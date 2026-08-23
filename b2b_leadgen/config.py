@@ -11,6 +11,12 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
+    # Admin Portal Security
+    admin_password: str = Field(
+        default="admin123",
+        validation_alias="ADMIN_PASSWORD"
+    )
+
     # API Keys (Supports GEMINI_API_KEY or fallback GOOGLE_API_KEY)
     gemini_api_key: Optional[str] = Field(
         default=None,

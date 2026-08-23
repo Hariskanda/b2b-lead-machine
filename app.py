@@ -1,9 +1,12 @@
 import asyncio
 import io
 import json
+import os
+from datetime import datetime
+from typing import Any
+
 import pandas as pd
 import streamlit as st
-from datetime import datetime
 
 from b2b_leadgen.config import settings
 from b2b_leadgen.email_dispatcher import build_outreach_email, dispatch_campaign
@@ -25,7 +28,7 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.3rem;
+        font-size: 2.4rem;
         font-weight: 800;
         margin-bottom: 0.2rem;
         background: linear-gradient(90deg, #4A90E2, #9013FE);
@@ -37,6 +40,14 @@ st.markdown("""
         color: #6c757d;
         margin-bottom: 1.5rem;
     }
+    .storefront-card {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        color: #ffffff;
+        border-radius: 14px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
     .upi-card {
         background: #ffffff;
         border: 2px solid #6366f1;
@@ -46,12 +57,12 @@ st.markdown("""
         margin: 20px auto;
         box-shadow: 0 4px 14px rgba(99, 102, 241, 0.12);
     }
-    .email-card {
+    .admin-card {
         background: #f8fafc;
-        border: 1px solid #cbd5e1;
+        border: 1px solid #e2e8f0;
         border-radius: 12px;
-        padding: 20px;
-        margin: 15px 0;
+        padding: 16px;
+        margin-top: 10px;
     }
     .unlocked-box {
         background-color: #f0fdf4;
@@ -61,8 +72,52 @@ st.markdown("""
         text-align: center;
         margin: 20px 0;
     }
+    .pill {
+        display: inline-block;
+        background: #334155;
+        color: #93c5fd;
+        padding: 4px 10px;
+        border-radius: 9999px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        margin: 2px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+
+# =============================================================
+# 🔐 Secure Secret Resolution Helper
+# =============================================================
+def get_secret(key: str, default: Any = None) -> Any:
+    """Reads a configuration secret from st.secrets, environment variables, or config settings."""
+    try:
+        if key in st.secrets:
+            return st.secrets[key]
+    except Exception:
+        pass
+    env_val = os.environ.get(key)
+    if env_val is not None:
+        return env_val
+    settings_val = getattr(settings, key.lower(), None)
+    if settings_val is not None:
+        return settings_val
+    return default
+
+
+# Read Core Secrets Securely from st.secrets / backend
+GEMINI_API_KEY = get_secret("GEMINI_API_KEY", settings.effective_api_key)
+ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD", settings.admin_password or "admin123")
+SMTP_USER = get_secret("SMTP_USER", settings.effective_smtp_user)
+SMTP_PASSWORD = get_secret("SMTP_PASSWORD", settings.effective_smtp_password)
+SMTP_HOST = get_secret("SMTP_HOST", settings.smtp_host or "smtp.gmail.com")
+SMTP_PORT = int(get_secret("SMTP_PORT", settings.smtp_port or 587))
+SENDER_NAME = get_secret("SENDER_NAME", settings.sender_name or "B2B Lead Machine")
+APP_URL = get_secret("APP_URL", settings.effective_app_url or "http://localhost:8501")
+UPI_ID = get_secret("UPI_ID", settings.upi_id or "9019525230@fam")
+UPI_PAYEE_NAME = get_secret("UPI_PAYEE_NAME", settings.upi_payee_name or "B2B Lead Machine")
+UPI_AMOUNT_INR = float(get_secret("UPI_AMOUNT_INR", settings.upi_amount_inr or 499.0))
+
 
 # Initialize Session State
 if "leads" not in st.session_state:
@@ -77,100 +132,98 @@ if "verified_utr" not in st.session_state:
     st.session_state["verified_utr"] = None
 if "campaign_results" not in st.session_state:
     st.session_state["campaign_results"] = None
+if "admin_authenticated" not in st.session_state:
+    st.session_state["admin_authenticated"] = False
 
 
 # =============================================================
-# ⚙️ Sidebar Controls
+# 🛍️ Clean Public Sidebar Interface & Gated Admin Portal
 # =============================================================
 with st.sidebar:
     st.image("https://img.icons8.com/isometric/100/lightning-bolt.png", width=60)
-    st.title("Settings & Config")
+    st.title("B2B Lead Machine")
 
-    api_key_input = st.text_input(
-        "Gemini API Key",
-        value=settings.effective_api_key or "",
-        type="password",
-        help="Optional: Provide your Google Gemini API Key."
-    )
+    st.markdown("""
+    <div class="storefront-card">
+        <h4 style="margin-top:0; color:#f8fafc; font-size:1.05rem;">⚡ Prospecting on Autopilot</h4>
+        <p style="font-size:0.85rem; color:#cbd5e1; margin-bottom:10px;">
+            Target real local businesses, extract verified contact emails, and generate customized AI sales pitches in seconds.
+        </p>
+        <span class="pill">🎯 Niche + Location Discovery</span><br>
+        <span class="pill">📧 Decision-Maker Emails</span><br>
+        <span class="pill">✍️ AI Cold Pitches</span><br>
+        <span class="pill">📲 Instant ₹499 UPI Download</span>
+    </div>
+    """, unsafe_allow_html=True)
 
-    model_option = st.selectbox(
-        "Gemini Model",
-        options=["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
-        index=0,
-        help="Google Gemini model for summary & pitch generation."
-    )
-
-    concurrency = st.slider(
-        "Max Concurrency",
-        min_value=1,
-        max_value=8,
-        value=settings.max_concurrent_requests,
-        help="Concurrent web scraping and extraction requests."
-    )
-
-    follow_subpages = st.checkbox(
-        "Follow Contact/About Pages",
-        value=settings.follow_contact_pages,
-        help="If enabled, crawls internal /contact or /about pages to locate hidden email addresses."
-    )
-
-    st.divider()
-    st.subheader("📧 Gmail SMTP Outbound")
-    smtp_sender = st.text_input(
-        "Sender Gmail Address",
-        value=getattr(settings, "effective_smtp_user", "") or "",
-        placeholder="you@gmail.com",
-        help="Your Gmail address for sending cold email outreach."
-    )
-    smtp_pass = st.text_input(
-        "Gmail App Password (16-char)",
-        value=getattr(settings, "effective_smtp_password", "") or "",
-        type="password",
-        help="Generate a 16-character App Password in Google Account > Security > 2-Step Verification > App Passwords."
-    )
-    app_public_url = st.text_input(
-        "App Public URL (CTA link)",
-        value=getattr(settings, "effective_app_url", "http://localhost:8501") or "http://localhost:8501",
-        help="The link included in cold emails pointing leads to your payment portal."
-    )
-
-    st.divider()
-    st.subheader("📲 UPI Payment Gateway")
-    custom_upi_id = st.text_input("Merchant UPI ID", value=getattr(settings, "upi_id", "9019525230@fam"))
-    custom_payee = st.text_input("Payee Name", value=getattr(settings, "upi_payee_name", "B2B Lead Machine"))
-    custom_upi_amount = st.number_input("Lead Download Price (₹)", value=int(getattr(settings, "upi_amount_inr", 499.0)), min_value=1, step=50)
-
+    st.subheader("📦 Order Status")
     if st.session_state["upi_payment_verified"]:
-        st.success(f"✅ Verified UTR: `{st.session_state['verified_utr']}`")
+        st.success(f"✅ UNLOCKED (UTR: `{st.session_state['verified_utr']}`)")
     else:
-        st.info(f"🔒 Download Status: ₹{custom_upi_amount} Required")
+        st.info(f"🔒 Full CSV Export: ₹{int(UPI_AMOUNT_INR)} Required")
 
     st.divider()
-    st.subheader("📊 Google Sheets Live Sync")
-    gsheet_target = st.text_input(
-        "Sheet Name or URL",
-        placeholder="e.g. B2B Leads 2026 or full URL",
-        help="Enter the title or URL of your Google Sheet."
-    )
-    worksheet_name = st.text_input("Worksheet Name", value="Leads")
-    auto_sync_sheets = st.checkbox("Auto-sync new leads to Sheet", value=False)
 
-    with st.expander("Service Account JSON (Optional)"):
-        custom_sa_json = st.text_area(
-            "Paste Service Account JSON",
-            help="Optional if configured via st.secrets in Streamlit Cloud.",
-            height=100
-        )
+    # 🔐 Secure Admin Configuration Portal (Password Protected)
+    with st.expander("🔐 Admin Portal", expanded=False):
+        if not st.session_state["admin_authenticated"]:
+            st.markdown("##### Admin Authentication")
+            admin_pwd_input = st.text_input("Enter Admin Password", type="password", key="admin_pwd_input")
+            if st.button("Unlock Admin Panel", use_container_width=True):
+                if admin_pwd_input and admin_pwd_input == ADMIN_PASSWORD:
+                    st.session_state["admin_authenticated"] = True
+                    st.success("Admin mode unlocked!")
+                    st.rerun()
+                else:
+                    st.error("⚠️ Invalid Admin Password.")
+        else:
+            st.markdown('<span style="color:#15803d; font-weight:700;">🔓 ADMIN MODE ACTIVE</span>', unsafe_allow_html=True)
 
-    st.divider()
-    st.caption("⚡ **Automated B2B Lead Machine**\nAutopilot Outbound Engine with UPI Paywall.")
+            admin_model = st.selectbox(
+                "Gemini Model",
+                options=["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
+                index=0,
+                key="admin_model_select"
+            )
+
+            admin_concurrency = st.slider(
+                "Max Concurrency",
+                min_value=1,
+                max_value=8,
+                value=int(settings.max_concurrent_requests),
+                key="admin_concurrency_slider"
+            )
+
+            admin_follow_subpages = st.checkbox(
+                "Follow Contact/About Pages",
+                value=settings.follow_contact_pages,
+                key="admin_follow_subpages_cb"
+            )
+
+            st.markdown("##### Google Sheets Sync")
+            admin_gsheet_target = st.text_input("Sheet Name or URL", placeholder="e.g. B2B Leads 2026", key="admin_gsheet_target")
+            admin_auto_sync = st.checkbox("Auto-sync to Google Sheet", value=False, key="admin_auto_sync_cb")
+
+            if st.button("Log Out of Admin", use_container_width=True):
+                st.session_state["admin_authenticated"] = False
+                st.rerun()
+
+    st.caption("⚡ **B2B Lead Machine** • 24/7 Cloud Engine")
+
+
+# Set runtime parameters (Admin overrides if logged in, otherwise default)
+effective_model = st.session_state.get("admin_model_select", settings.gemini_model or "gemini-1.5-flash")
+effective_concurrency = int(st.session_state.get("admin_concurrency_slider", settings.max_concurrent_requests or 3))
+effective_follow_subpages = st.session_state.get("admin_follow_subpages_cb", settings.follow_contact_pages)
+effective_gsheet_target = st.session_state.get("admin_gsheet_target", "")
+effective_auto_sync = st.session_state.get("admin_auto_sync_cb", False)
 
 
 # =============================================================
-# 🚀 Main Application Header & Tabs
+# 🚀 Main Storefront Header & Tabs
 # =============================================================
 st.markdown('<div class="main-header">⚡ Automated B2B Lead Machine</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Autonomous Lead Discovery, AI Cold Pitch Generation & Autopilot Email Dispatcher</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Autonomous Lead Discovery, Verified Email Extraction & AI Cold Pitch Generator</div>', unsafe_allow_html=True)
 
 tab_search, tab_csv = st.tabs(["🔍 Keyword Search & Lead Discovery", "📁 Upload Existing CSV"])
 
@@ -212,14 +265,14 @@ with tab_search:
                     status_text.success(f"✅ Discovered {len(discovered_inputs)} businesses! Starting AI scraping and cold pitch generation...")
 
                     pipeline = LeadGenPipeline(
-                        api_key=api_key_input or None,
-                        model=model_option,
-                        max_concurrency=int(concurrency),
+                        api_key=GEMINI_API_KEY or None,
+                        model=effective_model,
+                        max_concurrency=effective_concurrency,
+                        follow_contact_pages=effective_follow_subpages,
                         use_checkpoint=False
                     )
 
                     total = len(discovered_inputs)
-                    results = []
 
                     def update_ui_progress(lead: EnrichedLead, idx: int, tot: int):
                         pct = int((idx / tot) * 100)
@@ -244,13 +297,12 @@ with tab_search:
                     st.session_state["last_query"] = search_query
                     st.session_state["campaign_results"] = None
 
-                    if auto_sync_sheets and gsheet_target:
+                    if effective_auto_sync and effective_gsheet_target:
                         try:
                             sync_res = export_leads_to_google_sheet(
                                 leads=results,
-                                sheet_name_or_url=gsheet_target,
-                                worksheet_title=worksheet_name or "Leads",
-                                credentials_info=custom_sa_json or None
+                                sheet_name_or_url=effective_gsheet_target,
+                                worksheet_title="Leads"
                             )
                             if sync_res.get("success"):
                                 st.toast(f"✅ Synced {sync_res.get('rows_appended')} leads to Google Sheet!", icon="📊")
@@ -297,9 +349,10 @@ with tab_csv:
                         prog_bar = st.progress(0)
 
                         pipeline = LeadGenPipeline(
-                            api_key=api_key_input or None,
-                            model=model_option,
-                            max_concurrency=int(concurrency),
+                            api_key=GEMINI_API_KEY or None,
+                            model=effective_model,
+                            max_concurrency=effective_concurrency,
+                            follow_contact_pages=effective_follow_subpages,
                             use_checkpoint=False
                         )
 
@@ -324,13 +377,12 @@ with tab_csv:
                         st.session_state["last_query"] = f"CSV: {uploaded_file.name}"
                         st.session_state["campaign_results"] = None
 
-                        if auto_sync_sheets and gsheet_target:
+                        if effective_auto_sync and effective_gsheet_target:
                             try:
                                 sync_res = export_leads_to_google_sheet(
                                     leads=results,
-                                    sheet_name_or_url=gsheet_target,
-                                    worksheet_title=worksheet_name or "Leads",
-                                    credentials_info=custom_sa_json or None
+                                    sheet_name_or_url=effective_gsheet_target,
+                                    worksheet_title="Leads"
                                 )
                                 if sync_res.get("success"):
                                     st.toast(f"✅ Synced {sync_res.get('rows_appended')} leads to Google Sheet!", icon="📊")
@@ -342,7 +394,7 @@ with tab_csv:
 
 
 # =============================================================
-# 📊 Generated Leads Table & Autopilot Dispatcher
+# 📊 Generated Leads Table & Custom UPI Paywall Display
 # =============================================================
 if st.session_state["leads"]:
     df = st.session_state["df"]
@@ -390,81 +442,67 @@ if st.session_state["leads"]:
     st.markdown("---")
 
     # =========================================================
-    # 🚀 Autopilot Gmail Cold Email Dispatcher
+    # 🚀 Admin Autopilot Outbound Launcher (Gated to Admin)
     # =========================================================
-    st.markdown("### 📨 Autopilot Cold Outreach Campaign")
-    st.markdown("Automatically email these verified prospects their customized pitch with a link to your UPI payment portal.")
+    if st.session_state["admin_authenticated"]:
+        st.markdown("### 📨 Admin Autopilot Email Campaign")
+        st.markdown("Dispatches personalized cold email pitches from your configured Gmail account with your CTA link.")
 
-    eligible_count = sum(1 for l in leads if l.primary_email and "@" in l.primary_email)
+        eligible_count = sum(1 for l in leads if l.primary_email and "@" in l.primary_email)
 
-    c_em1, c_em2 = st.columns([1, 1])
-    with c_em1:
-        st.markdown(f"""
-        <div class="email-card">
-            <h4 style="margin-top:0;">⚡ Campaign Overview</h4>
-            <p>• <strong>Eligible Contacts:</strong> {eligible_count} verified email addresses</p>
-            <p>• <strong>Sender:</strong> <code>{smtp_sender or 'Not configured (set in sidebar)'}</code></p>
-            <p>• <strong>CTA Target Link:</strong> <a href="{app_public_url}" target="_blank">{app_public_url}</a></p>
-            <p>• <strong>Payment Option:</strong> Informs lead of instant ₹499 UPI dataset download</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with c_em2:
         if eligible_count > 0:
             sample_lead = next(l for l in leads if l.primary_email)
-            subj, html_prev, txt_prev = build_outreach_email(sample_lead, app_url=app_public_url, sender_name=settings.sender_name)
-            with st.expander(f"👁️ Preview Outbound Email to {sample_lead.company_name}", expanded=False):
-                st.markdown(f"**Subject:** `{subj}`")
-                st.markdown(f"**To:** `{sample_lead.primary_email}`")
-                st.markdown("**Email Body:**")
-                st.text(txt_prev)
-        else:
-            st.info("No leads with verified email addresses available for outbound campaign.")
+            subj, html_prev, txt_prev = build_outreach_email(sample_lead, app_url=APP_URL, sender_name=SENDER_NAME)
 
-    if eligible_count > 0:
-        if st.button("🚀 Launch Autopilot Email Campaign", type="primary", use_container_width=True):
-            if not smtp_sender or not smtp_pass:
-                st.warning("⚠️ Please enter your Sender Gmail Address and 16-character App Password in the sidebar.")
-            else:
-                progress_container = st.container()
-                with progress_container:
-                    dispatch_status = st.empty()
-                    dispatch_bar = st.progress(0)
+            col_adm_info, col_adm_prev = st.columns([1, 1])
+            with col_adm_info:
+                st.info(f"• **Eligible Contacts:** {eligible_count}\n• **Sender:** `{SMTP_USER}`\n• **CTA Link:** `{APP_URL}`")
+            with col_adm_prev:
+                with st.expander(f"👁️ Preview Email to {sample_lead.company_name}", expanded=False):
+                    st.markdown(f"**Subject:** `{subj}`")
+                    st.text(txt_prev)
 
-                    def on_email_progress(lead: EnrichedLead, success: bool, msg: str, idx: int, tot: int):
-                        pct = int((idx / tot) * 100)
-                        dispatch_bar.progress(pct)
-                        icon = "✅" if success else "❌"
-                        dispatch_status.text(f"Sending ({idx}/{tot}) {icon} -> {lead.company_name} ({lead.primary_email})")
+            if st.button("🚀 Launch Autopilot Email Campaign (Admin)", type="primary", use_container_width=True):
+                if not SMTP_USER or not SMTP_PASSWORD:
+                    st.warning("⚠️ SMTP credentials not set in secrets.")
+                else:
+                    progress_container = st.container()
+                    with progress_container:
+                        dispatch_status = st.empty()
+                        dispatch_bar = st.progress(0)
 
-                    with st.spinner("Dispatching cold email pitches via Gmail SMTP..."):
-                        report = dispatch_campaign(
-                            leads=leads,
-                            sender_email=smtp_sender,
-                            app_password=smtp_pass,
-                            app_url=app_public_url,
-                            sender_name=settings.sender_name,
-                            delay_seconds=1.0,
-                            progress_callback=on_email_progress
-                        )
+                        def on_email_progress(lead: EnrichedLead, success: bool, msg: str, idx: int, tot: int):
+                            pct = int((idx / tot) * 100)
+                            dispatch_bar.progress(pct)
+                            icon = "✅" if success else "❌"
+                            dispatch_status.text(f"Sending ({idx}/{tot}) {icon} -> {lead.company_name} ({lead.primary_email})")
 
-                    dispatch_bar.progress(100)
-                    st.session_state["campaign_results"] = report
-                    if report.get("success"):
-                        st.success(f"🎉 Campaign Finished! Successfully sent {report.get('sent_count')} out of {report.get('eligible_leads')} emails.")
-                    else:
-                        st.warning(f"⚠️ {report.get('message')}")
+                        with st.spinner("Dispatching cold email pitches via Gmail SMTP..."):
+                            report = dispatch_campaign(
+                                leads=leads,
+                                sender_email=SMTP_USER,
+                                app_password=SMTP_PASSWORD,
+                                app_url=APP_URL,
+                                sender_name=SENDER_NAME,
+                                smtp_host=SMTP_HOST,
+                                smtp_port=SMTP_PORT,
+                                delay_seconds=1.0,
+                                progress_callback=on_email_progress
+                            )
 
-    if st.session_state["campaign_results"]:
-        rep = st.session_state["campaign_results"]
-        st.markdown("#### 📊 Campaign Dispatch Results")
-        if rep.get("results"):
-            rep_df = pd.DataFrame(rep.get("results", []))
-            st.dataframe(rep_df, use_container_width=True, hide_index=True)
-        elif rep.get("message"):
-            st.info(rep.get("message"))
+                        dispatch_bar.progress(100)
+                        st.session_state["campaign_results"] = report
+                        if report.get("success"):
+                            st.success(f"🎉 Campaign Finished! Successfully sent {report.get('sent_count')} out of {report.get('eligible_leads')} emails.")
+                        else:
+                            st.warning(f"⚠️ {report.get('message')}")
 
-    st.markdown("---")
+            if st.session_state["campaign_results"]:
+                rep = st.session_state["campaign_results"]
+                if rep.get("results"):
+                    st.dataframe(pd.DataFrame(rep.get("results", [])), use_container_width=True, hide_index=True)
+
+        st.markdown("---")
 
     # =========================================================
     # 📲 Custom UPI QR Code Payment Wall (₹499)
@@ -475,9 +513,9 @@ if st.session_state["leads"]:
 
     if not is_upi_paid:
         qr_img, qr_buf, upi_uri = generate_upi_qr_code(
-            upi_id=custom_upi_id,
-            payee_name=custom_payee,
-            amount_inr=float(custom_upi_amount),
+            upi_id=UPI_ID,
+            payee_name=UPI_PAYEE_NAME,
+            amount_inr=UPI_AMOUNT_INR,
             transaction_note="B2B Leads Dataset Export"
         )
 
@@ -486,22 +524,22 @@ if st.session_state["leads"]:
         with col_qr:
             st.markdown(f"""
             <div class="upi-card">
-                <h3 style="margin-top: 0; color: #1e293b;">📲 Scan to Pay ₹{int(custom_upi_amount)}</h3>
+                <h3 style="margin-top: 0; color: #1e293b;">📲 Scan to Pay ₹{int(UPI_AMOUNT_INR)}</h3>
                 <p style="color: #64748b; font-size: 0.95rem; margin-bottom: 12px;">
                     Scan using Google Pay, PhonePe, Paytm, BHIM, or any UPI App to unlock your verified CSV download.
                 </p>
             </div>
             """, unsafe_allow_html=True)
-            st.image(qr_buf, caption=f"Pay ₹{int(custom_upi_amount)} to {custom_upi_id}", use_container_width=True)
+            st.image(qr_buf, caption=f"Pay ₹{int(UPI_AMOUNT_INR)} to {UPI_ID}", use_container_width=True)
             st.link_button("📱 Pay via UPI App (Mobile Direct)", upi_uri, use_container_width=True)
 
         with col_verify:
             st.markdown("### 🔐 Enter 12-Digit UTR to Unlock")
             st.markdown(f"""
             **Payment Details:**
-            - **Amount:** ₹{int(custom_upi_amount)}.00
-            - **Payee Name:** `{custom_payee}`
-            - **UPI ID:** `{custom_upi_id}`
+            - **Amount:** ₹{int(UPI_AMOUNT_INR)}.00
+            - **Payee Name:** `{UPI_PAYEE_NAME}`
+            - **UPI ID:** `{UPI_ID}`
             - **Note:** `B2B Leads Dataset Export`
             
             After completing payment in your UPI app, enter your **12-digit UTR Transaction ID** below:
@@ -523,7 +561,7 @@ if st.session_state["leads"]:
                 else:
                     st.error("⚠️ Invalid UTR Number! Please enter a valid 12-digit numeric Transaction ID (UTR).")
 
-            st.warning("⚠️ **Download CSV is hidden until ₹499 UPI payment is verified via 12-digit UTR.**")
+            st.warning(f"⚠️ **Download CSV is hidden until ₹{int(UPI_AMOUNT_INR)} UPI payment is verified via 12-digit UTR.**")
 
     else:
         # Payment Verified -> Reveal Download CSV and JSON buttons!
@@ -531,11 +569,11 @@ if st.session_state["leads"]:
         st.markdown(f"""
         <div class="unlocked-box">
             <h3 style="color: #15803d; margin-bottom: 4px;">🎉 Payment Verified! (UTR: {verified_utr_num})</h3>
-            <p style="color: #166534; margin: 0;">Your ₹{int(custom_upi_amount)} transfer is confirmed. Download your verified lead dataset below!</p>
+            <p style="color: #166534; margin: 0;">Your ₹{int(UPI_AMOUNT_INR)} transfer is confirmed. Download your verified lead dataset below!</p>
         </div>
         """, unsafe_allow_html=True)
 
-        c_dl1, c_dl2, c_sync = st.columns([1, 1, 2])
+        c_dl1, c_dl2 = st.columns([1, 1])
         with c_dl1:
             csv_buffer = io.StringIO()
             df.to_csv(csv_buffer, index=False)
@@ -556,17 +594,3 @@ if st.session_state["leads"]:
                 mime="application/json",
                 use_container_width=True
             )
-        with c_sync:
-            if gsheet_target:
-                if st.button("📊 Sync to Google Sheet Now", use_container_width=True):
-                    with st.spinner("Connecting to Google Sheets and appending rows..."):
-                        try:
-                            sync_res = export_leads_to_google_sheet(
-                                leads=leads,
-                                sheet_name_or_url=gsheet_target,
-                                worksheet_title=worksheet_name or "Leads",
-                                credentials_info=custom_sa_json or None
-                            )
-                            st.success(f"✅ Appended {sync_res.get('rows_appended')} rows to [{sync_res.get('spreadsheet_title')}]({sync_res.get('spreadsheet_url')})!")
-                        except Exception as e:
-                            st.error(f"Failed to sync to Google Sheet: {e}")
