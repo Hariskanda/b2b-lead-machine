@@ -11,10 +11,18 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
-    # Admin Portal Security
+    # Admin Portal & Download Unlock Security
     admin_password: str = Field(
         default="admin123",
         validation_alias="ADMIN_PASSWORD"
+    )
+    unlock_code: str = Field(
+        default="4990",
+        validation_alias="UNLOCK_CODE"
+    )
+    whatsapp_number: str = Field(
+        default="919019525230",
+        validation_alias="WHATSAPP_NUMBER"
     )
 
     # API Keys (Supports GEMINI_API_KEY or fallback GOOGLE_API_KEY)
@@ -75,7 +83,7 @@ class Settings(BaseSettings):
         validation_alias="UPI_ID"
     )
     upi_payee_name: str = Field(
-        default="B2B Lead Machine",
+        default="B2BLeadMachine",
         validation_alias="UPI_PAYEE_NAME"
     )
     upi_amount_inr: float = Field(

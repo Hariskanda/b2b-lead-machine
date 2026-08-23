@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import os
+import urllib.parse
 from datetime import datetime
 from typing import Any, Optional
 
@@ -49,13 +50,21 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
     .upi-hero-box {
-        background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
         border: 2px solid #6366f1;
         border-radius: 16px;
         padding: 24px;
         text-align: center;
-        margin: 20px auto;
-        box-shadow: 0 6px 18px rgba(99, 102, 241, 0.15);
+        margin: 15px auto;
+        box-shadow: 0 6px 18px rgba(99, 102, 241, 0.12);
+    }
+    .whatsapp-box {
+        background: #f0fdf4;
+        border: 2px solid #22c55e;
+        border-radius: 14px;
+        padding: 18px;
+        text-align: center;
+        margin-top: 15px;
     }
     .unlocked-box {
         background-color: #f0fdf4;
@@ -115,6 +124,8 @@ def get_secret(key: str, default: Any = None) -> Any:
 # Read Core Secrets Securely from st.secrets / backend
 GEMINI_API_KEY: Optional[str] = get_secret("GEMINI_API_KEY", settings.effective_api_key)
 ADMIN_PASSWORD: str = str(get_secret("ADMIN_PASSWORD", settings.admin_password or "admin123"))
+UNLOCK_CODE: str = str(get_secret("UNLOCK_CODE", settings.unlock_code or "4990"))
+WHATSAPP_NUMBER: str = str(get_secret("WHATSAPP_NUMBER", settings.whatsapp_number or "919019525230"))
 SMTP_USER: str = str(get_secret("SMTP_USER", settings.effective_smtp_user or ""))
 SMTP_PASSWORD: str = str(get_secret("SMTP_PASSWORD", settings.effective_smtp_password or ""))
 SMTP_HOST: str = str(get_secret("SMTP_HOST", settings.smtp_host or "smtp.gmail.com"))
@@ -144,6 +155,8 @@ if "last_query" not in st.session_state:
     st.session_state["last_query"] = ""
 if "upi_payment_verified" not in st.session_state:
     st.session_state["upi_payment_verified"] = False
+if "submitted_utr" not in st.session_state:
+    st.session_state["submitted_utr"] = ""
 if "campaign_results" not in st.session_state:
     st.session_state["campaign_results"] = None
 if "admin_authenticated" not in st.session_state:
@@ -166,7 +179,7 @@ with st.sidebar:
         <span class="pill">🎯 Niche + Location Discovery</span><br>
         <span class="pill">📧 Decision-Maker Emails</span><br>
         <span class="pill">✍️ AI Cold Pitches</span><br>
-        <span class="pill">📲 Instant ₹499 1-Click UPI</span>
+        <span class="pill">📲 Verified ₹499 UPI Export</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -174,7 +187,7 @@ with st.sidebar:
     if st.session_state["upi_payment_verified"]:
         st.success("✅ FULL CSV EXPORT UNLOCKED")
     else:
-        st.info(f"🔒 Full CSV Export: ₹{UPI_AMOUNT_INR} Required")
+        st.info(f"🔒 Full CSV Export: ₹{UPI_AMOUNT_INR} Verification Required")
 
     st.divider()
 
@@ -192,6 +205,12 @@ with st.sidebar:
                     st.error("⚠️ Invalid Admin Password.")
         else:
             st.markdown('<span style="color:#15803d; font-weight:700;">🔓 ADMIN MODE ACTIVE</span>', unsafe_allow_html=True)
+
+            if not st.session_state["upi_payment_verified"]:
+                if st.button("⚡ Admin Instant Unlock Dataset", type="primary", use_container_width=True):
+                    st.session_state["upi_payment_verified"] = True
+                    st.toast("🎉 Dataset unlocked by Admin!", icon="🔓")
+                    st.rerun()
 
             admin_model = st.selectbox(
                 "Gemini Model",
@@ -222,7 +241,7 @@ with st.sidebar:
                 st.session_state["admin_authenticated"] = False
                 st.rerun()
 
-    st.caption("⚡ **B2B Lead Machine** • Zero-KYC UPI Checkout")
+    st.caption("⚡ **B2B Lead Machine** • Secure UPI Payment Gateway")
 
 
 # Set runtime parameters (Admin overrides if logged in, otherwise default)
@@ -408,7 +427,7 @@ with tab_csv:
 
 
 # =============================================================
-# 📊 Generated Leads Table & Zero-KYC UPI Checkout
+# 📊 Generated Leads Table & Secure UPI WhatsApp Verification
 # =============================================================
 if st.session_state["leads"]:
     df = st.session_state["df"]
@@ -519,7 +538,7 @@ if st.session_state["leads"]:
         st.markdown("---")
 
     # =========================================================
-    # 📲 Zero-KYC Universal UPI Intent Checkout & Instant Unlock
+    # 📲 Secure UPI Payment & WhatsApp Verification Flow
     # =========================================================
     st.markdown("### 📥 Download Lead Dataset")
 
@@ -538,12 +557,12 @@ if st.session_state["leads"]:
         with col_checkout:
             st.markdown(f"""
             <div class="upi-hero-box">
-                <h2 style="color: #1e293b; margin-top: 0; font-weight: 800;">⚡ Instant 1-Click UPI Checkout</h2>
-                <p style="color: #475569; font-size: 1.05rem; margin-bottom: 20px;">
-                    Pay <strong>₹{UPI_AMOUNT_INR}</strong> via any UPI app (Google Pay, PhonePe, Paytm, BHIM, Cred) with pre-filled amount.
+                <h2 style="color: #1e293b; margin-top: 0; font-weight: 800;">⚡ Step 1: Pay ₹{UPI_AMOUNT_INR} via UPI</h2>
+                <p style="color: #475569; font-size: 1.0rem; margin-bottom: 16px;">
+                    Scan the QR code or tap the button below to launch Google Pay, PhonePe, Paytm, or BHIM.
                 </p>
-                <div style="background: #eef2ff; border-radius: 10px; padding: 12px; margin-bottom: 20px; text-align: left;">
-                    <span style="font-size: 0.9rem; color: #3730a3;">
+                <div style="background: #eef2ff; border-radius: 10px; padding: 12px; margin-bottom: 16px; text-align: left;">
+                    <span style="font-size: 0.88rem; color: #3730a3;">
                         <strong>• Payee:</strong> <code>{UPI_PAYEE_NAME}</code><br>
                         <strong>• UPI ID:</strong> <code>{UPI_ID}</code><br>
                         <strong>• Amount:</strong> <code>₹{UPI_AMOUNT_INR}.00</code> (Pre-filled)<br>
@@ -553,36 +572,68 @@ if st.session_state["leads"]:
             </div>
             """, unsafe_allow_html=True)
 
-            # Prominent Clickable UPI Intent Button (Mobile & Desktop)
+            # Prominent Clickable UPI Intent Deep Link
             st.link_button(
-                label=f"🚀 Pay ₹{UPI_AMOUNT_INR} via UPI App (Google Pay / PhonePe / Paytm)",
+                label=f"🚀 Launch UPI App to Pay ₹{UPI_AMOUNT_INR} (GPay / PhonePe / Paytm)",
                 url=UNIVERSAL_UPI_URI,
                 type="primary",
                 use_container_width=True
             )
 
-            st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+            st.markdown("---")
 
-            # 1-Click Instant Unlock Action
-            if st.button("✅ I Have Paid ₹499 — Unlock CSV Download Now", type="secondary", use_container_width=True):
-                st.session_state["upi_payment_verified"] = True
-                st.toast("🎉 Payment confirmed! CSV download unlocked.", icon="✅")
-                st.rerun()
+            st.markdown(f"""
+            <div class="whatsapp-box">
+                <h3 style="color: #166534; margin-top: 0; font-weight: 700;">📲 Step 2: Send Payment Proof</h3>
+                <p style="color: #15803d; font-size: 0.95rem; margin-bottom: 12px;">
+                    After completing the transfer, enter your 12-digit UTR and send payment proof on WhatsApp to receive your instant Unlock Code.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
-            with st.expander("📝 Optional: Submit UTR Reference Number"):
-                utr_fallback = st.text_input("12-digit UTR Number (Optional)", placeholder="e.g. 423589123456", max_chars=12)
-                if st.button("Submit UTR", use_container_width=True):
-                    if validate_utr(utr_fallback):
+            utr_input = st.text_input(
+                "Enter 12-digit UTR / UPI Transaction Reference",
+                value=st.session_state["submitted_utr"],
+                placeholder="e.g. 423589123456",
+                max_chars=12,
+                help="You can find your 12-digit UTR number in your UPI payment receipt."
+            )
+
+            # Build pre-filled WhatsApp link with submitted UTR
+            utr_text_part = f"My UTR reference is: {utr_input.strip()}" if utr_input.strip() else "My UTR reference is: [Enter UTR]"
+            wa_message = f"Hi, I just paid ₹{UPI_AMOUNT_INR} for my B2B Leads. {utr_text_part}"
+            wa_url = f"https://wa.me/{WHATSAPP_NUMBER}?text={urllib.parse.quote(wa_message)}"
+
+            st.link_button(
+                label="📲 Send Payment Proof on WhatsApp to Unlock",
+                url=wa_url,
+                type="primary",
+                use_container_width=True
+            )
+
+            st.markdown("---")
+
+            st.markdown("#### 🔑 Step 3: Enter Unlock Code")
+            st.caption("Enter the 4-digit Unlock Code received on WhatsApp (or Admin Authorization) to download the CSV.")
+
+            c_code1, c_code2 = st.columns([3, 1])
+            with c_code1:
+                entered_code = st.text_input("Enter Unlock Code", type="password", placeholder="Enter code here...", label_visibility="collapsed")
+            with c_code2:
+                if st.button("Unlock CSV", type="primary", use_container_width=True):
+                    clean_code = entered_code.strip()
+                    if clean_code and (clean_code == UNLOCK_CODE or clean_code == ADMIN_PASSWORD):
                         st.session_state["upi_payment_verified"] = True
-                        st.toast("🎉 UTR verified! CSV download unlocked.", icon="✅")
+                        st.session_state["submitted_utr"] = utr_input.strip()
+                        st.toast("🎉 Code verified! Full CSV download unlocked.", icon="✅")
                         st.rerun()
                     else:
-                        st.error("⚠️ Invalid UTR Number format.")
+                        st.error("⚠️ Invalid Unlock Code. Please send proof on WhatsApp to receive your code.")
 
         with col_qr:
             st.markdown("""
             <div style="text-align:center; padding: 10px;">
-                <p style="font-weight: 600; color: #1e293b; margin-bottom: 8px;">Scan to Pay on Desktop</p>
+                <p style="font-weight: 700; color: #1e293b; margin-bottom: 8px;">Scan with any UPI App</p>
             </div>
             """, unsafe_allow_html=True)
             st.image(qr_buf, caption=f"Scan to Pay ₹{UPI_AMOUNT_INR} ({UPI_ID})", use_container_width=True)
@@ -592,7 +643,7 @@ if st.session_state["leads"]:
         st.markdown(f"""
         <div class="unlocked-box">
             <h3 style="color: #15803d; margin-bottom: 4px;">🎉 Full Lead Dataset Unlocked!</h3>
-            <p style="color: #166534; margin: 0;">Payment of ₹{UPI_AMOUNT_INR} confirmed. You can now download your complete verified leads below!</p>
+            <p style="color: #166534; margin: 0;">Payment of ₹{UPI_AMOUNT_INR} confirmed. Download your verified lead dataset below!</p>
         </div>
         """, unsafe_allow_html=True)
 
