@@ -30,7 +30,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS styling
+# Custom CSS styling with Copy Protection & Scrape Deterrence
 st.markdown("""
 <style>
     .main-header {
@@ -73,13 +73,6 @@ st.markdown("""
         margin: 15px auto;
         box-shadow: 0 6px 18px rgba(99, 102, 241, 0.12);
     }
-    .autopilot-box {
-        background: #f8fafc;
-        border: 2px solid #3b82f6;
-        border-radius: 14px;
-        padding: 16px;
-        margin-top: 15px;
-    }
     .whatsapp-box {
         background: #f0fdf4;
         border: 2px solid #22c55e;
@@ -105,6 +98,39 @@ st.markdown("""
         font-size: 0.78rem;
         font-weight: 600;
         margin: 2px 0;
+    }
+    /* 🛡️ Copy Protection & Scrape Deterrence for Public Preview */
+    .protected-sample-container {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 18px;
+        background: #ffffff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        margin-bottom: 14px;
+    }
+    .locked-teaser-card {
+        -webkit-user-select: none;
+        user-select: none;
+        background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+        border: 2px dashed #94a3b8;
+        border-radius: 14px;
+        padding: 24px;
+        text-align: center;
+        margin: 16px 0;
+    }
+    .paywall-gate-card {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+        border: 2px solid #818cf8;
+        border-radius: 16px;
+        padding: 24px;
+        color: #ffffff;
+        text-align: center;
+        margin: 20px 0;
+        box-shadow: 0 8px 24px rgba(49, 46, 129, 0.25);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -147,6 +173,19 @@ def get_secret(key: str, default: Any = None) -> Any:
         pass
 
     return default
+
+
+def mask_email_address(email: Optional[str]) -> str:
+    """Masks middle characters of email address to deter scrape/copy before payment."""
+    if not email or "@" not in email:
+        return "No email found"
+    parts = email.strip().split("@")
+    user, domain = parts[0], parts[1]
+    if len(user) <= 2:
+        masked_user = user[0] + "***"
+    else:
+        masked_user = user[:2] + "***" + user[-1]
+    return f"{masked_user}@{domain}"
 
 
 # Read Core Secrets Securely from st.secrets / backend
@@ -514,11 +553,14 @@ with tab_csv:
 
 
 # =============================================================
-# 📊 Generated Leads Table & Checkout
+# 📊 Generated Leads Display (Paywall Protected & Admin View)
 # =============================================================
 if st.session_state["leads"]:
     df = st.session_state["df"]
     leads: list[EnrichedLead] = st.session_state["leads"]
+
+    is_admin = st.session_state["admin_authenticated"]
+    is_paid = st.session_state["upi_payment_verified"]
 
     st.markdown("---")
     st.markdown("### 📋 Generated Leads Dataset")
@@ -531,33 +573,98 @@ if st.session_state["leads"]:
 
     m1, m2, m3, m4 = st.columns(4)
     with m1:
-        st.metric("Total Leads", total_leads)
+        st.metric("Total Leads Discovered", total_leads)
     with m2:
-        st.metric("Verified Emails Found", emails_found)
+        st.metric("Verified Contacts Found", emails_found)
     with m3:
         st.metric("Email Discovery Rate", email_rate)
     with m4:
-        st.metric("Successful Scrapes", success_count)
+        if is_admin:
+            st.metric("Dataset Access", "🔓 Admin Mode")
+        elif is_paid:
+            st.metric("Dataset Access", "✅ Unlocked")
+        else:
+            st.metric("Dataset Access", "🔒 Sample Preview (2 of %d)" % total_leads)
 
-    # Interactive Table
-    st.dataframe(
-        df[["company_name", "website_url", "primary_email", "company_summary", "personalized_pitch", "status"]],
-        column_config={
-            "website_url": st.column_config.LinkColumn("Website URL"),
-            "primary_email": st.column_config.TextColumn("Contact Email"),
-            "personalized_pitch": st.column_config.TextColumn("Cold Email Pitch", width="large")
-        },
-        use_container_width=True,
-        hide_index=True
-    )
+    # ---------------------------------------------------------
+    # 🔓 UNLOCKED / ADMIN FULL VIEW
+    # ---------------------------------------------------------
+    if is_admin or is_paid:
+        if is_admin and not is_paid:
+            st.info("🔓 **ADMIN MODE ACTIVE:** You are viewing the full, unrestricted leads dataset.")
 
-    # Cold Outreach Pitch Cards
-    with st.expander("✉️ View Personalized Cold Email Pitches for All Leads", expanded=False):
-        for lead in leads:
-            st.markdown(f"**📌 {lead.company_name}** (`{lead.primary_email or 'No email found'}`)")
-            st.markdown(f"**Summary:** {lead.company_summary or 'N/A'}")
-            st.info(lead.personalized_pitch or "N/A")
-            st.divider()
+        # Full Interactive Table
+        st.dataframe(
+            df[["company_name", "website_url", "primary_email", "company_summary", "personalized_pitch", "status"]],
+            column_config={
+                "website_url": st.column_config.LinkColumn("Website URL"),
+                "primary_email": st.column_config.TextColumn("Contact Email"),
+                "personalized_pitch": st.column_config.TextColumn("Cold Email Pitch", width="large")
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # Full Cold Outreach Pitch Cards
+        with st.expander("✉️ View Personalized Cold Email Pitches for All Leads", expanded=False):
+            for lead in leads:
+                st.markdown(f"**📌 {lead.company_name}** (`{lead.primary_email or 'No email found'}`)")
+                st.markdown(f"**Summary:** {lead.company_summary or 'N/A'}")
+                st.info(lead.personalized_pitch or "N/A")
+                st.divider()
+
+    # ---------------------------------------------------------
+    # 🔒 PUBLIC RESTRICTED SAMPLE PREVIEW (Max 2 Rows + Copy Protection)
+    # ---------------------------------------------------------
+    else:
+        st.markdown("#### 👁️ Verified Sample Preview (Top 2 Leads)")
+        st.caption("🛡️ *Data preview is copy-protected. Unlock full dataset below to view all verified emails and download CSV.*")
+
+        sample_leads = leads[:2]
+        hidden_count = max(0, total_leads - len(sample_leads))
+
+        for idx, lead in enumerate(sample_leads, 1):
+            masked_email = mask_email_address(lead.primary_email)
+            st.markdown(f"""
+            <div class="protected-sample-container">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span style="font-size:1.1rem; font-weight:700; color:#1e293b;">📌 Sample #{idx}: {lead.company_name}</span>
+                    <span class="pill">Verified Lead</span>
+                </div>
+                <div style="font-size:0.9rem; color:#475569; margin-bottom:6px;">
+                    <strong>Website:</strong> <a href="{lead.website_url or '#'}" target="_blank">{lead.website_url or 'N/A'}</a> | 
+                    <strong>Contact Email:</strong> <code style="color:#2563eb; background:#eff6ff; padding:2px 6px; border-radius:4px;">{masked_email}</code>
+                </div>
+                <div style="font-size:0.88rem; color:#334155; margin-bottom:8px;">
+                    <strong>Company Summary:</strong> {lead.company_summary or 'N/A'}
+                </div>
+                <div style="background:#f8fafc; border-left:3px solid #3b82f6; padding:10px; border-radius:6px; font-size:0.86rem; color:#1e293b;">
+                    <strong>AI Cold Pitch Preview:</strong> <em>"{lead.personalized_pitch or 'Custom pitch generated by Gemini'}"</em>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        if hidden_count > 0:
+            st.markdown(f"""
+            <div class="locked-teaser-card">
+                <h3 style="color:#334155; margin-top:0; font-weight:800;">🔒 +{hidden_count} More Verified Leads & AI Pitches Locked</h3>
+                <p style="color:#64748b; font-size:0.95rem; margin-bottom:0;">
+                    Full unmasked contact emails, phone dossiers, customized cold pitches, and the complete CSV/JSON export are protected behind the paywall.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # High-Converting Paywall Gate Notice
+        st.markdown(f"""
+        <div class="paywall-gate-card">
+            <h2 style="margin-top:0; font-weight:800; color:#ffffff;">🚀 Unlock All {total_leads} Leads & Download Full CSV</h2>
+            <p style="font-size:1.05rem; color:#c7d2fe; margin-bottom:14px; max-width:680px; margin-left:auto; margin-right:auto;">
+                Complete your checkout for <strong>${CRYPTO_PRICE_USD:.2f} USD</strong> via automated Zero-KYC NOWPayments Crypto Checkout (USDT, BTC, ETH, SOL, LTC) or UPI to unlock all unmasked leads immediately.
+            </p>
+            <span class="pill" style="background:#4338ca; color:#ffffff;">⚡ Instant On-Chain Blockchain Confirmation</span>
+            <span class="pill" style="background:#4338ca; color:#ffffff;">📥 Immediate Full CSV Export</span>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.markdown("---")
 
@@ -629,8 +736,6 @@ if st.session_state["leads"]:
     # 💳 Automated Zero-KYC Payment Checkout (Crypto & UPI)
     # =========================================================
     st.markdown("### 📥 Download Lead Dataset")
-
-    is_paid = st.session_state["upi_payment_verified"]
 
     if not is_paid:
         pay_tab_crypto, pay_tab_upi = st.tabs([
@@ -825,7 +930,7 @@ if st.session_state["leads"]:
             csv_buffer = io.StringIO()
             df.to_csv(csv_buffer, index=False)
             st.download_button(
-                label="📥 Download CSV",
+                label="📥 Download Full CSV",
                 data=csv_buffer.getvalue(),
                 file_name=f"enriched_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                 mime="text/csv",
@@ -835,7 +940,7 @@ if st.session_state["leads"]:
         with c_dl2:
             json_str = json.dumps([l.model_dump() for l in leads], indent=2)
             st.download_button(
-                label="📥 Download JSON",
+                label="📥 Download Full JSON",
                 data=json_str,
                 file_name=f"enriched_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
                 mime="application/json",
