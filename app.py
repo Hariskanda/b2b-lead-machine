@@ -9,6 +9,7 @@ from typing import Any, Optional
 import pandas as pd
 import streamlit as st
 
+from b2b_leadgen.autopilot import autopilot_engine
 from b2b_leadgen.config import settings
 from b2b_leadgen.email_dispatcher import build_outreach_email, dispatch_campaign
 from b2b_leadgen.finder import discover_leads_by_keyword
@@ -72,6 +73,13 @@ st.markdown("""
         margin: 15px auto;
         box-shadow: 0 6px 18px rgba(99, 102, 241, 0.12);
     }
+    .autopilot-box {
+        background: #f8fafc;
+        border: 2px solid #3b82f6;
+        border-radius: 14px;
+        padding: 16px;
+        margin-top: 15px;
+    }
     .whatsapp-box {
         background: #f0fdf4;
         border: 2px solid #22c55e;
@@ -107,18 +115,18 @@ st.markdown("""
 # =============================================================
 def get_secret(key: str, default: Any = None) -> Any:
     """
-    Reads a configuration secret with robust fallbacks:
-    1. st.secrets[key] / st.secrets[key.lower()] / st.secrets[key.upper()]
-    2. os.environ[key] / os.environ[key.lower()] / os.environ[key.upper()]
+    Reads a configuration secret safely from:
+    1. st.secrets (case-insensitive)
+    2. os.environ (case-insensitive)
     3. settings attribute or default value
     """
     try:
         if hasattr(st, "secrets") and st.secrets is not None:
-            if key in st.secrets:
+            if key in st.secrets and str(st.secrets[key]).strip():
                 return st.secrets[key]
-            if key.lower() in st.secrets:
+            if key.lower() in st.secrets and str(st.secrets[key.lower()]).strip():
                 return st.secrets[key.lower()]
-            if key.upper() in st.secrets:
+            if key.upper() in st.secrets and str(st.secrets[key.upper()]).strip():
                 return st.secrets[key.upper()]
     except Exception:
         pass
@@ -128,29 +136,35 @@ def get_secret(key: str, default: Any = None) -> Any:
         if env_val is not None and str(env_val).strip():
             return env_val
 
-    settings_val = getattr(settings, key.lower(), None)
-    if settings_val is not None and str(settings_val).strip():
-        return settings_val
+    try:
+        val = getattr(settings, key.lower(), None)
+        if val is not None and str(val).strip():
+            return val
+        val = getattr(settings, f"effective_{key.lower()}", None)
+        if val is not None and str(val).strip():
+            return val
+    except Exception:
+        pass
 
     return default
 
 
 # Read Core Secrets Securely from st.secrets / backend
-GEMINI_API_KEY: Optional[str] = get_secret("GEMINI_API_KEY", settings.effective_api_key)
-NOWPAYMENTS_API_KEY: Optional[str] = get_secret("NOWPAYMENTS_API_KEY", settings.effective_nowpayments_key)
-CRYPTO_PRICE_USD: float = float(get_secret("CRYPTO_PRICE_USD", settings.crypto_price_usd or 6.0))
-ADMIN_PASSWORD: str = str(get_secret("ADMIN_PASSWORD", settings.admin_password or "admin123"))
-UNLOCK_CODE: str = str(get_secret("UNLOCK_CODE", settings.unlock_code or "4990"))
-WHATSAPP_NUMBER: str = str(get_secret("WHATSAPP_NUMBER", settings.whatsapp_number or "919019525230"))
-SMTP_USER: str = str(get_secret("SMTP_USER", settings.effective_smtp_user or ""))
-SMTP_PASSWORD: str = str(get_secret("SMTP_PASSWORD", settings.effective_smtp_password or ""))
-SMTP_HOST: str = str(get_secret("SMTP_HOST", settings.smtp_host or "smtp.gmail.com"))
-SMTP_PORT: int = int(get_secret("SMTP_PORT", settings.smtp_port or 587))
-SENDER_NAME: str = str(get_secret("SENDER_NAME", settings.sender_name or "B2B Lead Machine"))
-APP_URL: str = str(get_secret("APP_URL", settings.effective_app_url or "http://localhost:8501"))
-UPI_ID: str = str(get_secret("UPI_ID", settings.upi_id or "9019525230@fam"))
-UPI_PAYEE_NAME: str = str(get_secret("UPI_PAYEE_NAME", "B2BLeadMachine"))
-UPI_AMOUNT_INR: int = int(get_secret("UPI_AMOUNT_INR", 499))
+GEMINI_API_KEY: Optional[str] = get_secret("GEMINI_API_KEY", getattr(settings, "effective_api_key", None))
+NOWPAYMENTS_API_KEY: Optional[str] = get_secret("NOWPAYMENTS_API_KEY", getattr(settings, "effective_nowpayments_key", None))
+CRYPTO_PRICE_USD: float = float(get_secret("CRYPTO_PRICE_USD", getattr(settings, "crypto_price_usd", 6.0)))
+ADMIN_PASSWORD: str = str(get_secret("ADMIN_PASSWORD", getattr(settings, "admin_password", "admin123")))
+UNLOCK_CODE: str = str(get_secret("UNLOCK_CODE", getattr(settings, "unlock_code", "4990")))
+WHATSAPP_NUMBER: str = str(get_secret("WHATSAPP_NUMBER", getattr(settings, "whatsapp_number", "919019525230")))
+SMTP_USER: str = str(get_secret("SMTP_USER", getattr(settings, "effective_smtp_user", "")))
+SMTP_PASSWORD: str = str(get_secret("SMTP_PASSWORD", getattr(settings, "effective_smtp_password", "")))
+SMTP_HOST: str = str(get_secret("SMTP_HOST", getattr(settings, "smtp_host", "smtp.gmail.com")))
+SMTP_PORT: int = int(get_secret("SMTP_PORT", getattr(settings, "smtp_port", 587)))
+SENDER_NAME: str = str(get_secret("SENDER_NAME", getattr(settings, "sender_name", "B2B Lead Machine")))
+APP_URL: str = str(get_secret("APP_URL", getattr(settings, "effective_app_url", "http://localhost:8501")))
+UPI_ID: str = str(get_secret("UPI_ID", getattr(settings, "upi_id", "9019525230@fam")))
+UPI_PAYEE_NAME: str = str(get_secret("UPI_PAYEE_NAME", getattr(settings, "upi_payee_name", "B2BLeadMachine")))
+UPI_AMOUNT_INR: int = int(get_secret("UPI_AMOUNT_INR", getattr(settings, "upi_amount_inr", 499)))
 UPI_NOTE: str = "LeadExport499"
 
 # Universal UPI Deep Link Intent URI (Pre-filled ₹499)
@@ -234,6 +248,54 @@ with st.sidebar:
                     st.toast("🎉 Dataset unlocked by Admin!", icon="🔓")
                     st.rerun()
 
+            st.markdown("---")
+            st.markdown("#### 🤖 24/7 Autopilot Background Engine")
+
+            ap_status = autopilot_engine.get_status()
+            if ap_status["is_running"]:
+                st.success(f"🟢 ACTIVE: Sent {ap_status['total_emails_sent']} emails | Cycle #{ap_status['total_cycles']}")
+                st.caption(f"Current Niche: `{ap_status['current_niche'] or 'Initializing...'}`")
+                if st.button("🛑 Stop 24/7 Autopilot Engine", type="secondary", use_container_width=True):
+                    autopilot_engine.stop()
+                    st.warning("Autopilot stopped.")
+                    st.rerun()
+            else:
+                st.info("⚪ STATUS: Autopilot Engine Idle")
+
+                ap_batch_size = st.slider("Batch Size (Leads/cycle)", min_value=3, max_value=20, value=5, key="ap_batch_slider")
+                ap_interval = st.slider("Interval Delay Between Batches (Sec)", min_value=30, max_value=600, value=120, step=30, key="ap_interval_slider")
+                ap_continuous = st.checkbox("Run Continuously 24/7", value=True, key="ap_continuous_cb")
+
+                if st.button("🚀 Launch 24/7 Background Autopilot", type="primary", use_container_width=True):
+                    if not SMTP_USER or not SMTP_PASSWORD:
+                        st.warning("⚠️ SMTP credentials (SMTP_USER, SMTP_PASSWORD) not set in secrets.")
+                    else:
+                        autopilot_engine.start(
+                            gemini_api_key=GEMINI_API_KEY,
+                            smtp_user=SMTP_USER,
+                            smtp_password=SMTP_PASSWORD,
+                            app_url=APP_URL,
+                            sender_name=SENDER_NAME,
+                            smtp_host=SMTP_HOST,
+                            smtp_port=SMTP_PORT,
+                            batch_size=ap_batch_size,
+                            interval_seconds=ap_interval,
+                            run_continuously=ap_continuous
+                        )
+                        st.success("🎉 24/7 Background Autopilot Worker Launched!")
+                        st.rerun()
+
+            with st.expander("📜 View Autopilot Activity Logs", expanded=False):
+                logs = ap_status.get("logs", [])
+                if logs:
+                    for l in logs[:15]:
+                        st.text(f"[{l['timestamp']}] {l['message']}")
+                else:
+                    st.caption("No logs recorded yet.")
+
+            st.markdown("---")
+            st.markdown("#### Engine Tuning")
+
             admin_model = st.selectbox(
                 "Gemini Model",
                 options=["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
@@ -245,13 +307,13 @@ with st.sidebar:
                 "Max Concurrency",
                 min_value=1,
                 max_value=8,
-                value=int(settings.max_concurrent_requests),
+                value=int(getattr(settings, "max_concurrent_requests", 3)),
                 key="admin_concurrency_slider"
             )
 
             admin_follow_subpages = st.checkbox(
                 "Follow Contact/About Pages",
-                value=settings.follow_contact_pages,
+                value=getattr(settings, "follow_contact_pages", True),
                 key="admin_follow_subpages_cb"
             )
 
@@ -267,9 +329,9 @@ with st.sidebar:
 
 
 # Set runtime parameters (Admin overrides if logged in, otherwise default)
-effective_model = st.session_state.get("admin_model_select", settings.gemini_model or "gemini-1.5-flash")
-effective_concurrency = int(st.session_state.get("admin_concurrency_slider", settings.max_concurrent_requests or 3))
-effective_follow_subpages = bool(st.session_state.get("admin_follow_subpages_cb", settings.follow_contact_pages))
+effective_model = st.session_state.get("admin_model_select", getattr(settings, "gemini_model", "gemini-1.5-flash"))
+effective_concurrency = int(st.session_state.get("admin_concurrency_slider", getattr(settings, "max_concurrent_requests", 3)))
+effective_follow_subpages = bool(st.session_state.get("admin_follow_subpages_cb", getattr(settings, "follow_contact_pages", True)))
 effective_gsheet_target = str(st.session_state.get("admin_gsheet_target", ""))
 effective_auto_sync = bool(st.session_state.get("admin_auto_sync_cb", False))
 
@@ -502,7 +564,7 @@ if st.session_state["leads"]:
     # 🚀 Admin Autopilot Outbound Launcher (Gated to Admin)
     # =========================================================
     if st.session_state["admin_authenticated"]:
-        st.markdown("### 📨 Admin Autopilot Email Campaign")
+        st.markdown("### 📨 Admin Single-Batch Outbound Launcher")
         st.markdown("Dispatches personalized cold email pitches from your configured Gmail account with your CTA link.")
 
         eligible_count = sum(1 for l in leads if l.primary_email and "@" in l.primary_email)
@@ -519,7 +581,7 @@ if st.session_state["leads"]:
                     st.markdown(f"**Subject:** `{subj}`")
                     st.text(txt_prev)
 
-            if st.button("🚀 Launch Autopilot Email Campaign (Admin)", type="primary", use_container_width=True):
+            if st.button("🚀 Launch Single-Batch Outreach Campaign", type="primary", use_container_width=True):
                 if not SMTP_USER or not SMTP_PASSWORD:
                     st.warning("⚠️ SMTP credentials not set in secrets.")
                 else:
