@@ -14,7 +14,7 @@ from b2b_leadgen.finder import discover_leads_by_keyword
 from b2b_leadgen.models import EnrichedLead, LeadInput
 from b2b_leadgen.pipeline import LeadGenPipeline, detect_company_column
 from b2b_leadgen.sheets_exporter import export_leads_to_google_sheet
-from b2b_leadgen.upi_checkout import generate_upi_qr_code, validate_utr
+from b2b_leadgen.upi_checkout import generate_upi_qr_code, generate_upi_uri, validate_utr
 
 # Page Configuration
 st.set_page_config(
@@ -48,27 +48,20 @@ st.markdown("""
         margin-bottom: 20px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
-    .upi-card {
-        background: #ffffff;
+    .upi-hero-box {
+        background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
         border: 2px solid #6366f1;
         border-radius: 16px;
         padding: 24px;
         text-align: center;
         margin: 20px auto;
-        box-shadow: 0 4px 14px rgba(99, 102, 241, 0.12);
-    }
-    .admin-card {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 16px;
-        margin-top: 10px;
+        box-shadow: 0 6px 18px rgba(99, 102, 241, 0.15);
     }
     .unlocked-box {
         background-color: #f0fdf4;
         border: 2px solid #22c55e;
         border-radius: 12px;
-        padding: 18px;
+        padding: 20px;
         text-align: center;
         margin: 20px 0;
     }
@@ -129,8 +122,17 @@ SMTP_PORT: int = int(get_secret("SMTP_PORT", settings.smtp_port or 587))
 SENDER_NAME: str = str(get_secret("SENDER_NAME", settings.sender_name or "B2B Lead Machine"))
 APP_URL: str = str(get_secret("APP_URL", settings.effective_app_url or "http://localhost:8501"))
 UPI_ID: str = str(get_secret("UPI_ID", settings.upi_id or "9019525230@fam"))
-UPI_PAYEE_NAME: str = str(get_secret("UPI_PAYEE_NAME", settings.upi_payee_name or "B2B Lead Machine"))
-UPI_AMOUNT_INR: float = float(get_secret("UPI_AMOUNT_INR", settings.upi_amount_inr or 499.0))
+UPI_PAYEE_NAME: str = str(get_secret("UPI_PAYEE_NAME", "B2BLeadMachine"))
+UPI_AMOUNT_INR: int = int(get_secret("UPI_AMOUNT_INR", 499))
+UPI_NOTE: str = "LeadExport499"
+
+# Universal UPI Deep Link Intent URI (Pre-filled ₹499)
+UNIVERSAL_UPI_URI = generate_upi_uri(
+    upi_id=UPI_ID,
+    payee_name=UPI_PAYEE_NAME,
+    amount_inr=UPI_AMOUNT_INR,
+    transaction_note=UPI_NOTE
+)
 
 
 # Initialize Session State
@@ -142,8 +144,6 @@ if "last_query" not in st.session_state:
     st.session_state["last_query"] = ""
 if "upi_payment_verified" not in st.session_state:
     st.session_state["upi_payment_verified"] = False
-if "verified_utr" not in st.session_state:
-    st.session_state["verified_utr"] = None
 if "campaign_results" not in st.session_state:
     st.session_state["campaign_results"] = None
 if "admin_authenticated" not in st.session_state:
@@ -166,15 +166,15 @@ with st.sidebar:
         <span class="pill">🎯 Niche + Location Discovery</span><br>
         <span class="pill">📧 Decision-Maker Emails</span><br>
         <span class="pill">✍️ AI Cold Pitches</span><br>
-        <span class="pill">📲 Instant ₹499 UPI Download</span>
+        <span class="pill">📲 Instant ₹499 1-Click UPI</span>
     </div>
     """, unsafe_allow_html=True)
 
     st.subheader("📦 Order Status")
     if st.session_state["upi_payment_verified"]:
-        st.success(f"✅ UNLOCKED (UTR: `{st.session_state['verified_utr']}`)")
+        st.success("✅ FULL CSV EXPORT UNLOCKED")
     else:
-        st.info(f"🔒 Full CSV Export: ₹{int(UPI_AMOUNT_INR)} Required")
+        st.info(f"🔒 Full CSV Export: ₹{UPI_AMOUNT_INR} Required")
 
     st.divider()
 
@@ -222,7 +222,7 @@ with st.sidebar:
                 st.session_state["admin_authenticated"] = False
                 st.rerun()
 
-    st.caption("⚡ **B2B Lead Machine** • 24/7 Cloud Engine")
+    st.caption("⚡ **B2B Lead Machine** • Zero-KYC UPI Checkout")
 
 
 # Set runtime parameters (Admin overrides if logged in, otherwise default)
@@ -408,7 +408,7 @@ with tab_csv:
 
 
 # =============================================================
-# 📊 Generated Leads Table & Custom UPI Paywall Display
+# 📊 Generated Leads Table & Zero-KYC UPI Checkout
 # =============================================================
 if st.session_state["leads"]:
     df = st.session_state["df"]
@@ -519,7 +519,7 @@ if st.session_state["leads"]:
         st.markdown("---")
 
     # =========================================================
-    # 📲 Custom UPI QR Code Payment Wall (₹499)
+    # 📲 Zero-KYC Universal UPI Intent Checkout & Instant Unlock
     # =========================================================
     st.markdown("### 📥 Download Lead Dataset")
 
@@ -530,60 +530,69 @@ if st.session_state["leads"]:
             upi_id=UPI_ID,
             payee_name=UPI_PAYEE_NAME,
             amount_inr=UPI_AMOUNT_INR,
-            transaction_note="B2B Leads Dataset Export"
+            transaction_note=UPI_NOTE
         )
 
-        col_qr, col_verify = st.columns([1, 1])
+        col_checkout, col_qr = st.columns([3, 2])
 
-        with col_qr:
+        with col_checkout:
             st.markdown(f"""
-            <div class="upi-card">
-                <h3 style="margin-top: 0; color: #1e293b;">📲 Scan to Pay ₹{int(UPI_AMOUNT_INR)}</h3>
-                <p style="color: #64748b; font-size: 0.95rem; margin-bottom: 12px;">
-                    Scan using Google Pay, PhonePe, Paytm, BHIM, or any UPI App to unlock your verified CSV download.
+            <div class="upi-hero-box">
+                <h2 style="color: #1e293b; margin-top: 0; font-weight: 800;">⚡ Instant 1-Click UPI Checkout</h2>
+                <p style="color: #475569; font-size: 1.05rem; margin-bottom: 20px;">
+                    Pay <strong>₹{UPI_AMOUNT_INR}</strong> via any UPI app (Google Pay, PhonePe, Paytm, BHIM, Cred) with pre-filled amount.
                 </p>
+                <div style="background: #eef2ff; border-radius: 10px; padding: 12px; margin-bottom: 20px; text-align: left;">
+                    <span style="font-size: 0.9rem; color: #3730a3;">
+                        <strong>• Payee:</strong> <code>{UPI_PAYEE_NAME}</code><br>
+                        <strong>• UPI ID:</strong> <code>{UPI_ID}</code><br>
+                        <strong>• Amount:</strong> <code>₹{UPI_AMOUNT_INR}.00</code> (Pre-filled)<br>
+                        <strong>• Reference Note:</strong> <code>{UPI_NOTE}</code>
+                    </span>
+                </div>
             </div>
             """, unsafe_allow_html=True)
-            st.image(qr_buf, caption=f"Pay ₹{int(UPI_AMOUNT_INR)} to {UPI_ID}", use_container_width=True)
-            st.link_button("📱 Pay via UPI App (Mobile Direct)", upi_uri, use_container_width=True)
 
-        with col_verify:
-            st.markdown("### 🔐 Enter 12-Digit UTR to Unlock")
-            st.markdown(f"""
-            **Payment Details:**
-            - **Amount:** ₹{int(UPI_AMOUNT_INR)}.00
-            - **Payee Name:** `{UPI_PAYEE_NAME}`
-            - **UPI ID:** `{UPI_ID}`
-            - **Note:** `B2B Leads Dataset Export`
-            
-            After completing payment in your UPI app, enter your **12-digit UTR Transaction ID** below:
-            """)
-
-            utr_input = st.text_input(
-                "12-digit UTR Transaction ID",
-                placeholder="e.g. 423589123456",
-                max_chars=12,
-                help="You can find the 12-digit UTR / Reference number in your UPI transaction receipt."
+            # Prominent Clickable UPI Intent Button (Mobile & Desktop)
+            st.link_button(
+                label=f"🚀 Pay ₹{UPI_AMOUNT_INR} via UPI App (Google Pay / PhonePe / Paytm)",
+                url=UNIVERSAL_UPI_URI,
+                type="primary",
+                use_container_width=True
             )
 
-            if st.button("✅ Verify Transaction & Unlock CSV", type="primary", use_container_width=True):
-                if validate_utr(utr_input):
-                    st.session_state["upi_payment_verified"] = True
-                    st.session_state["verified_utr"] = utr_input.strip()
-                    st.toast("🎉 Transaction verified! CSV Download Unlocked.", icon="✅")
-                    st.rerun()
-                else:
-                    st.error("⚠️ Invalid UTR Number! Please enter a valid 12-digit numeric Transaction ID (UTR).")
+            st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
-            st.warning(f"⚠️ **Download CSV is hidden until ₹{int(UPI_AMOUNT_INR)} UPI payment is verified via 12-digit UTR.**")
+            # 1-Click Instant Unlock Action
+            if st.button("✅ I Have Paid ₹499 — Unlock CSV Download Now", type="secondary", use_container_width=True):
+                st.session_state["upi_payment_verified"] = True
+                st.toast("🎉 Payment confirmed! CSV download unlocked.", icon="✅")
+                st.rerun()
+
+            with st.expander("📝 Optional: Submit UTR Reference Number"):
+                utr_fallback = st.text_input("12-digit UTR Number (Optional)", placeholder="e.g. 423589123456", max_chars=12)
+                if st.button("Submit UTR", use_container_width=True):
+                    if validate_utr(utr_fallback):
+                        st.session_state["upi_payment_verified"] = True
+                        st.toast("🎉 UTR verified! CSV download unlocked.", icon="✅")
+                        st.rerun()
+                    else:
+                        st.error("⚠️ Invalid UTR Number format.")
+
+        with col_qr:
+            st.markdown("""
+            <div style="text-align:center; padding: 10px;">
+                <p style="font-weight: 600; color: #1e293b; margin-bottom: 8px;">Scan to Pay on Desktop</p>
+            </div>
+            """, unsafe_allow_html=True)
+            st.image(qr_buf, caption=f"Scan to Pay ₹{UPI_AMOUNT_INR} ({UPI_ID})", use_container_width=True)
 
     else:
         # Payment Verified -> Reveal Download CSV and JSON buttons!
-        verified_utr_num = st.session_state.get("verified_utr", "Verified")
         st.markdown(f"""
         <div class="unlocked-box">
-            <h3 style="color: #15803d; margin-bottom: 4px;">🎉 Payment Verified! (UTR: {verified_utr_num})</h3>
-            <p style="color: #166534; margin: 0;">Your ₹{int(UPI_AMOUNT_INR)} transfer is confirmed. Download your verified lead dataset below!</p>
+            <h3 style="color: #15803d; margin-bottom: 4px;">🎉 Full Lead Dataset Unlocked!</h3>
+            <p style="color: #166534; margin: 0;">Payment of ₹{UPI_AMOUNT_INR} confirmed. You can now download your complete verified leads below!</p>
         </div>
         """, unsafe_allow_html=True)
 

@@ -9,18 +9,19 @@ import qrcode
 
 def generate_upi_uri(
     upi_id: str = "9019525230@fam",
-    payee_name: str = "B2B Lead Machine",
-    amount_inr: float = 499.0,
-    transaction_note: str = "B2B Leads Dataset Export"
+    payee_name: str = "B2BLeadMachine",
+    amount_inr: Union[int, float] = 499,
+    transaction_note: str = "LeadExport499"
 ) -> str:
     """
-    Generates a standard dynamic UPI intent URI according to NPCI specifications.
-    Format: upi://pay?pa={upi_id}&pn={payee_name}&am={amount}&cu=INR&tn={transaction_note}
+    Generates a universal UPI intent URI according to NPCI specifications.
+    Format: upi://pay?pa=9019525230@fam&pn=B2BLeadMachine&am=499&cu=INR&tn=LeadExport499
     """
+    clean_amount = int(amount_inr) if int(amount_inr) == amount_inr else f"{amount_inr:.2f}"
     params = {
         "pa": upi_id.strip(),
         "pn": payee_name.strip(),
-        "am": f"{amount_inr:.2f}",
+        "am": str(clean_amount),
         "cu": "INR",
         "tn": transaction_note.strip()
     }
@@ -30,15 +31,15 @@ def generate_upi_uri(
 
 def generate_upi_qr_code(
     upi_id: str = "9019525230@fam",
-    payee_name: str = "B2B Lead Machine",
-    amount_inr: float = 499.0,
-    transaction_note: str = "B2B Leads Dataset Export",
+    payee_name: str = "B2BLeadMachine",
+    amount_inr: Union[int, float] = 499,
+    transaction_note: str = "LeadExport499",
     custom_qr_path: Optional[str] = "assets/upi_qr.png",
     box_size: int = 10,
     border: int = 2
 ) -> Tuple[Union[Image.Image, str], io.BytesIO, str]:
     """
-    Returns the custom branded QR code image if available, or generates a dynamic QR code from the UPI URI.
+    Returns the custom branded QR code image if available, or dynamically generates a QR code from the universal UPI intent URI.
     Returns (PIL Image, BytesIO buffer, URI string).
     """
     upi_uri = generate_upi_uri(
@@ -49,13 +50,16 @@ def generate_upi_qr_code(
     )
 
     if custom_qr_path and os.path.exists(custom_qr_path):
-        img = Image.open(custom_qr_path)
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        buf.seek(0)
-        return img, buf, upi_uri
+        try:
+            img = Image.open(custom_qr_path)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            buf.seek(0)
+            return img, buf, upi_uri
+        except Exception:
+            pass
 
-    # Dynamic fallback generator
+    # Dynamic fallback QR generator
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_M,
@@ -77,7 +81,6 @@ def generate_upi_qr_code(
 def validate_utr(utr: str) -> bool:
     """
     Validates that a UTR / UPI Transaction Reference is a valid 12-digit numeric identifier.
-    NPCI standard UPI UTR numbers are exactly 12 numeric digits.
     """
     if not utr:
         return False
