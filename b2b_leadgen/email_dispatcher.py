@@ -12,20 +12,30 @@ from b2b_leadgen.models import EnrichedLead
 logger = logging.getLogger(__name__)
 
 
+def _get_attr(obj: Any, key: str, default: Any = None) -> Any:
+    """Safely retrieves an attribute from either an object or a dictionary."""
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
 def build_outreach_email(
-    lead: EnrichedLead,
+    lead: Any,
     app_url: Optional[str] = None,
     sender_name: Optional[str] = None,
-    price_usd: float = 6.0
+    price_usd: float = 6.0,
+    **kwargs: Any
 ) -> Tuple[str, str, str]:
     """
     Builds the personalized cold outreach email for a company directing them
     to the secure zero-KYC crypto checkout (accepting USDT, BTC, LTC, ETH, etc. via NOWPayments).
     Returns (subject, html_body, plain_text_body).
     """
-    company_name = lead.company_name or "there"
+    company_name = _get_attr(lead, "company_name") or "there"
     pitch = (
-        lead.personalized_pitch
+        _get_attr(lead, "personalized_pitch")
         or f"I came across {company_name} and was very impressed by your service offerings. We help businesses in your space streamline lead acquisition and client operations."
     )
     effective_url = (app_url or getattr(settings, "effective_app_url", "http://localhost:8501") or "http://localhost:8501").rstrip("/")
@@ -157,7 +167,8 @@ def send_single_email(
     subject: str,
     html_body: str,
     plain_text: str,
-    sender_name: str = "B2B Lead Machine"
+    sender_name: str = "B2B Lead Machine",
+    **kwargs: Any
 ) -> bool:
     """Sends a single multipart email using an existing active SMTP session."""
     msg = MIMEMultipart("alternative")
@@ -175,7 +186,7 @@ def send_single_email(
 
 
 def dispatch_campaign(
-    leads: List[EnrichedLead],
+    leads: List[Any],
     sender_email: Optional[str] = None,
     app_password: Optional[str] = None,
     app_url: Optional[str] = None,
@@ -185,7 +196,8 @@ def dispatch_campaign(
     price_usd: float = 6.0,
     topic: str = "",
     delay_seconds: float = 1.0,
-    progress_callback: Optional[Callable[[EnrichedLead, bool, str, int, int], None]] = None
+    progress_callback: Optional[Callable[[Any, bool, str, int, int], None]] = None,
+    **kwargs: Any
 ) -> Dict[str, Any]:
     """
     Autonomously dispatches personalized pitches via Gmail SMTP to all leads with verified emails.
@@ -211,7 +223,13 @@ def dispatch_campaign(
             "results": []
         }
 
-    eligible_leads = [l for l in leads if l.primary_email and "@" in l.primary_email]
+    # Filter leads that have a valid email address
+    eligible_leads = []
+    for l in leads:
+        em = _get_attr(l, "primary_email")
+        if em and isinstance(em, str) and "@" in em:
+            eligible_leads.append(l)
+
     if not eligible_leads:
         return {
             "success": False,
@@ -242,7 +260,9 @@ def dispatch_campaign(
         logger.info(f"Successfully authenticated as {user}")
 
         for idx, lead in enumerate(eligible_leads, 1):
-            recipient = lead.primary_email.strip()
+            recipient = str(_get_attr(lead, "primary_email", "")).strip()
+            c_name = str(_get_attr(lead, "company_name", "there"))
+            p_pitch = str(_get_attr(lead, "personalized_pitch", ""))
 
             # 🛡️ Deduplication Check against persistent history database
             if sent_history.is_email_sent(recipient):
@@ -252,11 +272,11 @@ def dispatch_campaign(
                     progress_callback(lead, True, "Skipped (already in sent history)", idx, total_eligible)
 
                 results.append({
-                    "company_name": lead.company_name,
+                    "company_name": c_name,
                     "email": recipient,
                     "status": "skipped_duplicate",
                     "error": "Already contacted in previous cycle",
-                    "pitch": lead.personalized_pitch
+                    "pitch": p_pitch
                 })
                 continue
 
@@ -279,9 +299,9 @@ def dispatch_campaign(
                 # 📝 Record in persistent sent history
                 sent_history.record_sent_email(
                     email=recipient,
-                    company_name=lead.company_name or "Unknown",
+                    company_name=c_name,
                     topic=topic or "General Outreach",
-                    pitch=lead.personalized_pitch or ""
+                    pitch=p_pitch
                 )
 
                 if progress_callback:
@@ -295,11 +315,11 @@ def dispatch_campaign(
                     progress_callback(lead, False, str(e), idx, total_eligible)
 
             results.append({
-                "company_name": lead.company_name,
+                "company_name": c_name,
                 "email": recipient,
                 "status": status,
                 "error": err_msg,
-                "pitch": lead.personalized_pitch
+                "pitch": p_pitch
             })
 
             if idx < total_eligible and delay_seconds > 0:

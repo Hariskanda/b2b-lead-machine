@@ -6,8 +6,6 @@ import threading
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from b2b_leadgen.models import EnrichedLead
-
 logger = logging.getLogger(__name__)
 
 # Default persistent history JSON path in project root
@@ -80,6 +78,15 @@ CURATED_NICHES = [
 ]
 
 
+def _extract_email_from_obj(lead: Any) -> Optional[str]:
+    """Helper to extract primary_email from either EnrichedLead object or dictionary."""
+    if lead is None:
+        return None
+    if isinstance(lead, dict):
+        return lead.get("primary_email")
+    return getattr(lead, "primary_email", None)
+
+
 class SentHistoryManager:
     _instance: Optional["SentHistoryManager"] = None
     _lock = threading.Lock()
@@ -107,7 +114,7 @@ class SentHistoryManager:
         try:
             with open(self.file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                self._sent_emails = {k.lower().strip(): v for k, v in data.get("sent_emails", {}).items()}
+                self._sent_emails = {str(k).lower().strip(): v for k, v in data.get("sent_emails", {}).items()}
                 self._used_topics = set(data.get("used_topics", []))
         except Exception as e:
             logger.error(f"Error loading sent history from {self.file_path}: {e}")
@@ -131,7 +138,7 @@ class SentHistoryManager:
 
     def is_email_sent(self, email: Optional[str]) -> bool:
         """Returns True if the email has already been dispatched to in past cycles."""
-        if not email or "@" not in email:
+        if not email or not isinstance(email, str) or "@" not in email:
             return False
         clean_email = email.lower().strip()
         with self._rw_lock:
@@ -145,19 +152,19 @@ class SentHistoryManager:
         pitch: str = ""
     ) -> None:
         """Records a successfully dispatched email into the persistent database."""
-        if not email or "@" not in email:
+        if not email or not isinstance(email, str) or "@" not in email:
             return
         clean_email = email.lower().strip()
         with self._rw_lock:
             self._sent_emails[clean_email] = {
                 "email": clean_email,
-                "company_name": company_name or "Unknown",
-                "topic": topic or "General Outreach",
-                "pitch": pitch,
+                "company_name": str(company_name or "Unknown"),
+                "topic": str(topic or "General Outreach"),
+                "pitch": str(pitch or ""),
                 "sent_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             if topic:
-                self._used_topics.add(topic.strip())
+                self._used_topics.add(str(topic).strip())
             self._save_to_disk()
 
     def record_used_topic(self, topic: str) -> None:
@@ -165,7 +172,7 @@ class SentHistoryManager:
         if not topic:
             return
         with self._rw_lock:
-            self._used_topics.add(topic.strip())
+            self._used_topics.add(str(topic).strip())
             self._save_to_disk()
 
     def is_topic_used(self, topic: str) -> bool:
@@ -173,7 +180,7 @@ class SentHistoryManager:
         if not topic:
             return False
         with self._rw_lock:
-            return topic.strip() in self._used_topics
+            return str(topic).strip() in self._used_topics
 
     def get_all_sent_records(self) -> List[Dict[str, Any]]:
         """Returns all recorded sent emails sorted by latest date."""
@@ -207,17 +214,19 @@ class SentHistoryManager:
 
     def filter_leads_for_dispatch(
         self,
-        leads: List[EnrichedLead]
-    ) -> Tuple[List[EnrichedLead], List[EnrichedLead]]:
+        leads: List[Any]
+    ) -> Tuple[List[Any], List[Any]]:
         """
         Splits leads into (unsent_leads, already_sent_leads) based on email history.
+        Safely supports EnrichedLead instances, dataclasses, or dicts.
         """
-        unsent: List[EnrichedLead] = []
-        already_sent: List[EnrichedLead] = []
+        unsent: List[Any] = []
+        already_sent: List[Any] = []
 
         with self._rw_lock:
             for lead in leads:
-                email = (lead.primary_email or "").lower().strip()
+                raw_email = _extract_email_from_obj(lead)
+                email = str(raw_email).lower().strip() if raw_email else ""
                 if email and email in self._sent_emails:
                     already_sent.append(lead)
                 else:
@@ -233,14 +242,14 @@ class SentHistoryManager:
         with self._rw_lock:
             # 1. Custom niches priority
             if custom_niches:
-                unused_custom = [n for n in custom_niches if n.strip() not in self._used_topics]
+                unused_custom = [n for n in custom_niches if str(n).strip() not in self._used_topics]
                 if unused_custom:
-                    chosen = random.choice(unused_custom).strip()
+                    chosen = str(random.choice(unused_custom)).strip()
                     self._used_topics.add(chosen)
                     self._save_to_disk()
                     return chosen
                 # If all custom niches used, pick random custom
-                chosen = random.choice(custom_niches).strip()
+                chosen = str(random.choice(custom_niches)).strip()
                 return chosen
 
             # 2. Build full matrix of 900+ combinations

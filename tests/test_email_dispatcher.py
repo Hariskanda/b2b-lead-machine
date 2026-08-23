@@ -1,11 +1,13 @@
 import unittest
 from unittest.mock import MagicMock, patch
 from b2b_leadgen.email_dispatcher import build_outreach_email, send_single_email, dispatch_campaign
+from b2b_leadgen.history import sent_history
 from b2b_leadgen.models import EnrichedLead
 
 
 class TestEmailDispatcher(unittest.TestCase):
     def setUp(self):
+        sent_history.clear_sent_history()
         self.sample_lead = EnrichedLead(
             company_name="Apex Plumbing Services",
             website_url="https://apexplumbing.com",
@@ -30,7 +32,8 @@ class TestEmailDispatcher(unittest.TestCase):
             lead=self.sample_lead,
             app_url="http://localhost:8501",
             sender_name="B2B Lead Machine",
-            price_usd=6.0
+            price_usd=6.0,
+            extra_param_ignored="test"
         )
 
         self.assertIn("Apex Plumbing Services", subject)
@@ -51,7 +54,8 @@ class TestEmailDispatcher(unittest.TestCase):
             subject="Quick Question",
             html_body="<p>Hello</p>",
             plain_text="Hello",
-            sender_name="B2B Machine"
+            sender_name="B2B Machine",
+            extra_kwarg="ignored"
         )
         self.assertTrue(success)
         mock_server.sendmail.assert_called_once()
@@ -60,9 +64,13 @@ class TestEmailDispatcher(unittest.TestCase):
         self.assertEqual(args[1], ["contact@apexplumbing.com"])
 
     @patch("smtplib.SMTP")
-    def test_dispatch_campaign(self, mock_smtp_class):
+    def test_dispatch_campaign_with_kwargs_and_callbacks(self, mock_smtp_class):
         mock_server = MagicMock()
         mock_smtp_class.return_value = mock_server
+
+        progress_calls = []
+        def mock_progress(lead, success, msg, idx, tot):
+            progress_calls.append((lead, success, msg, idx, tot))
 
         leads = [self.sample_lead, self.lead_without_email]
         report = dispatch_campaign(
@@ -70,7 +78,14 @@ class TestEmailDispatcher(unittest.TestCase):
             sender_email="sender@gmail.com",
             app_password="mockapppassword123",
             app_url="http://localhost:8501",
-            delay_seconds=0.0
+            sender_name="B2B Lead Machine",
+            smtp_host="smtp.gmail.com",
+            smtp_port=587,
+            price_usd=6.0,
+            topic="Plumbing in Austin",
+            delay_seconds=0.0,
+            progress_callback=mock_progress,
+            extra_unexpected_param="safe"
         )
 
         self.assertTrue(report["success"])
@@ -78,8 +93,31 @@ class TestEmailDispatcher(unittest.TestCase):
         self.assertEqual(report["eligible_leads"], 1)
         self.assertEqual(report["sent_count"], 1)
         self.assertEqual(report["failed_count"], 0)
+        self.assertEqual(len(progress_calls), 1)
         mock_server.login.assert_called_once_with("sender@gmail.com", "mockapppassword123")
         mock_server.sendmail.assert_called_once()
+        self.assertTrue(sent_history.is_email_sent("contact@apexplumbing.com"))
+
+    @patch("smtplib.SMTP")
+    def test_dispatch_campaign_deduplication(self, mock_smtp_class):
+        mock_server = MagicMock()
+        mock_smtp_class.return_value = mock_server
+
+        # Pre-record email as sent
+        sent_history.record_sent_email("contact@apexplumbing.com", "Apex Plumbing", "Prior Topic")
+
+        leads = [self.sample_lead]
+        report = dispatch_campaign(
+            leads=leads,
+            sender_email="sender@gmail.com",
+            app_password="mockapppassword123",
+            delay_seconds=0.0
+        )
+
+        self.assertTrue(report["success"])
+        self.assertEqual(report["sent_count"], 0)
+        self.assertEqual(report["skipped_duplicates"], 1)
+        mock_server.sendmail.assert_not_called()
 
     @patch("b2b_leadgen.email_dispatcher.settings")
     def test_dispatch_missing_credentials(self, mock_settings):
