@@ -15,24 +15,31 @@ logger = logging.getLogger(__name__)
 EMAIL_REGEX = re.compile(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+')
 
 # Common false positive patterns or dummy domains in emails
-DISALLOWED_EMAIL_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.css', '.js'}
-DISALLOWED_DOMAINS = {'example.com', 'domain.com', 'yourcompany.com', 'email.com', 'test.com', 'sentry.io'}
+DISALLOWED_EMAIL_EXTS = ('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.css', '.js', '.map', '.woff', '.ttf')
+DISALLOWED_DOMAINS = {'example.com', 'domain.com', 'yourcompany.com', 'email.com', 'test.com', 'sentry.io', 'wixpress.com'}
+JUNK_PREFIXES = {'bootstrap', 'splide', 'jquery', 'swiper', 'vue', 'react', 'core-js', 'lodash', 'popper', 'fontawesome', 'webpack', 'babel', 'angular', 'chartjs', 'select2', 'moment', 'axios', 'sentry', 'dummy', 'user', 'username', 'test'}
 
 
 def filter_valid_emails(raw_emails: Set[str]) -> List[str]:
-    """Filters out image filenames, dummy emails, and invalid formats."""
+    """Filters out image filenames, library artifacts (bootstrap@4.6.0), dummy emails, and invalid formats."""
     valid = []
     for email in raw_emails:
-        email = email.strip().lower().rstrip('.,;')
-        if not email or '@' not in email:
+        email = email.strip().lower().rstrip('.,;:/')
+        if not email or '@' not in email or email.count('@') != 1:
             continue
-        # Check extensions
+        user, domain = email.split('@')
+        if user in JUNK_PREFIXES:
+            continue
+        if re.match(r"^v?\d+(\.\d+)+$", domain):
+            continue
         if any(email.endswith(ext) for ext in DISALLOWED_EMAIL_EXTS):
             continue
-        domain = email.split('@')[-1]
         if domain in DISALLOWED_DOMAINS:
             continue
         if len(email) < 6 or len(email) > 80:
+            continue
+        tld = domain.split('.')[-1]
+        if not tld.isalpha() or len(tld) < 2:
             continue
         if email not in valid:
             valid.append(email)
@@ -59,130 +66,116 @@ def extract_metadata(soup: BeautifulSoup) -> Tuple[Optional[str], Optional[str]]
     if soup.title and soup.title.string:
         title = soup.title.string.strip()
 
-    desc_tag = soup.find("meta", attrs={"name": "description"}) or soup.find("meta", attrs={"property": "og:description"})
-    if desc_tag and desc_tag.get("content"):
-        meta_desc = desc_tag["content"].strip()
+    meta_tag = soup.find("meta", attrs={"name": "description"}) or soup.find("meta", attrs={"property": "og:description"})
+    if meta_tag and meta_tag.get("content"):
+        meta_desc = meta_tag["content"].strip()
 
     return title, meta_desc
-
-
-def find_contact_links(base_url: str, soup: BeautifulSoup) -> List[str]:
-    """Finds internal contact, about, or support page URLs from homepage navigation."""
-    contact_keywords = ["contact", "about", "team", "support", "touch", "reach", "company"]
-    discovered_urls = []
-    base_domain = urlparse(base_url).netloc.lower()
-
-    for a_tag in soup.find_all("a", href=True):
-        href = a_tag["href"].strip()
-        link_text = (a_tag.get_text() or "").lower()
-
-        # Check mailto: links separately
-        if href.startswith("mailto:"):
-            continue
-
-        full_url = urljoin(base_url, href)
-        parsed = urlparse(full_url)
-
-        # Ensure link stays on the same domain
-        if parsed.netloc.lower() != base_domain:
-            continue
-
-        url_path = parsed.path.lower()
-        if any(keyword in url_path or keyword in link_text for keyword in contact_keywords):
-            if full_url not in discovered_urls and full_url != base_url:
-                discovered_urls.append(full_url)
-                if len(discovered_urls) >= 3:
-                    break
-
-    return discovered_urls
 
 
 class AsyncWebScraper:
     def __init__(
         self,
-        timeout: int = settings.request_timeout_seconds,
-        user_agent: str = settings.user_agent,
-        follow_contact_pages: bool = settings.follow_contact_pages
+        timeout: Optional[float] = None,
+        follow_contact_pages: bool = True,
+        max_subpages: int = 2
     ):
-        self.timeout = timeout
+        self.timeout = timeout or settings.scraping_timeout_seconds
         self.follow_contact_pages = follow_contact_pages
+        self.max_subpages = max_subpages
         self.headers = {
-            "User-Agent": user_agent,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Upgrade-Insecure-Requests": "1"
+            "User-Agent": settings.scraping_user_agent,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
         }
 
-    async def fetch_page(self, client: httpx.AsyncClient, url: str) -> Optional[ScrapedPage]:
-        """Fetches and parses a single webpage."""
+    async def scrape_url(self, url: str) -> ScrapedPage:
+        """Fetches and parses the given URL, optionally discovering contact subpages."""
+        if not url.startswith("http://") and not url.startswith("https://"):
+            url = "https://" + url
+
         try:
-            response = await client.get(url, headers=self.headers, timeout=self.timeout, follow_redirects=True)
-            if response.status_code >= 400:
-                logger.warning(f"HTTP {response.status_code} fetching {url}")
-                return None
+            async with httpx.AsyncClient(
+                headers=self.headers,
+                timeout=self.timeout,
+                follow_redirects=True,
+                verify=False
+            ) as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    logger.warning(f"HTTP {resp.status_code} when fetching {url}")
+                    return ScrapedPage(url=url, status_code=resp.status_code)
 
-            html_content = response.text
-            soup = BeautifulSoup(html_content, "html.parser")
+                soup = BeautifulSoup(resp.text, "html.parser")
+                title, meta_desc = extract_metadata(soup)
+                clean_text = clean_html_to_text(soup)
 
-            # Extract raw mailto: emails
-            raw_emails = set()
-            for mailto in soup.select('a[href^="mailto:"]'):
-                href = mailto.get("href", "")
-                email = href.replace("mailto:", "").split("?")[0].strip()
-                if email:
-                    raw_emails.add(email)
+                # Heuristic DOM Email Search
+                discovered_emails = set(EMAIL_REGEX.findall(resp.text))
+                for a in soup.find_all("a", href=True):
+                    href = a["href"]
+                    if href.startswith("mailto:"):
+                        raw_email = href.replace("mailto:", "").split("?")[0].strip()
+                        if raw_email:
+                            discovered_emails.add(raw_email)
 
-            # Extract regex emails from text
-            regex_matches = EMAIL_REGEX.findall(html_content)
-            raw_emails.update(regex_matches)
+                # Subpage crawling for Contact / About pages if requested
+                if self.follow_contact_pages:
+                    subpage_emails = await self._crawl_subpages(client, url, soup)
+                    discovered_emails.update(subpage_emails)
 
-            valid_emails = filter_valid_emails(raw_emails)
-            clean_text = clean_html_to_text(soup)
-            title, meta_desc = extract_metadata(soup)
-            contact_links = find_contact_links(url, soup)
+                valid_emails = filter_valid_emails(discovered_emails)
 
-            return ScrapedPage(
-                url=str(response.url),
-                status_code=response.status_code,
-                title=title,
-                meta_description=meta_desc,
-                clean_text=clean_text,
-                discovered_emails=valid_emails,
-                contact_links=contact_links
-            )
+                return ScrapedPage(
+                    url=str(resp.url),
+                    status_code=resp.status_code,
+                    title=title,
+                    meta_description=meta_desc,
+                    clean_text=clean_text,
+                    discovered_emails=valid_emails
+                )
+
         except Exception as e:
-            logger.warning(f"Failed to scrape {url}: {e}")
-            return None
+            logger.warning(f"Error scraping {url}: {e}")
+            return ScrapedPage(url=url, status_code=0)
 
-    async def scrape_company_site(self, base_url: str) -> Optional[ScrapedPage]:
-        """
-        Scrapes the company homepage, and if no contact email is found,
-        crawls discovered contact/about subpages.
-        """
-        async with httpx.AsyncClient(verify=False) as client:
-            homepage_data = await self.fetch_page(client, base_url)
-            if not homepage_data:
-                return None
+    async def _crawl_subpages(
+        self,
+        client: httpx.AsyncClient,
+        base_url: str,
+        soup: BeautifulSoup
+    ) -> Set[str]:
+        """Finds contact/about links and fetches their content to discover more emails."""
+        emails: Set[str] = set()
+        subpage_urls: Set[str] = set()
 
-            # If emails found or subpage following disabled, return homepage data
-            if homepage_data.discovered_emails or not self.follow_contact_pages:
-                return homepage_data
+        contact_keywords = ["contact", "about", "team", "reach", "support", "get-in-touch"]
 
-            # Follow top contact/about page to search for emails
-            for contact_url in homepage_data.contact_links:
-                logger.info(f"Checking subpage for contact details: {contact_url}")
-                subpage_data = await self.fetch_page(client, contact_url)
-                if subpage_data:
-                    # Merge discovered emails and append text
-                    if subpage_data.discovered_emails:
-                        homepage_data.discovered_emails.extend(subpage_data.discovered_emails)
-                    homepage_data.clean_text += f"\n--- Contact Page ({contact_url}) ---\n" + subpage_data.clean_text[:4000]
-                    if homepage_data.discovered_emails:
-                        break  # Found email, no need to crawl more
+        for a in soup.find_all("a", href=True):
+            href = a["href"].strip()
+            link_text = a.get_text().lower()
 
-            # Deduplicate emails
-            homepage_data.discovered_emails = list(dict.fromkeys(homepage_data.discovered_emails))
-            return homepage_data
+            if any(k in href.lower() or k in link_text for k in contact_keywords):
+                full_url = urljoin(base_url, href)
+                # Ensure same origin
+                if urlparse(full_url).netloc == urlparse(base_url).netloc:
+                    subpage_urls.add(full_url)
+                    if len(subpage_urls) >= self.max_subpages:
+                        break
+
+        for sub_url in subpage_urls:
+            try:
+                resp = await client.get(sub_url)
+                if resp.status_code == 200:
+                    found = EMAIL_REGEX.findall(resp.text)
+                    emails.update(found)
+                    sub_soup = BeautifulSoup(resp.text, "html.parser")
+                    for a in sub_soup.find_all("a", href=True):
+                        if a["href"].startswith("mailto:"):
+                            em = a["href"].replace("mailto:", "").split("?")[0].strip()
+                            if em:
+                                emails.add(em)
+            except Exception as e:
+                logger.debug(f"Could not scrape subpage {sub_url}: {e}")
+
+        return emails

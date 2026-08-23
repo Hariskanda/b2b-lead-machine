@@ -206,7 +206,7 @@ class AutopilotEngine:
                             smtp_port=smtp_port,
                             price_usd=price_usd,
                             topic=niche,
-                            delay_seconds=1.5
+                            delay_seconds=5.0
                         )
                         sent = report.get("sent_count", 0)
                         self.total_emails_sent += sent

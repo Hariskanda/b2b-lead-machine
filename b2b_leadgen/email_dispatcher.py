@@ -1,4 +1,5 @@
 import logging
+import re
 import smtplib
 import time
 from email.mime.multipart import MIMEMultipart
@@ -10,6 +11,80 @@ from b2b_leadgen.history import sent_history
 from b2b_leadgen.models import EnrichedLead
 
 logger = logging.getLogger(__name__)
+
+# Known library/framework artifact names before @
+JUNK_PREFIXES = {
+    "bootstrap", "splide", "jquery", "swiper", "vue", "react", "core-js",
+    "lodash", "popper", "fontawesome", "font-awesome", "modernizr",
+    "webpack", "babel", "angular", "gsap", "chartjs", "chart", "select2",
+    "moment", "axios", "normalize", "animate", "slick", "fancybox",
+    "magnific-popup", "owl.carousel", "owl-carousel", "lightbox",
+    "dummy", "placeholder", "yourname", "user", "username", "test",
+    "sentry", "git", "npm", "node_modules", "wixpress", "sentry-cdn"
+}
+
+# Invalid extension endings
+INVALID_EXTENSIONS = (
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
+    ".js", ".css", ".map", ".woff", ".woff2", ".ttf", ".eot",
+    ".mp4", ".mp3", ".pdf", ".zip", ".json", ".xml"
+)
+
+EMAIL_REGEX = re.compile(
+    r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
+)
+
+
+def is_valid_business_email(email: Optional[str]) -> Tuple[bool, str]:
+    """
+    Strictly validates whether an email is a legitimate business contact email,
+    filtering out library version tags (e.g. bootstrap@4.6.0, splide@4.1.4),
+    image asset extensions, dummy placeholders, and code artifacts.
+    Returns (is_valid, reason).
+    """
+    if not email or not isinstance(email, str):
+        return False, "Empty or non-string email"
+
+    clean = email.strip().lower().rstrip(".,;:/")
+
+    if len(clean) < 6 or len(clean) > 100:
+        return False, f"Invalid length ({len(clean)} chars)"
+
+    if "@" not in clean or clean.count("@") != 1:
+        return False, "Malformed email structure (must contain exactly one @)"
+
+    user_part, domain_part = clean.split("@")
+
+    if not user_part or not domain_part:
+        return False, "Missing user or domain part"
+
+    # 1. Reject code library artifacts before @
+    if user_part in JUNK_PREFIXES:
+        return False, f"Code library artifact detected: '{user_part}'"
+
+    # 2. Reject domain parts that look like semver version numbers (e.g. @4.6.0, @1.2.3, @4.1.4)
+    if re.match(r"^v?\d+(\.\d+)+$", domain_part):
+        return False, f"Version number artifact detected: '@{domain_part}'"
+
+    # 3. Reject file extension artifacts (.png, .jpg, .js, .css, etc.)
+    if domain_part.endswith(INVALID_EXTENSIONS) or any(clean.endswith(ext) for ext in INVALID_EXTENSIONS):
+        return False, f"Image or asset extension in email: '@{domain_part}'"
+
+    # 4. Check standard regex structure
+    if not EMAIL_REGEX.match(clean):
+        return False, "Failed standard email RFC regex validation"
+
+    # 5. Validate TLD (must be letters, length >= 2, e.g. .com, .org, .co, .io)
+    parts = domain_part.split(".")
+    tld = parts[-1]
+    if not tld.isalpha() or len(tld) < 2:
+        return False, f"Invalid domain TLD: '.{tld}'"
+
+    # 6. Reject common placeholder domains
+    if domain_part in ("domain.com", "example.com", "test.com", "yoursite.com", "company.com", "email.com"):
+        return False, f"Placeholder domain: '{domain_part}'"
+
+    return True, "Valid"
 
 
 def _get_attr(obj: Any, key: str, default: Any = None) -> Any:
@@ -160,6 +235,33 @@ Automated Outbound Intelligence
     return subject, html_body, plain_text
 
 
+def _connect_smtp_server(
+    host: str,
+    port: int,
+    user: str,
+    password: str
+) -> smtplib.SMTP:
+    """
+    Initializes and connects to the SMTP server with TLS/SSL negotiation and authentication.
+    Resolves 'please run connect() first' by ensuring full connection setup before return.
+    """
+    clean_password = password.replace(" ", "").strip()
+    logger.info(f"Connecting to SMTP server at {host}:{port}...")
+
+    if port == 465:
+        server = smtplib.SMTP_SSL(host, port, timeout=30)
+        server.ehlo()
+    else:
+        server = smtplib.SMTP(host, port, timeout=30)
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+
+    server.login(user, clean_password)
+    logger.info(f"Successfully authenticated SMTP session for {user}")
+    return server
+
+
 def send_single_email(
     server: smtplib.SMTP,
     sender_email: str,
@@ -195,14 +297,16 @@ def dispatch_campaign(
     smtp_port: Optional[int] = None,
     price_usd: float = 6.0,
     topic: str = "",
-    delay_seconds: float = 1.0,
+    delay_seconds: float = 5.0,
     progress_callback: Optional[Callable[[Any, bool, str, int, int], None]] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """
-    Autonomously dispatches personalized pitches via Gmail SMTP to all leads with verified emails.
-    Cross-references each recipient email against sent_history to prevent duplicate dispatches.
-    Records successful sends in persistent sent_history database.
+    Autonomously dispatches personalized pitches via Gmail SMTP with:
+    1. Robust SMTP connection & auto-reconnection handling (resolving 'please run connect() first').
+    2. Strict email validation filter (skipping code artifacts like bootstrap@4.6.0 or splide@4.1.4).
+    3. Sent-history deduplication check (preventing duplicate sends).
+    4. Gmail rate-limiting protection with configurable safety delays (default 5.0s).
     """
     user = (sender_email or getattr(settings, "effective_smtp_user", "") or "").strip()
     password = (app_password or getattr(settings, "effective_smtp_password", "") or "").strip()
@@ -219,18 +323,19 @@ def dispatch_campaign(
             "eligible_leads": 0,
             "sent_count": 0,
             "skipped_duplicates": 0,
+            "skipped_invalid": 0,
             "failed_count": 0,
             "results": []
         }
 
-    # Filter leads that have a valid email address
-    eligible_leads = []
+    # Extract leads that have non-empty email values
+    candidates = []
     for l in leads:
         em = _get_attr(l, "primary_email")
         if em and isinstance(em, str) and "@" in em:
-            eligible_leads.append(l)
+            candidates.append(l)
 
-    if not eligible_leads:
+    if not candidates:
         return {
             "success": False,
             "message": "No eligible leads with verified email addresses found.",
@@ -238,6 +343,7 @@ def dispatch_campaign(
             "eligible_leads": 0,
             "sent_count": 0,
             "skipped_duplicates": 0,
+            "skipped_invalid": 0,
             "failed_count": 0,
             "results": []
         }
@@ -245,31 +351,45 @@ def dispatch_campaign(
     results = []
     sent_count = 0
     skipped_duplicates = 0
+    skipped_invalid = 0
     failed_count = 0
-    total_eligible = len(eligible_leads)
-
-    logger.info(f"Connecting to Gmail SMTP server {host}:{port}...")
+    total_candidates = len(candidates)
 
     server = None
     try:
-        server = smtplib.SMTP(host, port, timeout=20)
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
-        server.login(user, password.replace(" ", ""))
-        logger.info(f"Successfully authenticated as {user}")
+        # 1. Establish initial verified connection before iteration
+        server = _connect_smtp_server(host, port, user, password)
 
-        for idx, lead in enumerate(eligible_leads, 1):
-            recipient = str(_get_attr(lead, "primary_email", "")).strip()
+        for idx, lead in enumerate(candidates, 1):
+            raw_recipient = str(_get_attr(lead, "primary_email", "")).strip()
             c_name = str(_get_attr(lead, "company_name", "there"))
             p_pitch = str(_get_attr(lead, "personalized_pitch", ""))
 
-            # 🛡️ Deduplication Check against persistent history database
+            # 🛡️ 2. Strict Email Validation Filter (e.g. Reject bootstrap@4.6.0, splide@4.1.4, invalid assets)
+            is_valid, validation_reason = is_valid_business_email(raw_recipient)
+            if not is_valid:
+                skipped_invalid += 1
+                logger.warning(f"🚫 Skipping invalid email '{raw_recipient}' ({validation_reason}).")
+                if progress_callback:
+                    progress_callback(lead, False, f"Skipped: {validation_reason}", idx, total_candidates)
+
+                results.append({
+                    "company_name": c_name,
+                    "email": raw_recipient,
+                    "status": "skipped_invalid",
+                    "error": f"Invalid email format ({validation_reason})",
+                    "pitch": p_pitch
+                })
+                continue
+
+            recipient = raw_recipient.lower()
+
+            # 🛡️ 3. Deduplication Check against persistent history database
             if sent_history.is_email_sent(recipient):
                 skipped_duplicates += 1
                 logger.info(f"⏩ Skipping {recipient} (already emailed in past campaign).")
                 if progress_callback:
-                    progress_callback(lead, True, "Skipped (already in sent history)", idx, total_eligible)
+                    progress_callback(lead, True, "Skipped (already in sent history)", idx, total_candidates)
 
                 results.append({
                     "company_name": c_name,
@@ -282,20 +402,46 @@ def dispatch_campaign(
 
             subject, html_body, plain_text = build_outreach_email(lead, app_url=url, sender_name=name, price_usd=price_usd)
 
-            try:
-                send_single_email(
-                    server=server,
-                    sender_email=user,
-                    recipient_email=recipient,
-                    subject=subject,
-                    html_body=html_body,
-                    plain_text=plain_text,
-                    sender_name=name
-                )
+            # 4. Send Email with auto-reconnection and rate-limit handling
+            send_success = False
+            err_msg = ""
+            for attempt in range(2):
+                try:
+                    send_single_email(
+                        server=server,
+                        sender_email=user,
+                        recipient_email=recipient,
+                        subject=subject,
+                        html_body=html_body,
+                        plain_text=plain_text,
+                        sender_name=name
+                    )
+                    send_success = True
+                    break
+                except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, BrokenPipeError, ConnectionResetError) as disc_err:
+                    logger.warning(f"SMTP connection dropped on attempt {attempt+1}: {disc_err}. Reconnecting...")
+                    try:
+                        server = _connect_smtp_server(host, port, user, password)
+                    except Exception as rec_err:
+                        err_msg = f"SMTP Reconnect failed: {rec_err}"
+                        break
+                except smtplib.SMTPResponseException as resp_err:
+                    # Gmail Rate Limit / Quota Check (421, 450, 451, 452, 550)
+                    code = resp_err.smtp_code
+                    msg = str(resp_err.smtp_error)
+                    if code in (421, 450, 451, 452, 550) and ("limit" in msg.lower() or "quota" in msg.lower() or "blocked" in msg.lower()):
+                        err_msg = f"Gmail rate limit / sending quota reached (Code {code}): {msg}"
+                        logger.error(err_msg)
+                    else:
+                        err_msg = f"SMTP Error ({code}): {msg}"
+                    break
+                except Exception as ex:
+                    err_msg = str(ex)
+                    break
+
+            if send_success:
                 sent_count += 1
                 status = "sent"
-                err_msg = ""
-
                 # 📝 Record in persistent sent history
                 sent_history.record_sent_email(
                     email=recipient,
@@ -303,16 +449,14 @@ def dispatch_campaign(
                     topic=topic or "General Outreach",
                     pitch=p_pitch
                 )
-
                 if progress_callback:
-                    progress_callback(lead, True, "Sent successfully", idx, total_eligible)
-            except Exception as e:
+                    progress_callback(lead, True, "Sent successfully", idx, total_candidates)
+            else:
                 failed_count += 1
                 status = "failed"
-                err_msg = str(e)
-                logger.error(f"Failed to send email to {recipient}: {e}")
+                logger.error(f"Failed to send email to {recipient}: {err_msg}")
                 if progress_callback:
-                    progress_callback(lead, False, str(e), idx, total_eligible)
+                    progress_callback(lead, False, err_msg, idx, total_candidates)
 
             results.append({
                 "company_name": c_name,
@@ -322,19 +466,21 @@ def dispatch_campaign(
                 "pitch": p_pitch
             })
 
-            if idx < total_eligible and delay_seconds > 0:
+            # ⏱️ 5. Rate-Limit Safety Delay between sends (e.g. 5-10s)
+            if idx < total_candidates and delay_seconds > 0:
                 time.sleep(delay_seconds)
 
     except Exception as e:
-        logger.error(f"SMTP Connection/Authentication error: {e}")
+        logger.error(f"SMTP Connection / Authentication failure: {e}")
         return {
             "success": False,
-            "message": f"SMTP Authentication error: {e}. Ensure you are using a 16-character Gmail App Password.",
+            "message": f"SMTP Authentication/Connection error: {e}. Ensure you are using a valid 16-character Gmail App Password.",
             "total_leads": len(leads),
-            "eligible_leads": total_eligible,
+            "eligible_leads": total_candidates,
             "sent_count": sent_count,
             "skipped_duplicates": skipped_duplicates,
-            "failed_count": total_eligible - sent_count - skipped_duplicates,
+            "skipped_invalid": skipped_invalid,
+            "failed_count": total_candidates - sent_count - skipped_duplicates - skipped_invalid,
             "results": results
         }
     finally:
@@ -347,9 +493,10 @@ def dispatch_campaign(
     return {
         "success": True,
         "total_leads": len(leads),
-        "eligible_leads": total_eligible,
+        "eligible_leads": total_candidates,
         "sent_count": sent_count,
         "skipped_duplicates": skipped_duplicates,
+        "skipped_invalid": skipped_invalid,
         "failed_count": failed_count,
         "results": results
     }

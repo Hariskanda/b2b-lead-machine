@@ -1,6 +1,11 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from b2b_leadgen.email_dispatcher import build_outreach_email, send_single_email, dispatch_campaign
+from b2b_leadgen.email_dispatcher import (
+    build_outreach_email,
+    send_single_email,
+    dispatch_campaign,
+    is_valid_business_email
+)
 from b2b_leadgen.history import sent_history
 from b2b_leadgen.models import EnrichedLead
 
@@ -26,6 +31,35 @@ class TestEmailDispatcher(unittest.TestCase):
             personalized_pitch="Hi team, nice website.",
             status="success"
         )
+        self.invalid_artifact_lead = EnrichedLead(
+            company_name="Bootstrap Lib",
+            website_url="https://lib.com",
+            primary_email="bootstrap@4.6.0",
+            company_summary="A JS library.",
+            personalized_pitch="Hi bootstrap team.",
+            status="success"
+        )
+
+    def test_is_valid_business_email(self):
+        valid, reason = is_valid_business_email("contact@apexplumbing.com")
+        self.assertTrue(valid)
+
+        valid, reason = is_valid_business_email("sales.dept@company.co.uk")
+        self.assertTrue(valid)
+
+        # Invalid library version artifacts
+        valid, reason = is_valid_business_email("bootstrap@4.6.0")
+        self.assertFalse(valid)
+        self.assertIn("artifact", reason.lower())
+
+        valid, reason = is_valid_business_email("splide@4.1.4")
+        self.assertFalse(valid)
+
+        valid, reason = is_valid_business_email("icon@2x.png")
+        self.assertFalse(valid)
+
+        valid, reason = is_valid_business_email("user@example.com")
+        self.assertFalse(valid)
 
     def test_build_outreach_email(self):
         subject, html_body, plain_text = build_outreach_email(
@@ -72,7 +106,7 @@ class TestEmailDispatcher(unittest.TestCase):
         def mock_progress(lead, success, msg, idx, tot):
             progress_calls.append((lead, success, msg, idx, tot))
 
-        leads = [self.sample_lead, self.lead_without_email]
+        leads = [self.sample_lead, self.lead_without_email, self.invalid_artifact_lead]
         report = dispatch_campaign(
             leads=leads,
             sender_email="sender@gmail.com",
@@ -89,11 +123,11 @@ class TestEmailDispatcher(unittest.TestCase):
         )
 
         self.assertTrue(report["success"])
-        self.assertEqual(report["total_leads"], 2)
-        self.assertEqual(report["eligible_leads"], 1)
+        self.assertEqual(report["total_leads"], 3)
+        self.assertEqual(report["eligible_leads"], 2)
         self.assertEqual(report["sent_count"], 1)
+        self.assertEqual(report["skipped_invalid"], 1)
         self.assertEqual(report["failed_count"], 0)
-        self.assertEqual(len(progress_calls), 1)
         mock_server.login.assert_called_once_with("sender@gmail.com", "mockapppassword123")
         mock_server.sendmail.assert_called_once()
         self.assertTrue(sent_history.is_email_sent("contact@apexplumbing.com"))

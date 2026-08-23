@@ -687,6 +687,8 @@ if st.session_state["leads"]:
                     st.markdown(f"**Subject:** `{subj}`")
                     st.text(txt_prev)
 
+            send_delay = st.slider("Safety Delay Between Outgoing Emails (Sec)", min_value=3, max_value=15, value=5, step=1, help="5-10s delay prevents triggering Gmail anti-spam sending blocks.", key="batch_delay_slider")
+
             if len(unsent_leads) == 0:
                 st.warning("⚠️ All eligible leads in this table have already been emailed previously. Deduplication filter active.")
             else:
@@ -699,13 +701,15 @@ if st.session_state["leads"]:
                             dispatch_status = st.empty()
                             dispatch_bar = st.progress(0)
 
-                            def on_email_progress(lead: EnrichedLead, success: bool, msg: str, idx: int, tot: int):
+                            def on_email_progress(lead: Any, success: bool, msg: str, idx: int, tot: int):
                                 pct = int((idx / tot) * 100)
                                 dispatch_bar.progress(pct)
                                 icon = "✅" if success else "❌"
-                                dispatch_status.text(f"Sending ({idx}/{tot}) {icon} -> {lead.company_name} ({lead.primary_email})")
+                                c_name = getattr(lead, "company_name", None) or (lead.get("company_name") if isinstance(lead, dict) else "Lead")
+                                p_email = getattr(lead, "primary_email", None) or (lead.get("primary_email") if isinstance(lead, dict) else "")
+                                dispatch_status.text(f"Processing ({idx}/{tot}) {icon} -> {c_name} ({p_email}) [{msg}]")
 
-                            with st.spinner("Dispatching cold email pitches via Gmail SMTP..."):
+                            with st.spinner("Connecting to Gmail SMTP & dispatching cold email pitches..."):
                                 report = dispatch_campaign(
                                     leads=unsent_leads,
                                     sender_email=SMTP_USER,
@@ -716,14 +720,14 @@ if st.session_state["leads"]:
                                     smtp_port=SMTP_PORT,
                                     price_usd=CRYPTO_PRICE_USD,
                                     topic=st.session_state.get("last_query", "Single Batch Outreach"),
-                                    delay_seconds=1.0,
+                                    delay_seconds=float(send_delay),
                                     progress_callback=on_email_progress
                                 )
 
                             dispatch_bar.progress(100)
                             st.session_state["campaign_results"] = report
                             if report.get("success"):
-                                st.success(f"🎉 Campaign Finished! Successfully sent {report.get('sent_count')} emails ({report.get('skipped_duplicates', 0)} duplicates skipped).")
+                                st.success(f"🎉 Campaign Finished! Successfully sent {report.get('sent_count')} emails ({report.get('skipped_duplicates', 0)} duplicates skipped, {report.get('skipped_invalid', 0)} invalid artifacts skipped).")
                             else:
                                 st.warning(f"⚠️ {report.get('message')}")
 
