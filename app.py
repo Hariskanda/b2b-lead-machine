@@ -3,7 +3,7 @@ import io
 import json
 import os
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 import streamlit as st
@@ -87,36 +87,50 @@ st.markdown("""
 
 
 # =============================================================
-# 🔐 Secure Secret Resolution Helper
+# 🔐 Secure Secret Resolution Helper with Robust Fallbacks
 # =============================================================
 def get_secret(key: str, default: Any = None) -> Any:
-    """Reads a configuration secret from st.secrets, environment variables, or config settings."""
+    """
+    Reads a configuration secret with robust fallbacks:
+    1. st.secrets[key] / st.secrets[key.lower()] / st.secrets[key.upper()]
+    2. os.environ[key] / os.environ[key.lower()] / os.environ[key.upper()]
+    3. settings attribute or default value
+    """
     try:
-        if key in st.secrets:
-            return st.secrets[key]
+        if hasattr(st, "secrets") and st.secrets is not None:
+            if key in st.secrets:
+                return st.secrets[key]
+            if key.lower() in st.secrets:
+                return st.secrets[key.lower()]
+            if key.upper() in st.secrets:
+                return st.secrets[key.upper()]
     except Exception:
         pass
-    env_val = os.environ.get(key)
-    if env_val is not None:
-        return env_val
+
+    for env_key in [key, key.lower(), key.upper()]:
+        env_val = os.environ.get(env_key)
+        if env_val is not None and str(env_val).strip():
+            return env_val
+
     settings_val = getattr(settings, key.lower(), None)
-    if settings_val is not None:
+    if settings_val is not None and str(settings_val).strip():
         return settings_val
+
     return default
 
 
 # Read Core Secrets Securely from st.secrets / backend
-GEMINI_API_KEY = get_secret("GEMINI_API_KEY", settings.effective_api_key)
-ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD", settings.admin_password or "admin123")
-SMTP_USER = get_secret("SMTP_USER", settings.effective_smtp_user)
-SMTP_PASSWORD = get_secret("SMTP_PASSWORD", settings.effective_smtp_password)
-SMTP_HOST = get_secret("SMTP_HOST", settings.smtp_host or "smtp.gmail.com")
-SMTP_PORT = int(get_secret("SMTP_PORT", settings.smtp_port or 587))
-SENDER_NAME = get_secret("SENDER_NAME", settings.sender_name or "B2B Lead Machine")
-APP_URL = get_secret("APP_URL", settings.effective_app_url or "http://localhost:8501")
-UPI_ID = get_secret("UPI_ID", settings.upi_id or "9019525230@fam")
-UPI_PAYEE_NAME = get_secret("UPI_PAYEE_NAME", settings.upi_payee_name or "B2B Lead Machine")
-UPI_AMOUNT_INR = float(get_secret("UPI_AMOUNT_INR", settings.upi_amount_inr or 499.0))
+GEMINI_API_KEY: Optional[str] = get_secret("GEMINI_API_KEY", settings.effective_api_key)
+ADMIN_PASSWORD: str = str(get_secret("ADMIN_PASSWORD", settings.admin_password or "admin123"))
+SMTP_USER: str = str(get_secret("SMTP_USER", settings.effective_smtp_user or ""))
+SMTP_PASSWORD: str = str(get_secret("SMTP_PASSWORD", settings.effective_smtp_password or ""))
+SMTP_HOST: str = str(get_secret("SMTP_HOST", settings.smtp_host or "smtp.gmail.com"))
+SMTP_PORT: int = int(get_secret("SMTP_PORT", settings.smtp_port or 587))
+SENDER_NAME: str = str(get_secret("SENDER_NAME", settings.sender_name or "B2B Lead Machine"))
+APP_URL: str = str(get_secret("APP_URL", settings.effective_app_url or "http://localhost:8501"))
+UPI_ID: str = str(get_secret("UPI_ID", settings.upi_id or "9019525230@fam"))
+UPI_PAYEE_NAME: str = str(get_secret("UPI_PAYEE_NAME", settings.upi_payee_name or "B2B Lead Machine"))
+UPI_AMOUNT_INR: float = float(get_secret("UPI_AMOUNT_INR", settings.upi_amount_inr or 499.0))
 
 
 # Initialize Session State
@@ -214,9 +228,9 @@ with st.sidebar:
 # Set runtime parameters (Admin overrides if logged in, otherwise default)
 effective_model = st.session_state.get("admin_model_select", settings.gemini_model or "gemini-1.5-flash")
 effective_concurrency = int(st.session_state.get("admin_concurrency_slider", settings.max_concurrent_requests or 3))
-effective_follow_subpages = st.session_state.get("admin_follow_subpages_cb", settings.follow_contact_pages)
-effective_gsheet_target = st.session_state.get("admin_gsheet_target", "")
-effective_auto_sync = st.session_state.get("admin_auto_sync_cb", False)
+effective_follow_subpages = bool(st.session_state.get("admin_follow_subpages_cb", settings.follow_contact_pages))
+effective_gsheet_target = str(st.session_state.get("admin_gsheet_target", ""))
+effective_auto_sync = bool(st.session_state.get("admin_auto_sync_cb", False))
 
 
 # =============================================================
@@ -265,7 +279,7 @@ with tab_search:
                     status_text.success(f"✅ Discovered {len(discovered_inputs)} businesses! Starting AI scraping and cold pitch generation...")
 
                     pipeline = LeadGenPipeline(
-                        api_key=GEMINI_API_KEY or None,
+                        api_key=GEMINI_API_KEY,
                         model=effective_model,
                         max_concurrency=effective_concurrency,
                         follow_contact_pages=effective_follow_subpages,
@@ -349,7 +363,7 @@ with tab_csv:
                         prog_bar = st.progress(0)
 
                         pipeline = LeadGenPipeline(
-                            api_key=GEMINI_API_KEY or None,
+                            api_key=GEMINI_API_KEY,
                             model=effective_model,
                             max_concurrency=effective_concurrency,
                             follow_contact_pages=effective_follow_subpages,

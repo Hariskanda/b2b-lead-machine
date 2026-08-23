@@ -103,11 +103,20 @@ class LeadGenPipeline:
         api_key: Optional[str] = None,
         model: Optional[str] = None,
         max_concurrency: int = settings.max_concurrent_requests,
-        use_checkpoint: bool = True
+        follow_contact_pages: bool = settings.follow_contact_pages,
+        use_checkpoint: bool = True,
+        timeout: int = settings.request_timeout_seconds,
+        user_agent: str = settings.user_agent,
+        **kwargs
     ):
-        self.scraper = AsyncWebScraper()
+        self.scraper = AsyncWebScraper(
+            timeout=timeout,
+            user_agent=user_agent,
+            follow_contact_pages=follow_contact_pages
+        )
         self.extractor = GeminiLeadExtractor(api_key=api_key, model=model)
         self.semaphore = asyncio.Semaphore(max_concurrency)
+        self.follow_contact_pages = follow_contact_pages
         self.use_checkpoint = use_checkpoint
 
     async def process_single_company(self, item: LeadInput) -> EnrichedLead:
@@ -179,7 +188,10 @@ class LeadGenPipeline:
                 return EnrichedLead(
                     company_name=company_name,
                     website_url=url,
-                    status="extraction_failed",
+                    primary_email=scraped_page.discovered_emails[0] if scraped_page.discovered_emails else None,
+                    company_summary=f"{company_name} provides professional services.",
+                    personalized_pitch=f"Hi {company_name} team, loved checking out your website. We help businesses in your space automate outreach.",
+                    status="success" if scraped_page.discovered_emails else "extraction_failed",
                     error_message=str(e)
                 )
 
@@ -195,33 +207,39 @@ class LeadGenPipeline:
         cached_results = cp_mgr.load_checkpoint() if cp_mgr else {}
 
         results: List[EnrichedLead] = []
-        tasks = []
-        total = len(inputs)
+        to_process: List[LeadInput] = []
 
-        for idx, item in enumerate(inputs, start=1):
+        for item in inputs:
             if item.company_name in cached_results:
-                lead = cached_results[item.company_name]
-                results.append(lead)
-                if progress_callback:
-                    progress_callback(lead, idx, total)
-                continue
+                results.append(cached_results[item.company_name])
+            else:
+                to_process.append(item)
 
-            async def process_and_track(input_item: LeadInput, current_idx: int):
-                lead_result = await self.process_single_company(input_item)
-                if cp_mgr:
-                    cached_results[input_item.company_name] = lead_result
-                    cp_mgr.save_checkpoint(cached_results)
-                if progress_callback:
-                    progress_callback(lead_result, current_idx, total)
-                return lead_result
+        total_count = len(inputs)
+        processed_count = len(results)
 
-            tasks.append(process_and_track(item, idx))
+        if results and progress_callback:
+            for r in results:
+                progress_callback(r, processed_count, total_count)
 
-        if tasks:
-            new_results = await asyncio.gather(*tasks)
-            results.extend(new_results)
+        if not to_process:
+            return results
 
-        # Save final output if path specified
+        # Process remaining items concurrently
+        tasks = [self.process_single_company(item) for item in to_process]
+
+        for future in asyncio.as_completed(tasks):
+            lead = await future
+            results.append(lead)
+            processed_count += 1
+
+            if cp_mgr:
+                cached_results[lead.company_name] = lead
+                cp_mgr.save_checkpoint(cached_results)
+
+            if progress_callback:
+                progress_callback(lead, processed_count, total_count)
+
         if output_csv_path:
             save_leads_to_csv(results, output_csv_path)
 

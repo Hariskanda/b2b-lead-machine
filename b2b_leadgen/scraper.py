@@ -59,10 +59,7 @@ def extract_metadata(soup: BeautifulSoup) -> Tuple[Optional[str], Optional[str]]
     if soup.title and soup.title.string:
         title = soup.title.string.strip()
 
-    desc_tag = (
-        soup.find("meta", attrs={"name": re.compile(r"^description$", re.I)})
-        or soup.find("meta", attrs={"property": re.compile(r"^og:description$", re.I)})
-    )
+    desc_tag = soup.find("meta", attrs={"name": "description"}) or soup.find("meta", attrs={"property": "og:description"})
     if desc_tag and desc_tag.get("content"):
         meta_desc = desc_tag["content"].strip()
 
@@ -70,10 +67,10 @@ def extract_metadata(soup: BeautifulSoup) -> Tuple[Optional[str], Optional[str]]
 
 
 def find_contact_links(base_url: str, soup: BeautifulSoup) -> List[str]:
-    """Discovers internal contact, about, or support page links."""
-    contact_keywords = ["contact", "contact-us", "about", "about-us", "team", "reach-us", "help", "support"]
-    base_domain = urlparse(base_url).netloc.lower()
+    """Finds internal contact, about, or support page URLs from homepage navigation."""
+    contact_keywords = ["contact", "about", "team", "support", "touch", "reach", "company"]
     discovered_urls = []
+    base_domain = urlparse(base_url).netloc.lower()
 
     for a_tag in soup.find_all("a", href=True):
         href = a_tag["href"].strip()
@@ -101,8 +98,14 @@ def find_contact_links(base_url: str, soup: BeautifulSoup) -> List[str]:
 
 
 class AsyncWebScraper:
-    def __init__(self, timeout: int = settings.request_timeout_seconds, user_agent: str = settings.user_agent):
+    def __init__(
+        self,
+        timeout: int = settings.request_timeout_seconds,
+        user_agent: str = settings.user_agent,
+        follow_contact_pages: bool = settings.follow_contact_pages
+    ):
         self.timeout = timeout
+        self.follow_contact_pages = follow_contact_pages
         self.headers = {
             "User-Agent": user_agent,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -165,7 +168,7 @@ class AsyncWebScraper:
                 return None
 
             # If emails found or subpage following disabled, return homepage data
-            if homepage_data.discovered_emails or not settings.follow_contact_pages:
+            if homepage_data.discovered_emails or not self.follow_contact_pages:
                 return homepage_data
 
             # Follow top contact/about page to search for emails
