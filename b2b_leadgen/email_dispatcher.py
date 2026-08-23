@@ -14,30 +14,33 @@ logger = logging.getLogger(__name__)
 def build_outreach_email(
     lead: EnrichedLead,
     app_url: Optional[str] = None,
-    sender_name: Optional[str] = None
+    sender_name: Optional[str] = None,
+    price_usd: float = 6.0
 ) -> Tuple[str, str, str]:
     """
-    Builds the personalized cold outreach email for a company.
+    Builds the personalized cold outreach email for a company directing them
+    to the secure zero-KYC crypto checkout (accepting USDT, BTC, LTC, ETH, etc. via NOWPayments).
     Returns (subject, html_body, plain_text_body).
     """
     company_name = lead.company_name or "there"
     pitch = (
         lead.personalized_pitch
-        or f"I came across {company_name} and was very impressed by your service offerings. We help businesses in your space streamline lead acquisition."
+        or f"I came across {company_name} and was very impressed by your service offerings. We help businesses in your space streamline lead acquisition and client operations."
     )
     effective_url = (app_url or getattr(settings, "effective_app_url", "http://localhost:8501") or "http://localhost:8501").rstrip("/")
     effective_name = sender_name or getattr(settings, "sender_name", "B2B Lead Machine")
+    effective_price = price_usd or getattr(settings, "crypto_price_usd", 6.0)
 
-    subject = f"Quick question regarding {company_name}"
+    subject = f"Growth opportunity for {company_name}"
 
     plain_text = f"""Hi {company_name} Team,
 
 {pitch}
 
-We have compiled a verified, real-time database of high-intent B2B prospects and target contractors in your market. You can explore the full live dataset directly on our web portal:
+We have compiled a verified, real-time database of high-intent B2B prospects and target decision-makers in your market. You can explore the live dataset directly on our portal:
 👉 {effective_url}
 
-(You can instantly unlock and download the entire verified dataset via instant UPI transfer for ₹499).
+(You can instantly unlock and download the entire verified dataset for ${effective_price:.2f} USD via our automated, zero-KYC crypto checkout accepting USDT, Bitcoin, Ethereum, Solana, and Litecoin).
 
 Best regards,
 {effective_name}
@@ -97,6 +100,16 @@ Automated Outbound Intelligence
             margin: 20px 0;
             text-align: center;
         }}
+        .badge {{
+            display: inline-block;
+            background: #eef2ff;
+            color: #4338ca;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 8px;
+        }}
         .footer {{
             background: #f8fafc;
             padding: 18px;
@@ -119,7 +132,7 @@ Automated Outbound Intelligence
                 {pitch}
             </div>
 
-            <p>We've built an autonomous lead intelligence tool that continuously verifies business contacts and prospect data in your region.</p>
+            <p>We've built an autonomous lead intelligence system that continuously tracks and verifies targeted business contacts and prospect data in your niche.</p>
             
             <p style="text-align: center;">
                 <a href="{effective_url}" class="cta-button" target="_blank">
@@ -127,8 +140,8 @@ Automated Outbound Intelligence
                 </a>
             </p>
 
-            <p style="font-size: 13px; color: #64748b;">
-                💡 <em>You can download the full enriched dataset with verified emails directly on the portal via instant ₹499 UPI checkout.</em>
+            <p style="font-size: 13px; color: #64748b; text-align: center;">
+                🔒 <em>Instant zero-KYC crypto checkout available (${effective_price:.2f} USD accepting USDT, BTC, ETH, SOL, LTC via NOWPayments).</em>
             </p>
 
             <p>Best regards,<br>
@@ -178,12 +191,13 @@ def dispatch_campaign(
     sender_name: Optional[str] = None,
     smtp_host: Optional[str] = None,
     smtp_port: Optional[int] = None,
+    price_usd: float = 6.0,
     delay_seconds: float = 1.0,
     progress_callback: Optional[Callable[[EnrichedLead, bool, str, int, int], None]] = None
 ) -> Dict[str, Any]:
     """
     Autonomously dispatches personalized pitches via Gmail SMTP to all leads with verified emails.
-    Gracefully returns error status if credentials are not configured.
+    Directs recipients to the zero-KYC crypto checkout portal.
     """
     user = (sender_email or getattr(settings, "effective_smtp_user", "") or "").strip()
     password = (app_password or getattr(settings, "effective_smtp_password", "") or "").strip()
@@ -195,7 +209,7 @@ def dispatch_campaign(
     if not user or not password:
         return {
             "success": False,
-            "message": "Gmail address and 16-character App Password are required to dispatch emails. Please configure them in the sidebar or .env file.",
+            "message": "Gmail address and 16-character App Password are required to dispatch emails. Please configure them in secrets or .env file.",
             "total_leads": len(leads),
             "eligible_leads": 0,
             "sent_count": 0,
@@ -233,7 +247,7 @@ def dispatch_campaign(
 
         for idx, lead in enumerate(eligible_leads, 1):
             recipient = lead.primary_email.strip()
-            subject, html_body, plain_text = build_outreach_email(lead, app_url=url, sender_name=name)
+            subject, html_body, plain_text = build_outreach_email(lead, app_url=url, sender_name=name, price_usd=price_usd)
 
             try:
                 send_single_email(

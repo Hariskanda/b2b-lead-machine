@@ -29,15 +29,18 @@ class TestEmailDispatcher(unittest.TestCase):
         subject, html_body, plain_text = build_outreach_email(
             lead=self.sample_lead,
             app_url="http://localhost:8501",
-            sender_name="B2B Lead Machine"
+            sender_name="B2B Lead Machine",
+            price_usd=6.0
         )
 
         self.assertIn("Apex Plumbing Services", subject)
         self.assertIn("AI automation for contractor client intake", plain_text)
         self.assertIn("http://localhost:8501", plain_text)
-        self.assertIn("₹499", plain_text)
+        self.assertIn("$6.00", plain_text)
+        self.assertIn("crypto checkout", plain_text.lower())
         self.assertIn("http://localhost:8501", html_body)
         self.assertIn("AI automation for contractor client intake", html_body)
+        self.assertIn("nowpayments", html_body.lower())
 
     def test_send_single_email(self):
         mock_server = MagicMock()

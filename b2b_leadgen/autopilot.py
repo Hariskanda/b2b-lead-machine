@@ -100,6 +100,7 @@ class AutopilotEngine:
         sender_name: str = "B2B Lead Machine",
         smtp_host: str = "smtp.gmail.com",
         smtp_port: int = 587,
+        price_usd: float = 6.0,
         batch_size: int = 5,
         interval_seconds: int = 120,
         run_continuously: bool = True,
@@ -129,13 +130,14 @@ class AutopilotEngine:
                     "app_url": app_url,
                     "sender_name": sender_name,
                     "smtp_host": smtp_host,
-                    "smtp_port": smtp_port
+                    "smtp_port": smtp_port,
+                    "price_usd": price_usd
                 },
                 daemon=True,
                 name="AutopilotOutboundWorker"
             )
             self._thread.start()
-            self.log(f"🚀 Autopilot Engine launched! Batch size: {self.batch_size}, Interval: {self.interval_seconds}s")
+            self.log(f"🚀 Autopilot Engine launched! Batch size: {self.batch_size}, Interval: {self.interval_seconds}s, Price: ${price_usd:.2f} USD")
             return True
 
     def stop(self) -> bool:
@@ -161,7 +163,8 @@ class AutopilotEngine:
         app_url: str,
         sender_name: str,
         smtp_host: str,
-        smtp_port: int
+        smtp_port: int,
+        price_usd: float = 6.0
     ) -> None:
         start_time = datetime.now()
         max_end_time = start_time + timedelta(hours=self.duration_hours) if not self.run_continuously else None
@@ -203,9 +206,9 @@ class AutopilotEngine:
                     emails_found = [l for l in enriched_leads if l.primary_email and "@" in l.primary_email]
                     self.log(f"🎯 AI Enrichment complete: Found {len(emails_found)} verified email contacts out of {len(enriched_leads)} leads.")
 
-                    # 3. Dispatch Email Campaign
+                    # 3. Dispatch Email Campaign with crypto/USD pricing CTA
                     if emails_found and smtp_user and smtp_password:
-                        self.log(f"📨 Dispatching cold pitches to {len(emails_found)} recipients from {smtp_user}...")
+                        self.log(f"📨 Dispatching cold pitches to {len(emails_found)} recipients from {smtp_user} (CTA: ${price_usd:.2f} USD Zero-KYC Crypto Checkout)...")
                         report = dispatch_campaign(
                             leads=emails_found,
                             sender_email=smtp_user,
@@ -214,6 +217,7 @@ class AutopilotEngine:
                             sender_name=sender_name,
                             smtp_host=smtp_host,
                             smtp_port=smtp_port,
+                            price_usd=price_usd,
                             delay_seconds=1.5
                         )
                         sent = report.get("sent_count", 0)

@@ -223,7 +223,7 @@ with st.sidebar:
     if st.session_state["upi_payment_verified"]:
         st.success("✅ FULL CSV EXPORT UNLOCKED")
     else:
-        st.info(f"🔒 Full CSV Export: $6 USD / ₹{UPI_AMOUNT_INR} Required")
+        st.info(f"🔒 Full CSV Export: ${CRYPTO_PRICE_USD:.2f} USD / ₹{UPI_AMOUNT_INR} Required")
 
     st.divider()
 
@@ -278,6 +278,7 @@ with st.sidebar:
                             sender_name=SENDER_NAME,
                             smtp_host=SMTP_HOST,
                             smtp_port=SMTP_PORT,
+                            price_usd=CRYPTO_PRICE_USD,
                             batch_size=ap_batch_size,
                             interval_seconds=ap_interval,
                             run_continuously=ap_continuous
@@ -565,17 +566,17 @@ if st.session_state["leads"]:
     # =========================================================
     if st.session_state["admin_authenticated"]:
         st.markdown("### 📨 Admin Single-Batch Outbound Launcher")
-        st.markdown("Dispatches personalized cold email pitches from your configured Gmail account with your CTA link.")
+        st.markdown(f"Dispatches personalized cold email pitches from your configured Gmail account with CTA directing to your **${CRYPTO_PRICE_USD:.2f} USD Zero-KYC Crypto Checkout**.")
 
         eligible_count = sum(1 for l in leads if l.primary_email and "@" in l.primary_email)
 
         if eligible_count > 0:
             sample_lead = next(l for l in leads if l.primary_email)
-            subj, html_prev, txt_prev = build_outreach_email(sample_lead, app_url=APP_URL, sender_name=SENDER_NAME)
+            subj, html_prev, txt_prev = build_outreach_email(sample_lead, app_url=APP_URL, sender_name=SENDER_NAME, price_usd=CRYPTO_PRICE_USD)
 
             col_adm_info, col_adm_prev = st.columns([1, 1])
             with col_adm_info:
-                st.info(f"• **Eligible Contacts:** {eligible_count}\n• **Sender:** `{SMTP_USER}`\n• **CTA Link:** `{APP_URL}`")
+                st.info(f"• **Eligible Contacts:** {eligible_count}\n• **Sender:** `{SMTP_USER}`\n• **CTA:** `${CRYPTO_PRICE_USD:.2f} USD Zero-KYC Crypto Checkout (NOWPayments)`\n• **App URL:** `{APP_URL}`")
             with col_adm_prev:
                 with st.expander(f"👁️ Preview Email to {sample_lead.company_name}", expanded=False):
                     st.markdown(f"**Subject:** `{subj}`")
@@ -605,6 +606,7 @@ if st.session_state["leads"]:
                                 sender_name=SENDER_NAME,
                                 smtp_host=SMTP_HOST,
                                 smtp_port=SMTP_PORT,
+                                price_usd=CRYPTO_PRICE_USD,
                                 delay_seconds=1.0,
                                 progress_callback=on_email_progress
                             )
@@ -644,7 +646,7 @@ if st.session_state["leads"]:
             <div class="crypto-hero-box">
                 <h2 style="color: #ffffff; margin-top: 0; font-weight: 800;">⚡ Instant Zero-KYC Crypto Checkout</h2>
                 <p style="color: #cbd5e1; font-size: 1.0rem; margin-bottom: 12px;">
-                    Pay <strong>${CRYPTO_PRICE_USD:.2f} USD</strong> with <strong>Bitcoin (BTC), USDT (TRC20/ERC20), Ethereum (ETH), Solana (SOL)</strong> or 150+ cryptocurrencies.
+                    Pay <strong>${CRYPTO_PRICE_USD:.2f} USD</strong> with <strong>Bitcoin (BTC), USDT (TRC20/ERC20), Ethereum (ETH), Solana (SOL), Litecoin (LTC)</strong> or 150+ cryptocurrencies.
                 </p>
                 <span class="pill">🔒 100% Automated On-Chain Verification</span>
                 <span class="pill">⚡ Instant CSV Download Upon Confirmation</span>
