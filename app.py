@@ -20,7 +20,6 @@ from b2b_leadgen.nowpayments import (
 )
 from b2b_leadgen.pipeline import LeadGenPipeline, detect_company_column
 from b2b_leadgen.sheets_exporter import export_leads_to_google_sheet
-from b2b_leadgen.upi_checkout import generate_upi_qr_code, generate_upi_uri, validate_utr
 
 # Page Configuration
 st.set_page_config(
@@ -63,23 +62,6 @@ st.markdown("""
         text-align: center;
         margin: 15px auto;
         box-shadow: 0 6px 18px rgba(129, 140, 248, 0.18);
-    }
-    .upi-hero-box {
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        border: 2px solid #6366f1;
-        border-radius: 16px;
-        padding: 22px;
-        text-align: center;
-        margin: 15px auto;
-        box-shadow: 0 6px 18px rgba(99, 102, 241, 0.12);
-    }
-    .whatsapp-box {
-        background: #f0fdf4;
-        border: 2px solid #22c55e;
-        border-radius: 14px;
-        padding: 16px;
-        text-align: center;
-        margin-top: 15px;
     }
     .unlocked-box {
         background-color: #f0fdf4;
@@ -194,25 +176,12 @@ NOWPAYMENTS_API_KEY: Optional[str] = get_secret("NOWPAYMENTS_API_KEY", getattr(s
 CRYPTO_PRICE_USD: float = float(get_secret("CRYPTO_PRICE_USD", getattr(settings, "crypto_price_usd", 6.0)))
 ADMIN_PASSWORD: str = str(get_secret("ADMIN_PASSWORD", getattr(settings, "admin_password", "admin123")))
 UNLOCK_CODE: str = str(get_secret("UNLOCK_CODE", getattr(settings, "unlock_code", "4990")))
-WHATSAPP_NUMBER: str = str(get_secret("WHATSAPP_NUMBER", getattr(settings, "whatsapp_number", "919019525230")))
 SMTP_USER: str = str(get_secret("SMTP_USER", getattr(settings, "effective_smtp_user", "")))
 SMTP_PASSWORD: str = str(get_secret("SMTP_PASSWORD", getattr(settings, "effective_smtp_password", "")))
 SMTP_HOST: str = str(get_secret("SMTP_HOST", getattr(settings, "smtp_host", "smtp.gmail.com")))
 SMTP_PORT: int = int(get_secret("SMTP_PORT", getattr(settings, "smtp_port", 587)))
 SENDER_NAME: str = str(get_secret("SENDER_NAME", getattr(settings, "sender_name", "B2B Lead Machine")))
 APP_URL: str = str(get_secret("APP_URL", getattr(settings, "effective_app_url", "http://localhost:8501")))
-UPI_ID: str = str(get_secret("UPI_ID", getattr(settings, "upi_id", "9019525230@fam")))
-UPI_PAYEE_NAME: str = str(get_secret("UPI_PAYEE_NAME", getattr(settings, "upi_payee_name", "B2BLeadMachine")))
-UPI_AMOUNT_INR: int = int(get_secret("UPI_AMOUNT_INR", getattr(settings, "upi_amount_inr", 499)))
-UPI_NOTE: str = "LeadExport499"
-
-# Universal UPI Deep Link Intent URI (Pre-filled ₹499)
-UNIVERSAL_UPI_URI = generate_upi_uri(
-    upi_id=UPI_ID,
-    payee_name=UPI_PAYEE_NAME,
-    amount_inr=UPI_AMOUNT_INR,
-    transaction_note=UPI_NOTE
-)
 
 
 # Initialize Session State
@@ -222,14 +191,12 @@ if "df" not in st.session_state:
     st.session_state["df"] = pd.DataFrame()
 if "last_query" not in st.session_state:
     st.session_state["last_query"] = ""
-if "upi_payment_verified" not in st.session_state:
-    st.session_state["upi_payment_verified"] = False
+if "payment_verified" not in st.session_state:
+    st.session_state["payment_verified"] = False
 if "crypto_invoice_url" not in st.session_state:
     st.session_state["crypto_invoice_url"] = None
 if "crypto_invoice_id" not in st.session_state:
     st.session_state["crypto_invoice_id"] = None
-if "submitted_utr" not in st.session_state:
-    st.session_state["submitted_utr"] = ""
 if "campaign_results" not in st.session_state:
     st.session_state["campaign_results"] = None
 if "admin_authenticated" not in st.session_state:
@@ -252,15 +219,15 @@ with st.sidebar:
         <span class="pill">🎯 Niche + Location Discovery</span><br>
         <span class="pill">📧 Decision-Maker Emails</span><br>
         <span class="pill">✍️ AI Cold Pitches</span><br>
-        <span class="pill">🌐 Zero-KYC Crypto & UPI Checkout</span>
+        <span class="pill">🌐 Zero-KYC Crypto Checkout</span>
     </div>
     """, unsafe_allow_html=True)
 
     st.subheader("📦 Order Status")
-    if st.session_state["upi_payment_verified"]:
+    if st.session_state["payment_verified"]:
         st.success("✅ FULL CSV EXPORT UNLOCKED")
     else:
-        st.info(f"🔒 Full CSV Export: ${CRYPTO_PRICE_USD:.2f} USD / ₹{UPI_AMOUNT_INR} Required")
+        st.info(f"🔒 Full CSV Export: ${CRYPTO_PRICE_USD:.2f} USD Crypto Required")
 
     st.divider()
 
@@ -279,9 +246,9 @@ with st.sidebar:
         else:
             st.markdown('<span style="color:#15803d; font-weight:700;">🔓 ADMIN MODE ACTIVE</span>', unsafe_allow_html=True)
 
-            if not st.session_state["upi_payment_verified"]:
+            if not st.session_state["payment_verified"]:
                 if st.button("⚡ Admin Instant Unlock Dataset", type="primary", use_container_width=True):
-                    st.session_state["upi_payment_verified"] = True
+                    st.session_state["payment_verified"] = True
                     st.toast("🎉 Dataset unlocked by Admin!", icon="🔓")
                     st.rerun()
 
@@ -363,7 +330,7 @@ with st.sidebar:
                 st.session_state["admin_authenticated"] = False
                 st.rerun()
 
-    st.caption("⚡ **B2B Lead Machine** • Automated Crypto & UPI Gateway")
+    st.caption("⚡ **B2B Lead Machine** • Automated NOWPayments Crypto Gateway")
 
 
 # Set runtime parameters (Admin overrides if logged in, otherwise default)
@@ -388,7 +355,7 @@ tab_search, tab_csv = st.tabs(["🔍 Keyword Search & Lead Discovery", "📁 Upl
 # -------------------------------------------------------------
 with tab_search:
     st.markdown("### 🎯 Discover Real Companies by Niche & Location")
-    st.markdown("Enter a target search phrase (e.g. *'Plumbing contractors in Austin, TX'* or *'Digital marketing agencies in Bangalore'*) to autonomously discover official company websites and enrich them.")
+    st.markdown("Enter a target search phrase (e.g. *'Plumbing contractors in Austin, TX'* or *'Commercial roofing in Miami'*) to autonomously discover official company websites and enrich them.")
 
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -560,7 +527,7 @@ if st.session_state["leads"]:
     leads: list[EnrichedLead] = st.session_state["leads"]
 
     is_admin = st.session_state["admin_authenticated"]
-    is_paid = st.session_state["upi_payment_verified"]
+    is_paid = st.session_state["payment_verified"]
 
     st.markdown("---")
     st.markdown("### 📋 Generated Leads Dataset")
@@ -659,7 +626,7 @@ if st.session_state["leads"]:
         <div class="paywall-gate-card">
             <h2 style="margin-top:0; font-weight:800; color:#ffffff;">🚀 Unlock All {total_leads} Leads & Download Full CSV</h2>
             <p style="font-size:1.05rem; color:#c7d2fe; margin-bottom:14px; max-width:680px; margin-left:auto; margin-right:auto;">
-                Complete your checkout for <strong>${CRYPTO_PRICE_USD:.2f} USD</strong> via automated Zero-KYC NOWPayments Crypto Checkout (USDT, BTC, ETH, SOL, LTC) or UPI to unlock all unmasked leads immediately.
+                Complete your checkout for <strong>${CRYPTO_PRICE_USD:.2f} USD</strong> via automated Zero-KYC NOWPayments Crypto Checkout (USDT, BTC, ETH, SOL, LTC) to unlock all unmasked leads immediately.
             </p>
             <span class="pill" style="background:#4338ca; color:#ffffff;">⚡ Instant On-Chain Blockchain Confirmation</span>
             <span class="pill" style="background:#4338ca; color:#ffffff;">📥 Immediate Full CSV Export</span>
@@ -733,195 +700,104 @@ if st.session_state["leads"]:
         st.markdown("---")
 
     # =========================================================
-    # 💳 Automated Zero-KYC Payment Checkout (Crypto & UPI)
+    # 💳 Automated Zero-KYC Crypto Checkout (NOWPayments)
     # =========================================================
     st.markdown("### 📥 Download Lead Dataset")
 
     if not is_paid:
-        pay_tab_crypto, pay_tab_upi = st.tabs([
-            "🌐 Automated Crypto Checkout (NOWPayments • $6 USD)",
-            "📲 UPI Payment Gateway (₹499)"
-        ])
+        st.markdown(f"""
+        <div class="crypto-hero-box">
+            <h2 style="color: #ffffff; margin-top: 0; font-weight: 800;">⚡ Instant Zero-KYC Crypto Checkout</h2>
+            <p style="color: #cbd5e1; font-size: 1.0rem; margin-bottom: 12px;">
+                Pay <strong>${CRYPTO_PRICE_USD:.2f} USD</strong> with <strong>Bitcoin (BTC), USDT (TRC20/ERC20), Ethereum (ETH), Solana (SOL), Litecoin (LTC)</strong> or 150+ cryptocurrencies.
+            </p>
+            <span class="pill">🔒 100% Automated On-Chain Verification</span>
+            <span class="pill">⚡ Instant CSV Download Upon Confirmation</span>
+        </div>
+        """, unsafe_allow_html=True)
 
-        # -----------------------------------------------------
-        # TAB A: NOWPayments Crypto Checkout & Invoice Lookup
-        # -----------------------------------------------------
-        with pay_tab_crypto:
-            st.markdown(f"""
-            <div class="crypto-hero-box">
-                <h2 style="color: #ffffff; margin-top: 0; font-weight: 800;">⚡ Instant Zero-KYC Crypto Checkout</h2>
-                <p style="color: #cbd5e1; font-size: 1.0rem; margin-bottom: 12px;">
-                    Pay <strong>${CRYPTO_PRICE_USD:.2f} USD</strong> with <strong>Bitcoin (BTC), USDT (TRC20/ERC20), Ethereum (ETH), Solana (SOL), Litecoin (LTC)</strong> or 150+ cryptocurrencies.
-                </p>
-                <span class="pill">🔒 100% Automated On-Chain Verification</span>
-                <span class="pill">⚡ Instant CSV Download Upon Confirmation</span>
-            </div>
-            """, unsafe_allow_html=True)
+        c_cr1, c_cr2 = st.columns([1, 1])
 
-            c_cr1, c_cr2 = st.columns([1, 1])
+        with c_cr1:
+            st.markdown("#### 1. Generate Payment Invoice")
+            if st.button("⚡ Generate Secure Crypto Invoice ($6 USD)", type="primary", use_container_width=True):
+                if not NOWPAYMENTS_API_KEY or NOWPAYMENTS_API_KEY == "dummy_nowpayments_key":
+                    st.warning("⚠️ NOWPAYMENTS_API_KEY is not configured in secrets. Please set your NOWPayments API Key in Streamlit Cloud Secrets.")
+                else:
+                    with st.spinner("Connecting to NOWPayments API..."):
+                        inv = create_nowpayments_invoice(
+                            api_key=NOWPAYMENTS_API_KEY,
+                            price_amount=CRYPTO_PRICE_USD,
+                            price_currency="usd",
+                            order_description=f"B2B Leads Machine - {len(leads)} Verified Leads Export"
+                        )
+                        if inv.get("success"):
+                            st.session_state["crypto_invoice_url"] = inv.get("invoice_url")
+                            st.session_state["crypto_invoice_id"] = inv.get("invoice_id")
+                            st.success("🎉 Crypto invoice generated successfully!")
+                        else:
+                            st.error(f"Failed to generate invoice: {inv.get('error')}")
 
-            with c_cr1:
-                st.markdown("#### 1. Generate Payment Invoice")
-                if st.button("⚡ Generate Secure Crypto Invoice ($6 USD)", type="primary", use_container_width=True):
-                    if not NOWPAYMENTS_API_KEY or NOWPAYMENTS_API_KEY == "dummy_nowpayments_key":
-                        st.warning("⚠️ NOWPAYMENTS_API_KEY is not configured in secrets. Please set your NOWPayments API Key in Streamlit Cloud Secrets.")
-                    else:
-                        with st.spinner("Connecting to NOWPayments API..."):
-                            inv = create_nowpayments_invoice(
-                                api_key=NOWPAYMENTS_API_KEY,
-                                price_amount=CRYPTO_PRICE_USD,
-                                price_currency="usd",
-                                order_description=f"B2B Leads Machine - {len(leads)} Verified Leads Export"
-                            )
-                            if inv.get("success"):
-                                st.session_state["crypto_invoice_url"] = inv.get("invoice_url")
-                                st.session_state["crypto_invoice_id"] = inv.get("invoice_id")
-                                st.success("🎉 Crypto invoice generated successfully!")
-                            else:
-                                st.error(f"Failed to generate invoice: {inv.get('error')}")
-
-                if st.session_state["crypto_invoice_url"]:
-                    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-                    st.link_button(
-                        label=f"🚀 Pay ${CRYPTO_PRICE_USD:.2f} with Crypto on NOWPayments",
-                        url=st.session_state["crypto_invoice_url"],
-                        type="primary",
-                        use_container_width=True
-                    )
-                    st.caption(f"Invoice ID: `{st.session_state['crypto_invoice_id']}`")
-
-            with c_cr2:
-                st.markdown("#### 2. Automatic Invoice Verification")
-                st.markdown("Once you complete payment in your wallet, click below to verify invoice on-chain:")
-
-                inv_id_input = st.text_input(
-                    "Invoice ID",
-                    value=st.session_state["crypto_invoice_id"] or "",
-                    placeholder="e.g. 5527915624",
-                    help="The Invoice ID generated by NOWPayments (auto-filled)."
+            if st.session_state["crypto_invoice_url"]:
+                st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+                st.link_button(
+                    label=f"🚀 Pay ${CRYPTO_PRICE_USD:.2f} with Crypto on NOWPayments",
+                    url=st.session_state["crypto_invoice_url"],
+                    type="primary",
+                    use_container_width=True
                 )
+                st.caption(f"Invoice ID: `{st.session_state['crypto_invoice_id']}`")
 
-                if st.button("🔄 Check Payment Status & Unlock CSV", use_container_width=True):
-                    if not NOWPAYMENTS_API_KEY or NOWPAYMENTS_API_KEY == "dummy_nowpayments_key":
-                        st.warning("⚠️ NOWPAYMENTS_API_KEY is not configured.")
-                    elif not inv_id_input.strip():
-                        st.info("ℹ️ Please generate an invoice or enter your NOWPayments Invoice ID to verify.")
-                    else:
-                        with st.spinner("Verifying invoice status with NOWPayments endpoint..."):
-                            stat = check_nowpayments_invoice_status(
-                                api_key=NOWPAYMENTS_API_KEY,
-                                invoice_id=inv_id_input.strip()
-                            )
-                            if stat.get("success"):
-                                status_name = stat.get("status", "waiting")
-                                if stat.get("is_completed"):
-                                    st.session_state["upi_payment_verified"] = True
-                                    st.toast("🎉 Crypto payment verified! Full CSV download unlocked.", icon="✅")
-                                    st.rerun()
-                                else:
-                                    st.info(f"⏳ Current Invoice Status: `{status_name}`. Please complete the transfer on NOWPayments and re-check once confirmed on the blockchain.")
-                            else:
-                                st.error(f"Could not verify invoice: {stat.get('error')}")
+        with c_cr2:
+            st.markdown("#### 2. Automatic Invoice Verification")
+            st.markdown("Once you complete payment in your wallet, click below to verify invoice on-chain:")
 
-        # -----------------------------------------------------
-        # TAB B: Indian UPI Payment Gateway
-        # -----------------------------------------------------
-        with pay_tab_upi:
-            qr_img, qr_buf, upi_uri = generate_upi_qr_code(
-                upi_id=UPI_ID,
-                payee_name=UPI_PAYEE_NAME,
-                amount_inr=UPI_AMOUNT_INR,
-                transaction_note=UPI_NOTE
+            inv_id_input = st.text_input(
+                "Invoice ID",
+                value=st.session_state["crypto_invoice_id"] or "",
+                placeholder="e.g. 5527915624",
+                help="The Invoice ID generated by NOWPayments (auto-filled)."
             )
 
-            col_checkout, col_qr = st.columns([3, 2])
-
-            with col_checkout:
-                st.markdown(f"""
-                <div class="upi-hero-box">
-                    <h3 style="color: #1e293b; margin-top: 0; font-weight: 800;">⚡ Step 1: Pay ₹{UPI_AMOUNT_INR} via UPI</h3>
-                    <p style="color: #475569; font-size: 0.95rem; margin-bottom: 12px;">
-                        Scan the QR code or tap the button below to launch Google Pay, PhonePe, Paytm, or BHIM.
-                    </p>
-                    <div style="background: #eef2ff; border-radius: 10px; padding: 10px; margin-bottom: 12px; text-align: left;">
-                        <span style="font-size: 0.85rem; color: #3730a3;">
-                            <strong>• Payee:</strong> <code>{UPI_PAYEE_NAME}</code><br>
-                            <strong>• UPI ID:</strong> <code>{UPI_ID}</code><br>
-                            <strong>• Amount:</strong> <code>₹{UPI_AMOUNT_INR}.00</code> (Pre-filled)<br>
-                            <strong>• Reference Note:</strong> <code>{UPI_NOTE}</code>
-                        </span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                st.link_button(
-                    label=f"🚀 Launch UPI App to Pay ₹{UPI_AMOUNT_INR} (GPay / PhonePe / Paytm)",
-                    url=UNIVERSAL_UPI_URI,
-                    type="primary",
-                    use_container_width=True
-                )
-
-                st.markdown("---")
-
-                st.markdown(f"""
-                <div class="whatsapp-box">
-                    <h4 style="color: #166534; margin-top: 0; font-weight: 700;">📲 Step 2: Send Payment Proof</h4>
-                    <p style="color: #15803d; font-size: 0.9rem; margin-bottom: 10px;">
-                        After completing transfer, enter your 12-digit UTR and send payment proof on WhatsApp to receive your Unlock Code.
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-
-                utr_input = st.text_input(
-                    "Enter 12-digit UTR / UPI Reference ID",
-                    value=st.session_state["submitted_utr"],
-                    placeholder="e.g. 423589123456",
-                    max_chars=12,
-                    key="upi_utr_input_field"
-                )
-
-                utr_text_part = f"My UTR reference is: {utr_input.strip()}" if utr_input.strip() else "My UTR reference is: [Enter UTR]"
-                wa_message = f"Hi, I just paid ₹{UPI_AMOUNT_INR} for my B2B Leads. {utr_text_part}"
-                wa_url = f"https://wa.me/{WHATSAPP_NUMBER}?text={urllib.parse.quote(wa_message)}"
-
-                st.link_button(
-                    label="📲 Send Payment Proof on WhatsApp to Unlock",
-                    url=wa_url,
-                    type="primary",
-                    use_container_width=True
-                )
-
-                st.markdown("---")
-                st.markdown("#### 🔑 Step 3: Enter Unlock Code")
-
-                c_code1, c_code2 = st.columns([3, 1])
-                with c_code1:
-                    entered_code = st.text_input("Enter Unlock Code", type="password", placeholder="Enter code here...", label_visibility="collapsed", key="upi_unlock_code_field")
-                with c_code2:
-                    if st.button("Unlock CSV", type="primary", use_container_width=True):
-                        clean_code = entered_code.strip()
-                        if clean_code and (clean_code == UNLOCK_CODE or clean_code == ADMIN_PASSWORD):
-                            st.session_state["upi_payment_verified"] = True
-                            st.session_state["submitted_utr"] = utr_input.strip()
-                            st.toast("🎉 Code verified! Full CSV download unlocked.", icon="✅")
-                            st.rerun()
+            if st.button("🔄 Check Payment Status & Unlock CSV", use_container_width=True):
+                if not NOWPAYMENTS_API_KEY or NOWPAYMENTS_API_KEY == "dummy_nowpayments_key":
+                    st.warning("⚠️ NOWPAYMENTS_API_KEY is not configured.")
+                elif not inv_id_input.strip():
+                    st.info("ℹ️ Please generate an invoice or enter your NOWPayments Invoice ID to verify.")
+                else:
+                    with st.spinner("Verifying invoice status with NOWPayments endpoint..."):
+                        stat = check_nowpayments_invoice_status(
+                            api_key=NOWPAYMENTS_API_KEY,
+                            invoice_id=inv_id_input.strip()
+                        )
+                        if stat.get("success"):
+                            status_name = stat.get("status", "waiting")
+                            if stat.get("is_completed"):
+                                st.session_state["payment_verified"] = True
+                                st.toast("🎉 Crypto payment verified! Full CSV download unlocked.", icon="✅")
+                                st.rerun()
+                            else:
+                                st.info(f"⏳ Current Invoice Status: `{status_name}`. Please complete the transfer on NOWPayments and re-check once confirmed on the blockchain.")
                         else:
-                            st.error("⚠️ Invalid Unlock Code. Please send proof on WhatsApp to receive your code.")
+                            st.error(f"Could not verify invoice: {stat.get('error')}")
 
-            with col_qr:
-                st.markdown("""
-                <div style="text-align:center; padding: 10px;">
-                    <p style="font-weight: 700; color: #1e293b; margin-bottom: 8px;">Scan with any UPI App</p>
-                </div>
-                """, unsafe_allow_html=True)
-                st.image(qr_buf, caption=f"Scan to Pay ₹{UPI_AMOUNT_INR} ({UPI_ID})", use_container_width=True)
+            with st.expander("🔑 Manual Passcode / Admin Unlock", expanded=False):
+                entered_passcode = st.text_input("Enter Passcode", type="password", placeholder="Enter unlock code...", key="manual_passcode_field")
+                if st.button("Unlock with Code", use_container_width=True):
+                    clean_code = entered_passcode.strip()
+                    if clean_code and (clean_code == UNLOCK_CODE or clean_code == ADMIN_PASSWORD):
+                        st.session_state["payment_verified"] = True
+                        st.toast("🎉 Passcode verified! Full CSV download unlocked.", icon="✅")
+                        st.rerun()
+                    else:
+                        st.error("⚠️ Invalid code.")
 
     else:
         # Payment Verified -> Reveal Download CSV and JSON buttons!
         st.markdown(f"""
         <div class="unlocked-box">
             <h3 style="color: #15803d; margin-bottom: 4px;">🎉 Full Lead Dataset Unlocked!</h3>
-            <p style="color: #166534; margin: 0;">Payment confirmed. Download your verified lead dataset below!</p>
+            <p style="color: #166534; margin: 0;">Payment confirmed on-chain. Download your verified lead dataset below!</p>
         </div>
         """, unsafe_allow_html=True)
 
