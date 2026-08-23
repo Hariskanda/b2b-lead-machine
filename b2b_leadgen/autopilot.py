@@ -10,30 +10,11 @@ from typing import Any, Dict, List, Optional
 from b2b_leadgen.config import settings
 from b2b_leadgen.email_dispatcher import dispatch_campaign
 from b2b_leadgen.finder import discover_leads_by_keyword
+from b2b_leadgen.history import sent_history, CURATED_NICHES
 from b2b_leadgen.models import EnrichedLead
 from b2b_leadgen.pipeline import LeadGenPipeline
 
 logger = logging.getLogger(__name__)
-
-# High-converting evergreen B2B local business niches & major metros
-CURATED_NICHES = [
-    "HVAC contractors in Dallas, TX",
-    "Commercial roofing companies in Miami, FL",
-    "Plumbing contractors in Austin, TX",
-    "Digital marketing agencies in Atlanta, GA",
-    "Dental clinics in Phoenix, AZ",
-    "Commercial cleaning services in Chicago, IL",
-    "Solar panel installation in San Diego, CA",
-    "Electrical contractors in Seattle, WA",
-    "Accounting firms in Denver, CO",
-    "Landscaping companies in Orlando, FL",
-    "General contractors in Houston, TX",
-    "IT support and managed service providers in Boston, MA",
-    "Auto repair and detailing in Charlotte, NC",
-    "Real estate brokerages in Tampa, FL",
-    "Legal and law firms in Philadelphia, PA",
-    "Catering and event planning in Nashville, TN"
-]
 
 
 class AutopilotEngine:
@@ -56,6 +37,7 @@ class AutopilotEngine:
         self.total_cycles: int = 0
         self.total_leads_discovered: int = 0
         self.total_emails_sent: int = 0
+        self.total_duplicates_skipped: int = 0
         self.current_niche: str = ""
         self.started_at: Optional[datetime] = None
         self.last_cycle_at: Optional[datetime] = None
@@ -82,6 +64,7 @@ class AutopilotEngine:
             "total_cycles": self.total_cycles,
             "total_leads_discovered": self.total_leads_discovered,
             "total_emails_sent": self.total_emails_sent,
+            "total_duplicates_skipped": self.total_duplicates_skipped,
             "current_niche": self.current_niche,
             "started_at": self.started_at.strftime("%Y-%m-%d %H:%M:%S") if self.started_at else None,
             "last_cycle_at": self.last_cycle_at.strftime("%Y-%m-%d %H:%M:%S") if self.last_cycle_at else None,
@@ -137,7 +120,7 @@ class AutopilotEngine:
                 name="AutopilotOutboundWorker"
             )
             self._thread.start()
-            self.log(f"🚀 Autopilot Engine launched! Batch size: {self.batch_size}, Interval: {self.interval_seconds}s, Price: ${price_usd:.2f} USD")
+            self.log(f"🚀 Autopilot Engine launched! Batch size: {self.batch_size}, Interval: {self.interval_seconds}s, Topic Rotation Active.")
             return True
 
     def stop(self) -> bool:
@@ -149,11 +132,6 @@ class AutopilotEngine:
             self.is_running = False
             self.log("🛑 Autopilot Engine received stop signal. Stopping...")
             return True
-
-    def _select_next_niche(self, gemini_api_key: Optional[str]) -> str:
-        if self.custom_niches:
-            return random.choice(self.custom_niches)
-        return random.choice(CURATED_NICHES)
 
     def _run_loop(
         self,
@@ -176,13 +154,15 @@ class AutopilotEngine:
 
             self.total_cycles += 1
             self.last_cycle_at = datetime.now()
-            niche = self._select_next_niche(gemini_api_key)
+
+            # 🎯 1. Dynamic Topic Rotation: Pick fresh, non-repeating niche
+            niche = sent_history.get_next_rotating_niche(self.custom_niches)
             self.current_niche = niche
 
-            self.log(f"🔄 Cycle #{self.total_cycles} started: Searching niche '{niche}' (target: {self.batch_size} leads)")
+            self.log(f"🔄 Cycle #{self.total_cycles} started: Fresh niche '{niche}' (target: {self.batch_size} leads)")
 
             try:
-                # 1. Discover Leads
+                # 2. Discover Leads
                 discovered = discover_leads_by_keyword(niche, max_results=self.batch_size)
                 if not discovered:
                     self.log(f"⚠️ No leads found for '{niche}'. Moving to next cycle.", level="WARNING")
@@ -190,7 +170,7 @@ class AutopilotEngine:
                     self.total_leads_discovered += len(discovered)
                     self.log(f"✅ Discovered {len(discovered)} company domains. Running AI enrichment...")
 
-                    # 2. Enrich Leads via Pipeline
+                    # 3. Enrich Leads via Pipeline
                     pipeline = LeadGenPipeline(
                         api_key=gemini_api_key,
                         model="gemini-1.5-flash",
@@ -204,13 +184,20 @@ class AutopilotEngine:
                     )
 
                     emails_found = [l for l in enriched_leads if l.primary_email and "@" in l.primary_email]
-                    self.log(f"🎯 AI Enrichment complete: Found {len(emails_found)} verified email contacts out of {len(enriched_leads)} leads.")
 
-                    # 3. Dispatch Email Campaign with crypto/USD pricing CTA
-                    if emails_found and smtp_user and smtp_password:
-                        self.log(f"📨 Dispatching cold pitches to {len(emails_found)} recipients from {smtp_user} (CTA: ${price_usd:.2f} USD Zero-KYC Crypto Checkout)...")
+                    # 4. Filter already-sent emails to prevent duplicates
+                    unsent_leads, skipped_leads = sent_history.filter_leads_for_dispatch(emails_found)
+                    if skipped_leads:
+                        self.total_duplicates_skipped += len(skipped_leads)
+                        self.log(f"🛡️ Deduplication filter: Skipped {len(skipped_leads)} already-contacted leads.")
+
+                    self.log(f"🎯 AI Enrichment complete: Found {len(unsent_leads)} fresh new verified contacts.")
+
+                    # 5. Dispatch Email Campaign with crypto/USD pricing CTA and record sent history
+                    if unsent_leads and smtp_user and smtp_password:
+                        self.log(f"📨 Dispatching cold pitches to {len(unsent_leads)} recipients from {smtp_user} (Topic: '{niche}')...")
                         report = dispatch_campaign(
-                            leads=emails_found,
+                            leads=unsent_leads,
                             sender_email=smtp_user,
                             app_password=smtp_password,
                             app_url=app_url,
@@ -218,13 +205,14 @@ class AutopilotEngine:
                             smtp_host=smtp_host,
                             smtp_port=smtp_port,
                             price_usd=price_usd,
+                            topic=niche,
                             delay_seconds=1.5
                         )
                         sent = report.get("sent_count", 0)
                         self.total_emails_sent += sent
-                        self.log(f"🎉 Sent {sent}/{len(emails_found)} emails successfully in Cycle #{self.total_cycles}.")
-                    elif not emails_found:
-                        self.log("ℹ️ No contact emails discovered for this niche batch.")
+                        self.log(f"🎉 Sent {sent}/{len(unsent_leads)} emails successfully in Cycle #{self.total_cycles}.")
+                    elif not unsent_leads:
+                        self.log("ℹ️ No new un-emailed contacts discovered for this niche batch.")
                     else:
                         self.log("⚠️ SMTP credentials not provided; skipped sending.", level="WARNING")
 

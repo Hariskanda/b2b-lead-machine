@@ -13,6 +13,7 @@ from b2b_leadgen.autopilot import autopilot_engine
 from b2b_leadgen.config import settings
 from b2b_leadgen.email_dispatcher import build_outreach_email, dispatch_campaign
 from b2b_leadgen.finder import discover_leads_by_keyword
+from b2b_leadgen.history import sent_history
 from b2b_leadgen.models import EnrichedLead, LeadInput
 from b2b_leadgen.nowpayments import (
     check_nowpayments_invoice_status,
@@ -259,6 +260,8 @@ with st.sidebar:
             if ap_status["is_running"]:
                 st.success(f"🟢 ACTIVE: Sent {ap_status['total_emails_sent']} emails | Cycle #{ap_status['total_cycles']}")
                 st.caption(f"Current Niche: `{ap_status['current_niche'] or 'Initializing...'}`")
+                if ap_status.get("total_duplicates_skipped", 0) > 0:
+                    st.caption(f"🛡️ Skipped Duplicates: `{ap_status['total_duplicates_skipped']}`")
                 if st.button("🛑 Stop 24/7 Autopilot Engine", type="secondary", use_container_width=True):
                     autopilot_engine.stop()
                     st.warning("Autopilot stopped.")
@@ -268,7 +271,7 @@ with st.sidebar:
 
                 ap_batch_size = st.slider("Batch Size (Leads/cycle)", min_value=3, max_value=20, value=5, key="ap_batch_slider")
                 ap_interval = st.slider("Interval Delay Between Batches (Sec)", min_value=30, max_value=600, value=120, step=30, key="ap_interval_slider")
-                ap_continuous = st.checkbox("Run Continuously 24/7", value=True, key="ap_continuous_cb")
+                ap_continuous = st.checkbox("Run Continuously 24/7 (Non-Repeating Topic Rotation)", value=True, key="ap_continuous_cb")
 
                 if st.button("🚀 Launch 24/7 Background Autopilot", type="primary", use_container_width=True):
                     if not SMTP_USER or not SMTP_PASSWORD:
@@ -287,7 +290,7 @@ with st.sidebar:
                             interval_seconds=ap_interval,
                             run_continuously=ap_continuous
                         )
-                        st.success("🎉 24/7 Background Autopilot Worker Launched!")
+                        st.success("🎉 24/7 Background Autopilot Worker Launched with Topic Rotation & Deduplication!")
                         st.rerun()
 
             with st.expander("📜 View Autopilot Activity Logs", expanded=False):
@@ -297,6 +300,33 @@ with st.sidebar:
                         st.text(f"[{l['timestamp']}] {l['message']}")
                 else:
                     st.caption("No logs recorded yet.")
+
+            st.markdown("---")
+            st.markdown("#### 📜 Sent History & Topic Database")
+            sent_count = sent_history.get_sent_count()
+            used_topics = sent_history.get_used_topics()
+            c_sh1, c_sh2 = st.columns(2)
+            with c_sh1:
+                st.metric("Unique Leads Contacted", sent_count)
+            with c_sh2:
+                st.metric("Topics Explored", len(used_topics))
+
+            all_records = sent_history.get_all_sent_records()
+            if all_records:
+                with st.expander(f"📋 View Sent History Log ({len(all_records)} emails)", expanded=False):
+                    history_df = pd.DataFrame(all_records)[["email", "company_name", "topic", "sent_at"]]
+                    st.dataframe(history_df, use_container_width=True, hide_index=True)
+
+                with st.expander(f"🏷️ View Explored Topics ({len(used_topics)})", expanded=False):
+                    for t in used_topics:
+                        st.text(f"• {t}")
+
+                if st.button("🗑️ Clear / Reset Sent History & Topics", use_container_width=True):
+                    sent_history.clear_sent_history()
+                    st.toast("✅ Sent history and topic memory reset!", icon="🗑️")
+                    st.rerun()
+            else:
+                st.caption("No outreach emails sent yet. Sent history database is clean.")
 
             st.markdown("---")
             st.markdown("#### Engine Tuning")
@@ -642,55 +672,60 @@ if st.session_state["leads"]:
         st.markdown("### 📨 Admin Single-Batch Outbound Launcher")
         st.markdown(f"Dispatches personalized cold email pitches from your configured Gmail account with CTA directing to your **${CRYPTO_PRICE_USD:.2f} USD Zero-KYC Crypto Checkout**.")
 
-        eligible_count = sum(1 for l in leads if l.primary_email and "@" in l.primary_email)
+        eligible_leads = [l for l in leads if l.primary_email and "@" in l.primary_email]
+        unsent_leads, skipped_leads = sent_history.filter_leads_for_dispatch(eligible_leads)
 
-        if eligible_count > 0:
-            sample_lead = next(l for l in leads if l.primary_email)
+        if eligible_leads:
+            sample_lead = eligible_leads[0]
             subj, html_prev, txt_prev = build_outreach_email(sample_lead, app_url=APP_URL, sender_name=SENDER_NAME, price_usd=CRYPTO_PRICE_USD)
 
             col_adm_info, col_adm_prev = st.columns([1, 1])
             with col_adm_info:
-                st.info(f"• **Eligible Contacts:** {eligible_count}\n• **Sender:** `{SMTP_USER}`\n• **CTA:** `${CRYPTO_PRICE_USD:.2f} USD Zero-KYC Crypto Checkout (NOWPayments)`\n• **App URL:** `{APP_URL}`")
+                st.info(f"• **Fresh Unsent Contacts:** {len(unsent_leads)}\n• **Already Emailed (Skipped):** {len(skipped_leads)}\n• **Sender:** `{SMTP_USER}`\n• **CTA:** `${CRYPTO_PRICE_USD:.2f} USD Crypto Checkout`\n• **App URL:** `{APP_URL}`")
             with col_adm_prev:
                 with st.expander(f"👁️ Preview Email to {sample_lead.company_name}", expanded=False):
                     st.markdown(f"**Subject:** `{subj}`")
                     st.text(txt_prev)
 
-            if st.button("🚀 Launch Single-Batch Outreach Campaign", type="primary", use_container_width=True):
-                if not SMTP_USER or not SMTP_PASSWORD:
-                    st.warning("⚠️ SMTP credentials not set in secrets.")
-                else:
-                    progress_container = st.container()
-                    with progress_container:
-                        dispatch_status = st.empty()
-                        dispatch_bar = st.progress(0)
+            if len(unsent_leads) == 0:
+                st.warning("⚠️ All eligible leads in this table have already been emailed previously. Deduplication filter active.")
+            else:
+                if st.button("🚀 Launch Single-Batch Outreach Campaign", type="primary", use_container_width=True):
+                    if not SMTP_USER or not SMTP_PASSWORD:
+                        st.warning("⚠️ SMTP credentials not set in secrets.")
+                    else:
+                        progress_container = st.container()
+                        with progress_container:
+                            dispatch_status = st.empty()
+                            dispatch_bar = st.progress(0)
 
-                        def on_email_progress(lead: EnrichedLead, success: bool, msg: str, idx: int, tot: int):
-                            pct = int((idx / tot) * 100)
-                            dispatch_bar.progress(pct)
-                            icon = "✅" if success else "❌"
-                            dispatch_status.text(f"Sending ({idx}/{tot}) {icon} -> {lead.company_name} ({lead.primary_email})")
+                            def on_email_progress(lead: EnrichedLead, success: bool, msg: str, idx: int, tot: int):
+                                pct = int((idx / tot) * 100)
+                                dispatch_bar.progress(pct)
+                                icon = "✅" if success else "❌"
+                                dispatch_status.text(f"Sending ({idx}/{tot}) {icon} -> {lead.company_name} ({lead.primary_email})")
 
-                        with st.spinner("Dispatching cold email pitches via Gmail SMTP..."):
-                            report = dispatch_campaign(
-                                leads=leads,
-                                sender_email=SMTP_USER,
-                                app_password=SMTP_PASSWORD,
-                                app_url=APP_URL,
-                                sender_name=SENDER_NAME,
-                                smtp_host=SMTP_HOST,
-                                smtp_port=SMTP_PORT,
-                                price_usd=CRYPTO_PRICE_USD,
-                                delay_seconds=1.0,
-                                progress_callback=on_email_progress
-                            )
+                            with st.spinner("Dispatching cold email pitches via Gmail SMTP..."):
+                                report = dispatch_campaign(
+                                    leads=unsent_leads,
+                                    sender_email=SMTP_USER,
+                                    app_password=SMTP_PASSWORD,
+                                    app_url=APP_URL,
+                                    sender_name=SENDER_NAME,
+                                    smtp_host=SMTP_HOST,
+                                    smtp_port=SMTP_PORT,
+                                    price_usd=CRYPTO_PRICE_USD,
+                                    topic=st.session_state.get("last_query", "Single Batch Outreach"),
+                                    delay_seconds=1.0,
+                                    progress_callback=on_email_progress
+                                )
 
-                        dispatch_bar.progress(100)
-                        st.session_state["campaign_results"] = report
-                        if report.get("success"):
-                            st.success(f"🎉 Campaign Finished! Successfully sent {report.get('sent_count')} out of {report.get('eligible_leads')} emails.")
-                        else:
-                            st.warning(f"⚠️ {report.get('message')}")
+                            dispatch_bar.progress(100)
+                            st.session_state["campaign_results"] = report
+                            if report.get("success"):
+                                st.success(f"🎉 Campaign Finished! Successfully sent {report.get('sent_count')} emails ({report.get('skipped_duplicates', 0)} duplicates skipped).")
+                            else:
+                                st.warning(f"⚠️ {report.get('message')}")
 
             if st.session_state["campaign_results"]:
                 rep = st.session_state["campaign_results"]

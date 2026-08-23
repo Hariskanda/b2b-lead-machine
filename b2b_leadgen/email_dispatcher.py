@@ -6,6 +6,7 @@ from email.mime.text import MIMEText
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from b2b_leadgen.config import settings
+from b2b_leadgen.history import sent_history
 from b2b_leadgen.models import EnrichedLead
 
 logger = logging.getLogger(__name__)
@@ -100,16 +101,6 @@ Automated Outbound Intelligence
             margin: 20px 0;
             text-align: center;
         }}
-        .badge {{
-            display: inline-block;
-            background: #eef2ff;
-            color: #4338ca;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-            margin-top: 8px;
-        }}
         .footer {{
             background: #f8fafc;
             padding: 18px;
@@ -192,12 +183,14 @@ def dispatch_campaign(
     smtp_host: Optional[str] = None,
     smtp_port: Optional[int] = None,
     price_usd: float = 6.0,
+    topic: str = "",
     delay_seconds: float = 1.0,
     progress_callback: Optional[Callable[[EnrichedLead, bool, str, int, int], None]] = None
 ) -> Dict[str, Any]:
     """
     Autonomously dispatches personalized pitches via Gmail SMTP to all leads with verified emails.
-    Directs recipients to the zero-KYC crypto checkout portal.
+    Cross-references each recipient email against sent_history to prevent duplicate dispatches.
+    Records successful sends in persistent sent_history database.
     """
     user = (sender_email or getattr(settings, "effective_smtp_user", "") or "").strip()
     password = (app_password or getattr(settings, "effective_smtp_password", "") or "").strip()
@@ -213,6 +206,7 @@ def dispatch_campaign(
             "total_leads": len(leads),
             "eligible_leads": 0,
             "sent_count": 0,
+            "skipped_duplicates": 0,
             "failed_count": 0,
             "results": []
         }
@@ -225,12 +219,14 @@ def dispatch_campaign(
             "total_leads": len(leads),
             "eligible_leads": 0,
             "sent_count": 0,
+            "skipped_duplicates": 0,
             "failed_count": 0,
             "results": []
         }
 
     results = []
     sent_count = 0
+    skipped_duplicates = 0
     failed_count = 0
     total_eligible = len(eligible_leads)
 
@@ -247,6 +243,23 @@ def dispatch_campaign(
 
         for idx, lead in enumerate(eligible_leads, 1):
             recipient = lead.primary_email.strip()
+
+            # 🛡️ Deduplication Check against persistent history database
+            if sent_history.is_email_sent(recipient):
+                skipped_duplicates += 1
+                logger.info(f"⏩ Skipping {recipient} (already emailed in past campaign).")
+                if progress_callback:
+                    progress_callback(lead, True, "Skipped (already in sent history)", idx, total_eligible)
+
+                results.append({
+                    "company_name": lead.company_name,
+                    "email": recipient,
+                    "status": "skipped_duplicate",
+                    "error": "Already contacted in previous cycle",
+                    "pitch": lead.personalized_pitch
+                })
+                continue
+
             subject, html_body, plain_text = build_outreach_email(lead, app_url=url, sender_name=name, price_usd=price_usd)
 
             try:
@@ -262,6 +275,15 @@ def dispatch_campaign(
                 sent_count += 1
                 status = "sent"
                 err_msg = ""
+
+                # 📝 Record in persistent sent history
+                sent_history.record_sent_email(
+                    email=recipient,
+                    company_name=lead.company_name or "Unknown",
+                    topic=topic or "General Outreach",
+                    pitch=lead.personalized_pitch or ""
+                )
+
                 if progress_callback:
                     progress_callback(lead, True, "Sent successfully", idx, total_eligible)
             except Exception as e:
@@ -291,7 +313,8 @@ def dispatch_campaign(
             "total_leads": len(leads),
             "eligible_leads": total_eligible,
             "sent_count": sent_count,
-            "failed_count": total_eligible - sent_count,
+            "skipped_duplicates": skipped_duplicates,
+            "failed_count": total_eligible - sent_count - skipped_duplicates,
             "results": results
         }
     finally:
@@ -306,6 +329,7 @@ def dispatch_campaign(
         "total_leads": len(leads),
         "eligible_leads": total_eligible,
         "sent_count": sent_count,
+        "skipped_duplicates": skipped_duplicates,
         "failed_count": failed_count,
         "results": results
     }
