@@ -25,6 +25,16 @@ class Settings(BaseSettings):
         validation_alias="WHATSAPP_NUMBER"
     )
 
+    # NOWPayments Crypto Gateway Configuration ($6 USD)
+    nowpayments_api_key: Optional[str] = Field(
+        default=None,
+        validation_alias="NOWPAYMENTS_API_KEY"
+    )
+    crypto_price_usd: float = Field(
+        default=6.0,
+        validation_alias="CRYPTO_PRICE_USD"
+    )
+
     # API Keys (Supports GEMINI_API_KEY or fallback GOOGLE_API_KEY)
     gemini_api_key: Optional[str] = Field(
         default=None,
@@ -116,6 +126,10 @@ class Settings(BaseSettings):
         default="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         validation_alias="USER_AGENT"
     )
+
+    @property
+    def effective_nowpayments_key(self) -> Optional[str]:
+        return self.nowpayments_api_key or os.environ.get("NOWPAYMENTS_API_KEY")
 
     @property
     def effective_api_key(self) -> Optional[str]:
