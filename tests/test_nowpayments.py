@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 from b2b_leadgen.nowpayments import (
     create_nowpayments_invoice,
     check_nowpayments_payment_status,
+    check_nowpayments_invoice_status,
     get_nowpayments_headers
 )
 
@@ -36,21 +37,39 @@ class TestNOWPayments(unittest.TestCase):
         self.assertEqual(result["invoice_url"], "https://nowpayments.io/payment/?iid=5000000000")
 
     @patch("httpx.Client.get")
-    def test_check_nowpayments_payment_status(self, mock_get):
+    def test_check_nowpayments_invoice_status_finished(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
-            "payment_id": "12345678",
+            "id": "5527915624",
             "payment_status": "finished"
         }
         mock_get.return_value = mock_resp
 
-        result = check_nowpayments_payment_status(
+        result = check_nowpayments_invoice_status(
             api_key="test_api_key",
-            payment_id="12345678"
+            invoice_id="5527915624"
         )
         self.assertTrue(result["success"])
-        self.assertEqual(result["payment_status"], "finished")
+        self.assertEqual(result["status"], "finished")
+        self.assertTrue(result["is_completed"])
+
+    @patch("httpx.Client.get")
+    def test_check_nowpayments_invoice_status_confirmed(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "id": "5527915624",
+            "status": "confirmed"
+        }
+        mock_get.return_value = mock_resp
+
+        result = check_nowpayments_invoice_status(
+            api_key="test_api_key",
+            invoice_id="5527915624"
+        )
+        self.assertTrue(result["success"])
+        self.assertEqual(result["status"], "confirmed")
         self.assertTrue(result["is_completed"])
 
     def test_create_nowpayments_invoice_missing_key(self):

@@ -82,46 +82,71 @@ def create_nowpayments_invoice(
         }
 
 
-def check_nowpayments_payment_status(
+def check_nowpayments_invoice_status(
     api_key: str,
-    payment_id: str
+    invoice_id: str
 ) -> Dict[str, Any]:
     """
-    Checks the status of a specific payment ID on the blockchain.
-    Payment statuses: 'waiting', 'confirming', 'confirmed', 'sending', 'partially_paid', 'finished', 'failed', 'refunded', 'expired'.
+    Queries the invoice status from https://api.nowpayments.io/v1/invoice/{invoice_id}
+    using the generated Invoice ID and verifies if the status is 'finished' or 'confirmed'.
     """
-    if not api_key or not payment_id:
+    if not api_key or not invoice_id:
         return {
             "success": False,
-            "error": "API Key and Payment ID are required."
+            "error": "API Key and Invoice ID are required."
         }
 
-    url = f"{NOWPAYMENTS_API_BASE}/payment/{payment_id.strip()}"
+    clean_id = invoice_id.strip()
     headers = get_nowpayments_headers(api_key)
+    url = f"{NOWPAYMENTS_API_BASE}/invoice/{clean_id}"
 
     try:
         with httpx.Client(timeout=15.0) as client:
             response = client.get(url, headers=headers)
             if response.status_code == 200:
                 data = response.json()
-                status = str(data.get("payment_status", "")).lower()
-                is_completed = status in ("finished", "confirmed", "sending")
+                status = str(data.get("payment_status") or data.get("status") or data.get("invoice_status") or "waiting").lower()
+                is_completed = status in ("finished", "confirmed", "sending", "success", "paid")
                 return {
                     "success": True,
-                    "payment_status": status,
+                    "status": status,
                     "is_completed": is_completed,
                     "raw": data
                 }
-            else:
+
+            # Fallback check on payment endpoint if invoice endpoint returns non-200
+            pay_url = f"{NOWPAYMENTS_API_BASE}/payment/{clean_id}"
+            pay_resp = client.get(pay_url, headers=headers)
+            if pay_resp.status_code == 200:
+                pay_data = pay_resp.json()
+                status = str(pay_data.get("payment_status") or "waiting").lower()
+                is_completed = status in ("finished", "confirmed", "sending", "success", "paid")
                 return {
-                    "success": False,
-                    "error": f"HTTP {response.status_code}: {response.text}"
+                    "success": True,
+                    "status": status,
+                    "is_completed": is_completed,
+                    "raw": pay_data
                 }
+
+            return {
+                "success": False,
+                "error": f"Invoice lookup failed (HTTP {response.status_code}): {response.text}"
+            }
     except Exception as e:
         return {
             "success": False,
             "error": str(e)
         }
+
+
+def check_nowpayments_payment_status(
+    api_key: str,
+    payment_id: str
+) -> Dict[str, Any]:
+    """
+    Checks the status of a specific payment ID on the blockchain.
+    """
+    return check_nowpayments_invoice_status(api_key=api_key, invoice_id=payment_id)
 
 
 def check_nowpayments_api_health(api_key: Optional[str] = None) -> bool:
