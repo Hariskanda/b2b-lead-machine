@@ -8,8 +8,9 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Default persistent history JSON path in project root
-DEFAULT_HISTORY_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sent_history.json")
+# Persistent global sent history database in project root
+DEFAULT_HISTORY_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sent_emails_global.json")
+LEGACY_HISTORY_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sent_history.json")
 
 # 30+ High-intent B2B service industries
 INDUSTRIES = [
@@ -106,20 +107,24 @@ class SentHistoryManager:
         self._load_from_disk()
 
     def _load_from_disk(self) -> None:
-        if not os.path.exists(self.file_path):
-            self._sent_emails = {}
-            self._used_topics = set()
-            return
+        self._sent_emails = {}
+        self._used_topics = set()
 
-        try:
-            with open(self.file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                self._sent_emails = {str(k).lower().strip(): v for k, v in data.get("sent_emails", {}).items()}
-                self._used_topics = set(data.get("used_topics", []))
-        except Exception as e:
-            logger.error(f"Error loading sent history from {self.file_path}: {e}")
-            self._sent_emails = {}
-            self._used_topics = set()
+        files_to_check = [self.file_path, LEGACY_HISTORY_FILE]
+        for fp in files_to_check:
+            if os.path.exists(fp):
+                try:
+                    with open(fp, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        for k, v in data.get("sent_emails", {}).items():
+                            clean_k = str(k).lower().strip()
+                            if clean_k and clean_k not in self._sent_emails:
+                                self._sent_emails[clean_k] = v
+                        for t in data.get("used_topics", []):
+                            if t:
+                                self._used_topics.add(str(t).strip())
+                except Exception as e:
+                    logger.error(f"Error loading sent history from {fp}: {e}")
 
     def _save_to_disk(self) -> None:
         try:

@@ -100,12 +100,12 @@ def build_outreach_email(
     lead: Any,
     app_url: Optional[str] = None,
     sender_name: Optional[str] = None,
-    price_usd: float = 6.0,
+    price_usd: float = 0.0,
     **kwargs: Any
 ) -> Tuple[str, str, str]:
     """
     Builds the personalized cold outreach email for a company directing them
-    to the secure zero-KYC crypto checkout (accepting USDT, BTC, LTC, ETH, etc. via NOWPayments).
+    to the verified lead intelligence dataset portal with instant free CSV access.
     Returns (subject, html_body, plain_text_body).
     """
     company_name = _get_attr(lead, "company_name") or "there"
@@ -115,7 +115,6 @@ def build_outreach_email(
     )
     effective_url = (app_url or getattr(settings, "effective_app_url", "http://localhost:8501") or "http://localhost:8501").rstrip("/")
     effective_name = sender_name or getattr(settings, "sender_name", "B2B Lead Machine")
-    effective_price = price_usd or getattr(settings, "crypto_price_usd", 6.0)
 
     subject = f"Growth opportunity for {company_name}"
 
@@ -126,7 +125,7 @@ def build_outreach_email(
 We have compiled a verified, real-time database of high-intent B2B prospects and target decision-makers in your market. You can explore the live dataset directly on our portal:
 👉 {effective_url}
 
-(You can instantly unlock and download the entire verified dataset for ${effective_price:.2f} USD via our automated, zero-KYC crypto checkout accepting USDT, Bitcoin, Ethereum, Solana, and Litecoin).
+(Instant free dataset preview & full CSV download available on the portal).
 
 Best regards,
 {effective_name}
@@ -212,12 +211,12 @@ Automated Outbound Intelligence
             
             <p style="text-align: center;">
                 <a href="{effective_url}" class="cta-button" target="_blank">
-                    ⚡ View Verified Lead List & Download
+                    ⚡ View Verified Lead List & Download CSV
                 </a>
             </p>
 
             <p style="font-size: 13px; color: #64748b; text-align: center;">
-                🔒 <em>Instant zero-KYC crypto checkout available (${effective_price:.2f} USD accepting USDT, BTC, ETH, SOL, LTC via NOWPayments).</em>
+                ✨ <em>Free instant access & full CSV download available on portal.</em>
             </p>
 
             <p>Best regards,<br>
@@ -225,7 +224,7 @@ Automated Outbound Intelligence
             <span style="color: #64748b; font-size: 13px;">B2B Lead Machine Outbound System</span></p>
         </div>
         <div class="footer">
-            Sent automatically via B2B Lead Machine Outbound Dispatcher • <a href="{effective_url}" style="color: #64748b;">Visit App</a>
+            Sent via B2B Lead Machine Outbound Dispatcher • <a href="{effective_url}" style="color: #64748b;">Visit App</a>
         </div>
     </div>
 </body>
