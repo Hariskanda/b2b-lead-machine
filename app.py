@@ -1,10 +1,11 @@
 import asyncio
 import io
 import json
+import logging
 import os
 import urllib.parse
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
@@ -22,7 +23,11 @@ from b2b_leadgen.nowpayments import (
 from b2b_leadgen.pipeline import LeadGenPipeline, detect_company_column
 from b2b_leadgen.sheets_exporter import export_leads_to_google_sheet
 
-# Page Configuration
+logger = logging.getLogger(__name__)
+
+# =============================================================
+# 📱 Page Configuration & Early Session State Initialization
+# =============================================================
 st.set_page_config(
     page_title="B2B Lead Machine",
     page_icon="⚡",
@@ -30,7 +35,27 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS styling with Copy Protection & Scrape Deterrence
+# Comprehensive top-level state defaults to guarantee mobile/cross-browser uptime
+SESSION_DEFAULTS: Dict[str, Any] = {
+    "leads": [],
+    "df": pd.DataFrame(),
+    "last_query": "",
+    "payment_verified": False,
+    "paid": False,
+    "admin_authenticated": False,
+    "admin_logged_in": False,
+    "crypto_invoice_url": None,
+    "crypto_invoice_id": None,
+    "campaign_results": None,
+    "sync_status": None,
+}
+
+for state_key, state_default in SESSION_DEFAULTS.items():
+    if state_key not in st.session_state:
+        st.session_state[state_key] = state_default
+
+
+# Custom CSS styling with Mobile Responsiveness & Copy Protection
 st.markdown("""
 <style>
     .main-header {
@@ -171,6 +196,36 @@ def mask_email_address(email: Optional[str]) -> str:
     return f"{masked_user}@{domain}"
 
 
+def safe_execute_pipeline(
+    pipeline: LeadGenPipeline,
+    inputs: List[LeadInput],
+    progress_callback: Optional[Callable[[EnrichedLead, int, int], None]] = None
+) -> List[EnrichedLead]:
+    """Safely runs the async enrichment pipeline across any execution environment."""
+    try:
+        return asyncio.run(
+            pipeline.run_batch(
+                inputs=inputs,
+                output_csv_path=None,
+                progress_callback=progress_callback
+            )
+        )
+    except RuntimeError:
+        # If an event loop is already running in this thread
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(
+                pipeline.run_batch(
+                    inputs=inputs,
+                    output_csv_path=None,
+                    progress_callback=progress_callback
+                )
+            )
+        finally:
+            loop.close()
+
+
 # Read Core Secrets Securely from st.secrets / backend
 GEMINI_API_KEY: Optional[str] = get_secret("GEMINI_API_KEY", getattr(settings, "effective_api_key", None))
 NOWPAYMENTS_API_KEY: Optional[str] = get_secret("NOWPAYMENTS_API_KEY", getattr(settings, "effective_nowpayments_key", None))
@@ -185,23 +240,9 @@ SENDER_NAME: str = str(get_secret("SENDER_NAME", getattr(settings, "sender_name"
 APP_URL: str = str(get_secret("APP_URL", getattr(settings, "effective_app_url", "http://localhost:8501")))
 
 
-# Initialize Session State
-if "leads" not in st.session_state:
-    st.session_state["leads"] = []
-if "df" not in st.session_state:
-    st.session_state["df"] = pd.DataFrame()
-if "last_query" not in st.session_state:
-    st.session_state["last_query"] = ""
-if "payment_verified" not in st.session_state:
-    st.session_state["payment_verified"] = False
-if "crypto_invoice_url" not in st.session_state:
-    st.session_state["crypto_invoice_url"] = None
-if "crypto_invoice_id" not in st.session_state:
-    st.session_state["crypto_invoice_id"] = None
-if "campaign_results" not in st.session_state:
-    st.session_state["campaign_results"] = None
-if "admin_authenticated" not in st.session_state:
-    st.session_state["admin_authenticated"] = False
+# State Accessors
+is_admin_active = bool(st.session_state.get("admin_authenticated", False) or st.session_state.get("admin_logged_in", False))
+is_paid_active = bool(st.session_state.get("payment_verified", False) or st.session_state.get("paid", False))
 
 
 # =============================================================
@@ -225,7 +266,7 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     st.subheader("📦 Order Status")
-    if st.session_state["payment_verified"]:
+    if is_paid_active:
         st.success("✅ FULL CSV EXPORT UNLOCKED")
     else:
         st.info(f"🔒 Full CSV Export: ${CRYPTO_PRICE_USD:.2f} USD Crypto Required")
@@ -234,12 +275,13 @@ with st.sidebar:
 
     # 🔐 Secure Admin Configuration Portal (Password Protected)
     with st.expander("🔐 Admin Portal", expanded=False):
-        if not st.session_state["admin_authenticated"]:
+        if not is_admin_active:
             st.markdown("##### Admin Authentication")
             admin_pwd_input = st.text_input("Enter Admin Password", type="password", key="admin_pwd_input")
             if st.button("Unlock Admin Panel", use_container_width=True):
                 if admin_pwd_input and admin_pwd_input == ADMIN_PASSWORD:
                     st.session_state["admin_authenticated"] = True
+                    st.session_state["admin_logged_in"] = True
                     st.success("Admin mode unlocked!")
                     st.rerun()
                 else:
@@ -247,9 +289,10 @@ with st.sidebar:
         else:
             st.markdown('<span style="color:#15803d; font-weight:700;">🔓 ADMIN MODE ACTIVE</span>', unsafe_allow_html=True)
 
-            if not st.session_state["payment_verified"]:
+            if not is_paid_active:
                 if st.button("⚡ Admin Instant Unlock Dataset", type="primary", use_container_width=True):
                     st.session_state["payment_verified"] = True
+                    st.session_state["paid"] = True
                     st.toast("🎉 Dataset unlocked by Admin!", icon="🔓")
                     st.rerun()
 
@@ -358,6 +401,7 @@ with st.sidebar:
 
             if st.button("Log Out of Admin", use_container_width=True):
                 st.session_state["admin_authenticated"] = False
+                st.session_state["admin_logged_in"] = False
                 st.rerun()
 
     st.caption("⚡ **B2B Lead Machine** • Automated NOWPayments Crypto Gateway")
@@ -409,59 +453,67 @@ with tab_search:
                 prog_bar = st.progress(0)
 
                 status_text.info(f"🔎 Discovering businesses matching '{search_query}' via DuckDuckGo...")
-                discovered_inputs = discover_leads_by_keyword(search_query.strip(), max_results=int(num_leads))
+                try:
+                    discovered_inputs = discover_leads_by_keyword(search_query.strip(), max_results=int(num_leads))
+                except Exception as disc_err:
+                    logger.error(f"Discovery error: {disc_err}")
+                    discovered_inputs = []
+                    status_text.error(f"⚠️ Search discovery encounter a network issue: {disc_err}. Please retry in a few seconds.")
 
                 if not discovered_inputs:
-                    status_text.error("No companies could be discovered. Try refining your search query.")
+                    status_text.error("No companies could be discovered for this query. Try refining your search keywords.")
                 else:
                     status_text.success(f"✅ Discovered {len(discovered_inputs)} businesses! Starting AI scraping and cold pitch generation...")
 
-                    pipeline = LeadGenPipeline(
-                        api_key=GEMINI_API_KEY,
-                        model=effective_model,
-                        max_concurrency=effective_concurrency,
-                        follow_contact_pages=effective_follow_subpages,
-                        use_checkpoint=False
-                    )
+                    try:
+                        pipeline = LeadGenPipeline(
+                            api_key=GEMINI_API_KEY,
+                            model=effective_model,
+                            max_concurrency=effective_concurrency,
+                            follow_contact_pages=effective_follow_subpages,
+                            use_checkpoint=False
+                        )
 
-                    total = len(discovered_inputs)
+                        total = len(discovered_inputs)
 
-                    def update_ui_progress(lead: EnrichedLead, idx: int, tot: int):
-                        pct = int((idx / tot) * 100)
-                        prog_bar.progress(pct)
-                        email_tag = f" — Found email: {lead.primary_email}" if lead.primary_email else ""
-                        status_text.text(f"Processing ({idx}/{tot}): {lead.company_name}{email_tag}")
+                        def update_ui_progress(lead: EnrichedLead, idx: int, tot: int):
+                            pct = int((idx / tot) * 100) if tot > 0 else 0
+                            prog_bar.progress(min(100, max(0, pct)))
+                            email_tag = f" — Found email: {lead.primary_email}" if lead.primary_email else ""
+                            status_text.text(f"Processing ({idx}/{tot}): {lead.company_name}{email_tag}")
 
-                    results = asyncio.run(
-                        pipeline.run_batch(
+                        results = safe_execute_pipeline(
+                            pipeline=pipeline,
                             inputs=discovered_inputs,
-                            output_csv_path=None,
                             progress_callback=update_ui_progress
                         )
-                    )
 
-                    prog_bar.progress(100)
-                    status_text.success(f"🎉 Successfully enriched {len(results)} leads!")
+                        prog_bar.progress(100)
+                        status_text.success(f"🎉 Successfully enriched {len(results)} leads!")
 
-                    st.session_state["leads"] = results
-                    df_data = [r.model_dump() for r in results]
-                    st.session_state["df"] = pd.DataFrame(df_data)
-                    st.session_state["last_query"] = search_query
-                    st.session_state["campaign_results"] = None
-                    st.session_state["crypto_invoice_url"] = None
-                    st.session_state["crypto_invoice_id"] = None
+                        st.session_state["leads"] = results
+                        df_data = [r.model_dump() for r in results]
+                        st.session_state["df"] = pd.DataFrame(df_data)
+                        st.session_state["last_query"] = search_query
+                        st.session_state["campaign_results"] = None
+                        st.session_state["crypto_invoice_url"] = None
+                        st.session_state["crypto_invoice_id"] = None
 
-                    if effective_auto_sync and effective_gsheet_target:
-                        try:
-                            sync_res = export_leads_to_google_sheet(
-                                leads=results,
-                                sheet_name_or_url=effective_gsheet_target,
-                                worksheet_title="Leads"
-                            )
-                            if sync_res.get("success"):
-                                st.toast(f"✅ Synced {sync_res.get('rows_appended')} leads to Google Sheet!", icon="📊")
-                        except Exception as e:
-                            st.warning(f"Google Sheets auto-sync failed: {e}")
+                        if effective_auto_sync and effective_gsheet_target:
+                            try:
+                                sync_res = export_leads_to_google_sheet(
+                                    leads=results,
+                                    sheet_name_or_url=effective_gsheet_target,
+                                    worksheet_title="Leads"
+                                )
+                                if sync_res.get("success"):
+                                    st.toast(f"✅ Synced {sync_res.get('rows_appended')} leads to Google Sheet!", icon="📊")
+                            except Exception as e:
+                                st.warning(f"Google Sheets auto-sync failed: {e}")
+
+                    except Exception as pipe_err:
+                        logger.error(f"Pipeline execution error: {pipe_err}")
+                        status_text.error(f"⚠️ Enrichment pipeline error: {pipe_err}")
 
 
 # -------------------------------------------------------------
@@ -502,48 +554,51 @@ with tab_csv:
                         status_text = st.empty()
                         prog_bar = st.progress(0)
 
-                        pipeline = LeadGenPipeline(
-                            api_key=GEMINI_API_KEY,
-                            model=effective_model,
-                            max_concurrency=effective_concurrency,
-                            follow_contact_pages=effective_follow_subpages,
-                            use_checkpoint=False
-                        )
+                        try:
+                            pipeline = LeadGenPipeline(
+                                api_key=GEMINI_API_KEY,
+                                model=effective_model,
+                                max_concurrency=effective_concurrency,
+                                follow_contact_pages=effective_follow_subpages,
+                                use_checkpoint=False
+                            )
 
-                        def update_csv_progress(lead: EnrichedLead, idx: int, tot: int):
-                            pct = int((idx / tot) * 100)
-                            prog_bar.progress(pct)
-                            status_text.text(f"Enriching ({idx}/{tot}): {lead.company_name}")
+                            def update_csv_progress(lead: EnrichedLead, idx: int, tot: int):
+                                pct = int((idx / tot) * 100) if tot > 0 else 0
+                                prog_bar.progress(min(100, max(0, pct)))
+                                status_text.text(f"Enriching ({idx}/{tot}): {lead.company_name}")
 
-                        results = asyncio.run(
-                            pipeline.run_batch(
+                            results = safe_execute_pipeline(
+                                pipeline=pipeline,
                                 inputs=input_leads,
-                                output_csv_path=None,
                                 progress_callback=update_csv_progress
                             )
-                        )
 
-                        prog_bar.progress(100)
-                        status_text.success(f"🎉 Successfully enriched {len(results)} leads from CSV!")
+                            prog_bar.progress(100)
+                            status_text.success(f"🎉 Successfully enriched {len(results)} leads from CSV!")
 
-                        st.session_state["leads"] = results
-                        st.session_state["df"] = pd.DataFrame([r.model_dump() for r in results])
-                        st.session_state["last_query"] = f"CSV: {uploaded_file.name}"
-                        st.session_state["campaign_results"] = None
-                        st.session_state["crypto_invoice_url"] = None
-                        st.session_state["crypto_invoice_id"] = None
+                            st.session_state["leads"] = results
+                            st.session_state["df"] = pd.DataFrame([r.model_dump() for r in results])
+                            st.session_state["last_query"] = f"CSV: {uploaded_file.name}"
+                            st.session_state["campaign_results"] = None
+                            st.session_state["crypto_invoice_url"] = None
+                            st.session_state["crypto_invoice_id"] = None
 
-                        if effective_auto_sync and effective_gsheet_target:
-                            try:
-                                sync_res = export_leads_to_google_sheet(
-                                    leads=results,
-                                    sheet_name_or_url=effective_gsheet_target,
-                                    worksheet_title="Leads"
-                                )
-                                if sync_res.get("success"):
-                                    st.toast(f"✅ Synced {sync_res.get('rows_appended')} leads to Google Sheet!", icon="📊")
-                            except Exception as e:
-                                st.warning(f"Google Sheets auto-sync failed: {e}")
+                            if effective_auto_sync and effective_gsheet_target:
+                                try:
+                                    sync_res = export_leads_to_google_sheet(
+                                        leads=results,
+                                        sheet_name_or_url=effective_gsheet_target,
+                                        worksheet_title="Leads"
+                                    )
+                                    if sync_res.get("success"):
+                                        st.toast(f"✅ Synced {sync_res.get('rows_appended')} leads to Google Sheet!", icon="📊")
+                                except Exception as e:
+                                    st.warning(f"Google Sheets auto-sync failed: {e}")
+
+                        except Exception as csv_pipe_err:
+                            logger.error(f"CSV enrichment error: {csv_pipe_err}")
+                            status_text.error(f"⚠️ CSV enrichment error: {csv_pipe_err}")
 
         except Exception as e:
             st.error(f"Error reading CSV file: {e}")
@@ -556,8 +611,8 @@ if st.session_state["leads"]:
     df = st.session_state["df"]
     leads: list[EnrichedLead] = st.session_state["leads"]
 
-    is_admin = st.session_state["admin_authenticated"]
-    is_paid = st.session_state["payment_verified"]
+    is_admin = bool(st.session_state.get("admin_authenticated", False) or st.session_state.get("admin_logged_in", False))
+    is_paid = bool(st.session_state.get("payment_verified", False) or st.session_state.get("paid", False))
 
     st.markdown("---")
     st.markdown("### 📋 Generated Leads Dataset")
@@ -668,11 +723,11 @@ if st.session_state["leads"]:
     # =========================================================
     # 🚀 Admin Autopilot Outbound Launcher (Gated to Admin)
     # =========================================================
-    if st.session_state["admin_authenticated"]:
+    if is_admin:
         st.markdown("### 📨 Admin Single-Batch Outbound Launcher")
         st.markdown(f"Dispatches personalized cold email pitches from your configured Gmail account with CTA directing to your **${CRYPTO_PRICE_USD:.2f} USD Zero-KYC Crypto Checkout**.")
 
-        eligible_leads = [l for l in leads if l.primary_email and "@" in l.primary_email]
+        eligible_leads = [l for l in leads if getattr(l, "primary_email", None) and "@" in str(getattr(l, "primary_email", ""))]
         unsent_leads, skipped_leads = sent_history.filter_leads_for_dispatch(eligible_leads)
 
         if eligible_leads:
@@ -702,8 +757,8 @@ if st.session_state["leads"]:
                             dispatch_bar = st.progress(0)
 
                             def on_email_progress(lead: Any, success: bool, msg: str, idx: int, tot: int):
-                                pct = int((idx / tot) * 100)
-                                dispatch_bar.progress(pct)
+                                pct = int((idx / tot) * 100) if tot > 0 else 0
+                                dispatch_bar.progress(min(100, max(0, pct)))
                                 icon = "✅" if success else "❌"
                                 c_name = getattr(lead, "company_name", None) or (lead.get("company_name") if isinstance(lead, dict) else "Lead")
                                 p_email = getattr(lead, "primary_email", None) or (lead.get("primary_email") if isinstance(lead, dict) else "")
@@ -813,6 +868,7 @@ if st.session_state["leads"]:
                             status_name = stat.get("status", "waiting")
                             if stat.get("is_completed"):
                                 st.session_state["payment_verified"] = True
+                                st.session_state["paid"] = True
                                 st.toast("🎉 Crypto payment verified! Full CSV download unlocked.", icon="✅")
                                 st.rerun()
                             else:
@@ -826,6 +882,7 @@ if st.session_state["leads"]:
                     clean_code = entered_passcode.strip()
                     if clean_code and (clean_code == UNLOCK_CODE or clean_code == ADMIN_PASSWORD):
                         st.session_state["payment_verified"] = True
+                        st.session_state["paid"] = True
                         st.toast("🎉 Passcode verified! Full CSV download unlocked.", icon="✅")
                         st.rerun()
                     else:

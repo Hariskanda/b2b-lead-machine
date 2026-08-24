@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import List, Optional, Set, Tuple
+from typing import Any, List, Optional, Set, Tuple
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -78,21 +78,28 @@ class AsyncWebScraper:
         self,
         timeout: Optional[float] = None,
         follow_contact_pages: bool = True,
-        max_subpages: int = 2
+        max_subpages: int = 2,
+        user_agent: Optional[str] = None,
+        **kwargs: Any
     ):
-        self.timeout = timeout or settings.scraping_timeout_seconds
-        self.follow_contact_pages = follow_contact_pages
-        self.max_subpages = max_subpages
+        self.timeout = float(timeout or getattr(settings, "scraping_timeout_seconds", 15.0) or 15.0)
+        self.follow_contact_pages = bool(follow_contact_pages)
+        self.max_subpages = int(max_subpages)
+        ua = user_agent or getattr(settings, "scraping_user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
         self.headers = {
-            "User-Agent": settings.scraping_user_agent,
+            "User-Agent": ua,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.5",
         }
 
     async def scrape_url(self, url: str) -> ScrapedPage:
         """Fetches and parses the given URL, optionally discovering contact subpages."""
-        if not url.startswith("http://") and not url.startswith("https://"):
-            url = "https://" + url
+        if not url:
+            return ScrapedPage(url="", status_code=0)
+
+        clean_url = url.strip()
+        if not clean_url.startswith("http://") and not clean_url.startswith("https://"):
+            clean_url = "https://" + clean_url
 
         try:
             async with httpx.AsyncClient(
@@ -101,10 +108,10 @@ class AsyncWebScraper:
                 follow_redirects=True,
                 verify=False
             ) as client:
-                resp = await client.get(url)
+                resp = await client.get(clean_url)
                 if resp.status_code != 200:
-                    logger.warning(f"HTTP {resp.status_code} when fetching {url}")
-                    return ScrapedPage(url=url, status_code=resp.status_code)
+                    logger.warning(f"HTTP {resp.status_code} when fetching {clean_url}")
+                    return ScrapedPage(url=clean_url, status_code=resp.status_code)
 
                 soup = BeautifulSoup(resp.text, "html.parser")
                 title, meta_desc = extract_metadata(soup)
@@ -113,7 +120,7 @@ class AsyncWebScraper:
                 # Heuristic DOM Email Search
                 discovered_emails = set(EMAIL_REGEX.findall(resp.text))
                 for a in soup.find_all("a", href=True):
-                    href = a["href"]
+                    href = str(a["href"]).strip()
                     if href.startswith("mailto:"):
                         raw_email = href.replace("mailto:", "").split("?")[0].strip()
                         if raw_email:
@@ -121,7 +128,7 @@ class AsyncWebScraper:
 
                 # Subpage crawling for Contact / About pages if requested
                 if self.follow_contact_pages:
-                    subpage_emails = await self._crawl_subpages(client, url, soup)
+                    subpage_emails = await self._crawl_subpages(client, clean_url, soup)
                     discovered_emails.update(subpage_emails)
 
                 valid_emails = filter_valid_emails(discovered_emails)
@@ -136,8 +143,12 @@ class AsyncWebScraper:
                 )
 
         except Exception as e:
-            logger.warning(f"Error scraping {url}: {e}")
-            return ScrapedPage(url=url, status_code=0)
+            logger.warning(f"Error scraping {clean_url}: {e}")
+            return ScrapedPage(url=clean_url, status_code=0)
+
+    async def scrape_company_site(self, url: str) -> ScrapedPage:
+        """Alias for scrape_url for pipeline backwards-compatibility."""
+        return await self.scrape_url(url)
 
     async def _crawl_subpages(
         self,
@@ -152,16 +163,19 @@ class AsyncWebScraper:
         contact_keywords = ["contact", "about", "team", "reach", "support", "get-in-touch"]
 
         for a in soup.find_all("a", href=True):
-            href = a["href"].strip()
+            href = str(a.get("href", "")).strip()
             link_text = a.get_text().lower()
 
             if any(k in href.lower() or k in link_text for k in contact_keywords):
                 full_url = urljoin(base_url, href)
                 # Ensure same origin
-                if urlparse(full_url).netloc == urlparse(base_url).netloc:
-                    subpage_urls.add(full_url)
-                    if len(subpage_urls) >= self.max_subpages:
-                        break
+                try:
+                    if urlparse(full_url).netloc == urlparse(base_url).netloc:
+                        subpage_urls.add(full_url)
+                        if len(subpage_urls) >= self.max_subpages:
+                            break
+                except Exception:
+                    pass
 
         for sub_url in subpage_urls:
             try:
@@ -171,8 +185,9 @@ class AsyncWebScraper:
                     emails.update(found)
                     sub_soup = BeautifulSoup(resp.text, "html.parser")
                     for a in sub_soup.find_all("a", href=True):
-                        if a["href"].startswith("mailto:"):
-                            em = a["href"].replace("mailto:", "").split("?")[0].strip()
+                        href = str(a.get("href", "")).strip()
+                        if href.startswith("mailto:"):
+                            em = href.replace("mailto:", "").split("?")[0].strip()
                             if em:
                                 emails.add(em)
             except Exception as e:

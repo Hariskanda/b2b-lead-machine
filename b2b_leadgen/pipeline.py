@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from b2b_leadgen.config import settings
 from b2b_leadgen.extractor import GeminiLeadExtractor
@@ -17,8 +17,10 @@ logger = logging.getLogger(__name__)
 
 def detect_company_column(header: List[str]) -> str:
     """Auto-detects the company name column from common naming patterns."""
+    if not header:
+        return ""
     candidates = ["company_name", "company", "company name", "name", "business", "business_name", "organization"]
-    normalized_headers = {h.strip().lower(): h for h in header}
+    normalized_headers = {str(h).strip().lower(): str(h) for h in header}
 
     for candidate in candidates:
         if candidate in normalized_headers:
@@ -39,14 +41,14 @@ def load_input_csv(file_path: str) -> List[LeadInput]:
         company_col = detect_company_column(reader.fieldnames)
         url_col = None
         for col in reader.fieldnames:
-            if col.strip().lower() in ["website", "url", "website_url", "domain"]:
+            if str(col).strip().lower() in ["website", "url", "website_url", "domain"]:
                 url_col = col
                 break
 
         for row in reader:
-            company_name = row.get(company_col, "").strip()
-            if company_name:
-                url = row.get(url_col, "").strip() if url_col else None
+            company_name = str(row.get(company_col, "")).strip()
+            if company_name and company_name.lower() != "nan":
+                url = str(row.get(url_col, "")).strip() if url_col else None
                 leads.append(LeadInput(company_name=company_name, website_url=url or None))
     return leads
 
@@ -78,7 +80,7 @@ class CheckpointManager:
         self.checkpoint_file = Path(checkpoint_file)
         self.checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
 
-    def load_checkpoint(self) -> dict[str, EnrichedLead]:
+    def load_checkpoint(self) -> Dict[str, EnrichedLead]:
         if not self.checkpoint_file.exists():
             return {}
         try:
@@ -89,7 +91,7 @@ class CheckpointManager:
             logger.warning(f"Failed to load checkpoint file: {e}")
             return {}
 
-    def save_checkpoint(self, cache: dict[str, EnrichedLead]) -> None:
+    def save_checkpoint(self, cache: Dict[str, EnrichedLead]) -> None:
         try:
             with open(self.checkpoint_file, "w", encoding="utf-8") as f:
                 json.dump({k: v.model_dump() for k, v in cache.items()}, f, indent=2)
@@ -102,27 +104,33 @@ class LeadGenPipeline:
         self,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
-        max_concurrency: int = settings.max_concurrent_requests,
-        follow_contact_pages: bool = settings.follow_contact_pages,
+        max_concurrency: Optional[int] = None,
+        follow_contact_pages: Optional[bool] = None,
         use_checkpoint: bool = True,
-        timeout: int = settings.request_timeout_seconds,
-        user_agent: str = settings.user_agent,
-        **kwargs
+        timeout: Optional[float] = None,
+        user_agent: Optional[str] = None,
+        **kwargs: Any
     ):
+        concurrency = int(max_concurrency or getattr(settings, "max_concurrent_requests", 3) or 3)
+        follow = bool(follow_contact_pages if follow_contact_pages is not None else getattr(settings, "follow_contact_pages", True))
+        t_out = float(timeout or getattr(settings, "request_timeout_seconds", 15.0) or 15.0)
+        ua = user_agent or getattr(settings, "user_agent", None)
+
         self.scraper = AsyncWebScraper(
-            timeout=timeout,
-            user_agent=user_agent,
-            follow_contact_pages=follow_contact_pages
+            timeout=t_out,
+            user_agent=ua,
+            follow_contact_pages=follow,
+            **kwargs
         )
         self.extractor = GeminiLeadExtractor(api_key=api_key, model=model)
-        self.semaphore = asyncio.Semaphore(max_concurrency)
-        self.follow_contact_pages = follow_contact_pages
+        self.semaphore = asyncio.Semaphore(concurrency)
+        self.follow_contact_pages = follow
         self.use_checkpoint = use_checkpoint
 
     async def process_single_company(self, item: LeadInput) -> EnrichedLead:
         """Processes a single company: search URL -> scrape website -> extract via Gemini."""
         async with self.semaphore:
-            company_name = item.company_name
+            company_name = item.company_name or "Unknown Company"
             url = item.website_url
 
             # 1. Search for website URL if not provided
@@ -145,8 +153,9 @@ class LeadGenPipeline:
                 )
 
             # 2. Scrape website content
+            scraped_page = None
             try:
-                scraped_page = await self.scraper.scrape_company_site(url)
+                scraped_page = await self.scraper.scrape_url(url)
             except Exception as e:
                 logger.error(f"Scraping failed for {url}: {e}")
                 return EnrichedLead(
@@ -166,7 +175,6 @@ class LeadGenPipeline:
 
             # 3. Extract structured summary & email using Gemini
             try:
-                # Run synchronous SDK call in thread pool to avoid blocking async loop
                 extraction = await asyncio.to_thread(
                     self.extractor.extract_company_info,
                     company_name=company_name,
@@ -185,13 +193,14 @@ class LeadGenPipeline:
                 )
             except Exception as e:
                 logger.error(f"Extraction failed for {company_name}: {e}")
+                fallback_email = scraped_page.discovered_emails[0] if scraped_page.discovered_emails else None
                 return EnrichedLead(
                     company_name=company_name,
                     website_url=url,
-                    primary_email=scraped_page.discovered_emails[0] if scraped_page.discovered_emails else None,
-                    company_summary=f"{company_name} provides professional services.",
-                    personalized_pitch=f"Hi {company_name} team, loved checking out your website. We help businesses in your space automate outreach.",
-                    status="success" if scraped_page.discovered_emails else "extraction_failed",
+                    primary_email=fallback_email,
+                    company_summary=scraped_page.meta_description or f"{company_name} provides professional services.",
+                    personalized_pitch=f"Hi {company_name} team, loved checking out your website. We help businesses in your space automate outreach and acquisition.",
+                    status="success" if fallback_email else "extraction_failed",
                     error_message=str(e)
                 )
 
@@ -202,6 +211,9 @@ class LeadGenPipeline:
         progress_callback: Optional[Callable[[EnrichedLead, int, int], None]] = None
     ) -> List[EnrichedLead]:
         """Runs the enrichment pipeline over a batch of companies."""
+        if not inputs:
+            return []
+
         checkpoint_file = str(Path(output_csv_path).with_suffix(".checkpoint.json")) if output_csv_path else None
         cp_mgr = CheckpointManager(checkpoint_file) if (self.use_checkpoint and checkpoint_file) else None
         cached_results = cp_mgr.load_checkpoint() if cp_mgr else {}
@@ -220,7 +232,10 @@ class LeadGenPipeline:
 
         if results and progress_callback:
             for r in results:
-                progress_callback(r, processed_count, total_count)
+                try:
+                    progress_callback(r, processed_count, total_count)
+                except Exception:
+                    pass
 
         if not to_process:
             return results
@@ -229,7 +244,12 @@ class LeadGenPipeline:
         tasks = [self.process_single_company(item) for item in to_process]
 
         for future in asyncio.as_completed(tasks):
-            lead = await future
+            try:
+                lead = await future
+            except Exception as e:
+                logger.error(f"Unexpected task exception in pipeline batch: {e}")
+                lead = EnrichedLead(company_name="Unknown Lead", status="failed", error_message=str(e))
+
             results.append(lead)
             processed_count += 1
 
@@ -238,9 +258,15 @@ class LeadGenPipeline:
                 cp_mgr.save_checkpoint(cached_results)
 
             if progress_callback:
-                progress_callback(lead, processed_count, total_count)
+                try:
+                    progress_callback(lead, processed_count, total_count)
+                except Exception:
+                    pass
 
         if output_csv_path:
-            save_leads_to_csv(results, output_csv_path)
+            try:
+                save_leads_to_csv(results, output_csv_path)
+            except Exception as e:
+                logger.error(f"Failed to write output CSV {output_csv_path}: {e}")
 
         return results
