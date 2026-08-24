@@ -204,6 +204,34 @@ class SentHistoryManager:
         with self._rw_lock:
             return list(self._used_topics)
 
+    def remove_sent_email(self, email: str) -> bool:
+        """Removes a single email from the sent history / do-not-contact list."""
+        if not email:
+            return False
+        clean_email = email.lower().strip()
+        with self._rw_lock:
+            if clean_email in self._sent_emails:
+                del self._sent_emails[clean_email]
+                self._save_to_disk()
+                return True
+            return False
+
+    def add_to_do_not_contact(self, email: str, company_name: str = "Manual Block", reason: str = "Admin Added") -> bool:
+        """Manually adds an email to the permanent do-not-contact list."""
+        if not email or "@" not in email:
+            return False
+        clean_email = email.lower().strip()
+        with self._rw_lock:
+            self._sent_emails[clean_email] = {
+                "email": clean_email,
+                "company_name": str(company_name),
+                "topic": f"Do-Not-Contact ({reason})",
+                "pitch": "Blocked by Admin",
+                "sent_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            self._save_to_disk()
+            return True
+
     def clear_sent_history(self) -> bool:
         """Resets the sent history database and wipes persistent storage."""
         with self._rw_lock:
@@ -212,6 +240,8 @@ class SentHistoryManager:
             try:
                 if os.path.exists(self.file_path):
                     os.remove(self.file_path)
+                if os.path.exists(LEGACY_HISTORY_FILE):
+                    os.remove(LEGACY_HISTORY_FILE)
                 return True
             except Exception as e:
                 logger.error(f"Error removing history file {self.file_path}: {e}")

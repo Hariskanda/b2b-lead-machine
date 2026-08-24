@@ -3,6 +3,7 @@ import io
 import json
 import logging
 import os
+import threading
 import urllib.parse
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
@@ -10,11 +11,16 @@ from typing import Any, Callable, Dict, List, Optional
 import pandas as pd
 import streamlit as st
 
+from b2b_leadgen.autopilot import autopilot_engine
 from b2b_leadgen.config import settings
 from b2b_leadgen.email_dispatcher import build_outreach_email, dispatch_campaign
 from b2b_leadgen.finder import discover_leads_by_keyword
 from b2b_leadgen.history import sent_history
 from b2b_leadgen.models import EnrichedLead, LeadInput
+from b2b_leadgen.nowpayments import (
+    check_nowpayments_invoice_status,
+    create_nowpayments_invoice
+)
 from b2b_leadgen.pipeline import LeadGenPipeline, detect_company_column
 from b2b_leadgen.sheets_exporter import export_leads_to_google_sheet
 
@@ -35,12 +41,17 @@ SESSION_DEFAULTS: Dict[str, Any] = {
     "leads": [],
     "df": pd.DataFrame(),
     "last_query": "",
-    "payment_verified": True,   # 100% Free Access Mode Active
-    "paid": True,               # 100% Free Access Mode Active
+    "paywall_enabled": False,     # Default: Free Mode Active for all users
+    "payment_verified": False,
+    "paid": False,
     "admin_authenticated": False,
     "admin_logged_in": False,
+    "crypto_invoice_url": None,
+    "crypto_invoice_id": None,
     "campaign_results": None,
     "sync_status": None,
+    "stop_event": threading.Event(),
+    "activity_logs": []
 }
 
 for state_key, state_default in SESSION_DEFAULTS.items():
@@ -48,7 +59,18 @@ for state_key, state_default in SESSION_DEFAULTS.items():
         st.session_state[state_key] = state_default
 
 
-# Custom CSS styling with Mobile Responsiveness & Free Tier Banner
+def add_activity_log(message: str, level: str = "INFO") -> None:
+    """Adds a timestamped activity event to session state logs."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entry = {"timestamp": timestamp, "level": level, "message": message}
+    if "activity_logs" not in st.session_state:
+        st.session_state["activity_logs"] = []
+    st.session_state["activity_logs"].append(entry)
+    if len(st.session_state["activity_logs"]) > 150:
+        st.session_state["activity_logs"].pop(0)
+
+
+# Custom CSS styling with Mobile Responsiveness & Copy Protection
 st.markdown("""
 <style>
     .main-header {
@@ -82,6 +104,16 @@ st.markdown("""
         margin-bottom: 20px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
+    .crypto-hero-box {
+        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+        border: 2px solid #818cf8;
+        border-radius: 16px;
+        padding: 22px;
+        color: #ffffff;
+        text-align: center;
+        margin: 15px auto;
+        box-shadow: 0 6px 18px rgba(129, 140, 248, 0.18);
+    }
     .unlocked-box {
         background-color: #f0fdf4;
         border: 2px solid #22c55e;
@@ -100,14 +132,43 @@ st.markdown("""
         font-weight: 600;
         margin: 2px 0;
     }
-    .outreach-box {
+    /* 🛡️ Copy Protection & Scrape Deterrence for Paywalled Preview */
+    .protected-sample-container {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 18px;
+        background: #ffffff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        margin-bottom: 14px;
+    }
+    .locked-teaser-card {
+        -webkit-user-select: none;
+        user-select: none;
+        background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+        border: 2px dashed #94a3b8;
+        border-radius: 14px;
+        padding: 24px;
+        text-align: center;
+        margin: 16px 0;
+    }
+    .paywall-gate-card {
         background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
         border: 2px solid #818cf8;
         border-radius: 16px;
-        padding: 22px;
+        padding: 24px;
         color: #ffffff;
+        text-align: center;
         margin: 20px 0;
-        box-shadow: 0 6px 20px rgba(49, 46, 129, 0.25);
+        box-shadow: 0 8px 24px rgba(49, 46, 129, 0.25);
+    }
+    .kill-switch-btn {
+        background-color: #dc2626 !important;
+        color: white !important;
+        font-weight: 700 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -152,6 +213,19 @@ def get_secret(key: str, default: Any = None) -> Any:
     return default
 
 
+def mask_email_address(email: Optional[str]) -> str:
+    """Masks middle characters of email address to deter scrape/copy before payment."""
+    if not email or "@" not in email:
+        return "No email found"
+    parts = email.strip().split("@")
+    user, domain = parts[0], parts[1]
+    if len(user) <= 2:
+        masked_user = user[0] + "***"
+    else:
+        masked_user = user[:2] + "***" + user[-1]
+    return f"{masked_user}@{domain}"
+
+
 def safe_execute_pipeline(
     pipeline: LeadGenPipeline,
     inputs: List[LeadInput],
@@ -167,7 +241,6 @@ def safe_execute_pipeline(
             )
         )
     except RuntimeError:
-        # If an event loop is already running in this thread
         loop = asyncio.new_event_loop()
         try:
             asyncio.set_event_loop(loop)
@@ -184,7 +257,10 @@ def safe_execute_pipeline(
 
 # Read Core Secrets Securely from st.secrets / backend
 GEMINI_API_KEY: Optional[str] = get_secret("GEMINI_API_KEY", getattr(settings, "effective_api_key", None))
+NOWPAYMENTS_API_KEY: Optional[str] = get_secret("NOWPAYMENTS_API_KEY", getattr(settings, "effective_nowpayments_key", None))
+CRYPTO_PRICE_USD: float = float(get_secret("CRYPTO_PRICE_USD", getattr(settings, "crypto_price_usd", 6.0)))
 ADMIN_PASSWORD: str = str(get_secret("ADMIN_PASSWORD", getattr(settings, "admin_password", "admin123")))
+UNLOCK_CODE: str = str(get_secret("UNLOCK_CODE", getattr(settings, "unlock_code", "4990")))
 SMTP_USER: str = str(get_secret("SMTP_USER", getattr(settings, "effective_smtp_user", "")))
 SMTP_PASSWORD: str = str(get_secret("SMTP_PASSWORD", getattr(settings, "effective_smtp_password", "")))
 SMTP_HOST: str = str(get_secret("SMTP_HOST", getattr(settings, "smtp_host", "smtp.gmail.com")))
@@ -195,10 +271,13 @@ APP_URL: str = str(get_secret("APP_URL", getattr(settings, "effective_app_url", 
 
 # State Accessors
 is_admin_active = bool(st.session_state.get("admin_authenticated", False) or st.session_state.get("admin_logged_in", False))
+paywall_is_on = bool(st.session_state.get("paywall_enabled", False))
+user_has_paid = bool(st.session_state.get("payment_verified", False) or st.session_state.get("paid", False))
+is_unlocked = (not paywall_is_on) or is_admin_active or user_has_paid
 
 
 # =============================================================
-# 🛍️ Clean Public Sidebar Interface & Settings
+# 🛍️ Clean Public Sidebar Interface & Master Admin Portal
 # =============================================================
 with st.sidebar:
     st.image("https://img.icons8.com/isometric/100/lightning-bolt.png", width=60)
@@ -213,54 +292,155 @@ with st.sidebar:
         <span class="pill">🎯 Niche + Location Discovery</span><br>
         <span class="pill">📧 Decision-Maker Emails</span><br>
         <span class="pill">✍️ AI Cold Pitches</span><br>
-        <span class="pill">📥 100% Free CSV Downloads</span>
+        <span class="pill">🛡️ Strict Global Deduplication</span>
     </div>
     """, unsafe_allow_html=True)
 
     st.subheader("📦 Access Status")
-    st.success("✅ FREE ACCESS ACTIVE — Full Dataset & CSV Export Unlocked")
+    if not paywall_is_on:
+        st.success("✅ FREE ACCESS ACTIVE — Full Dataset & CSV Export Unlocked")
+    elif is_unlocked:
+        st.success("✅ FULL CSV EXPORT UNLOCKED")
+    else:
+        st.info(f"🔒 Full CSV Export: ${CRYPTO_PRICE_USD:.2f} USD Crypto Required")
 
     st.divider()
 
-    # 📜 Persistent Sent History & Global Deduplication Metrics
-    with st.expander("📜 Global Sent History & Memory", expanded=False):
-        sent_count = sent_history.get_sent_count()
-        used_topics = sent_history.get_used_topics()
-        c_sh1, c_sh2 = st.columns(2)
-        with c_sh1:
-            st.metric("Total Emailed", sent_count)
-        with c_sh2:
-            st.metric("Topics Used", len(used_topics))
-
-        all_records = sent_history.get_all_sent_records()
-        if all_records:
-            st.caption(f"🛡️ Strict deduplication active across {len(all_records)} contacts.")
-            history_df = pd.DataFrame(all_records)[["email", "company_name", "topic", "sent_at"]]
-            st.dataframe(history_df, use_container_width=True, hide_index=True)
-
-            if st.button("🗑️ Clear / Reset Sent History", use_container_width=True):
-                sent_history.clear_sent_history()
-                st.toast("✅ Global sent history cleared!", icon="🗑️")
-                st.rerun()
-        else:
-            st.caption("No outreach emails sent yet. Global deduplication database is clean.")
-
-    st.divider()
-
-    # 🔐 Admin Portal (Optional Engine Tuning & Google Sheets Sync)
-    with st.expander("⚙️ Advanced Settings & Tuning", expanded=False):
+    # 🔐 Master Control & Tracking Panel (Password Protected Admin)
+    with st.expander("🔐 Admin Master Control Panel", expanded=False):
         if not is_admin_active:
-            admin_pwd_input = st.text_input("Admin Password (Optional)", type="password", key="admin_pwd_input")
-            if st.button("Unlock Advanced Settings", use_container_width=True):
+            st.markdown("##### Admin Authentication")
+            admin_pwd_input = st.text_input("Enter Admin Password", type="password", key="admin_pwd_input")
+            if st.button("Unlock Admin Panel", use_container_width=True):
                 if admin_pwd_input and admin_pwd_input == ADMIN_PASSWORD:
                     st.session_state["admin_authenticated"] = True
                     st.session_state["admin_logged_in"] = True
-                    st.success("Advanced settings unlocked!")
+                    add_activity_log("Admin authenticated successfully.", "INFO")
+                    st.success("Admin mode unlocked!")
                     st.rerun()
                 else:
                     st.error("⚠️ Invalid Admin Password.")
         else:
-            st.markdown('<span style="color:#15803d; font-weight:700;">🔓 ADVANCED SETTINGS ACTIVE</span>', unsafe_allow_html=True)
+            st.markdown('<span style="color:#15803d; font-weight:700;">🔓 MASTER ADMIN ACTIVE</span>', unsafe_allow_html=True)
+
+            # -------------------------------------------------
+            # 1. EMERGENCY KILL SWITCH & THREAD CONTROL
+            # -------------------------------------------------
+            st.markdown("---")
+            st.markdown("#### 🛑 Emergency Kill Switch")
+            st.caption("Instantly terminates all background loops, workers, and active outreach pipelines safely.")
+
+            ap_status = autopilot_engine.get_status()
+            col_ks1, col_ks2 = st.columns([1, 1])
+            with col_ks1:
+                if ap_status["is_running"]:
+                    st.success("🟢 Background Autopilot: ACTIVE")
+                else:
+                    st.info("⚪ Background Autopilot: IDLE")
+
+            if st.button("🛑 EMERGENCY STOP ALL BACKGROUND TASKS", type="secondary", use_container_width=True):
+                autopilot_engine.stop()
+                if "stop_event" in st.session_state:
+                    st.session_state["stop_event"].set()
+                add_activity_log("EMERGENCY KILL SWITCH TRIGGERED: All background tasks terminated.", "WARNING")
+                st.toast("🛑 Emergency Kill Switch triggered! All tasks stopped.", icon="🛑")
+                st.rerun()
+
+            # -------------------------------------------------
+            # 2. FREE MODE / CRYPTO PAYWALL TOGGLE
+            # -------------------------------------------------
+            st.markdown("---")
+            st.markdown("#### 💰 Monetization & Paywall Control")
+            new_paywall_val = st.toggle(
+                "Enable $6.00 USD Crypto Paywall (NOWPayments)",
+                value=st.session_state.get("paywall_enabled", False),
+                help="When OFF, all users can download the full CSV instantly for free. When ON, visitors must pay $6 in crypto to unlock."
+            )
+            if new_paywall_val != st.session_state.get("paywall_enabled", False):
+                st.session_state["paywall_enabled"] = new_paywall_val
+                mode_str = "Paywall ENABLED ($6 Crypto)" if new_paywall_val else "FREE MODE Active (No Paywall)"
+                add_activity_log(f"Admin updated monetization setting: {mode_str}", "INFO")
+                st.toast(f"Monetization mode updated: {mode_str}", icon="⚙️")
+                st.rerun()
+
+            if not is_unlocked and paywall_is_on:
+                if st.button("⚡ Admin Override: Unlock Dataset for this Session", use_container_width=True):
+                    st.session_state["payment_verified"] = True
+                    st.session_state["paid"] = True
+                    st.toast("🎉 Dataset unlocked by Admin!", icon="🔓")
+                    st.rerun()
+
+            # -------------------------------------------------
+            # 3. LIVE TRACKER & ACTIVITY LOG VIEWER
+            # -------------------------------------------------
+            st.markdown("---")
+            st.markdown("#### 📊 Activity & Tracker Logs")
+
+            sent_count = sent_history.get_sent_count()
+            used_topics = sent_history.get_used_topics()
+            total_skips = ap_status.get("total_duplicates_skipped", 0)
+
+            c_trk1, c_trk2 = st.columns(2)
+            with c_trk1:
+                st.metric("Total Emailed Globally", sent_count)
+            with c_trk2:
+                st.metric("Duplicates Skipped", total_skips)
+
+            all_logs = []
+            if "activity_logs" in st.session_state:
+                all_logs.extend(st.session_state["activity_logs"])
+            if ap_status.get("logs"):
+                all_logs.extend(ap_status.get("logs", []))
+
+            all_logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+
+            if all_logs:
+                with st.expander(f"📜 View Live Activity Logs ({len(all_logs)} events)", expanded=False):
+                    logs_df = pd.DataFrame(all_logs[:50])[["timestamp", "level", "message"]]
+                    st.dataframe(logs_df, use_container_width=True, hide_index=True)
+            else:
+                st.caption("No activity events logged yet.")
+
+            # -------------------------------------------------
+            # 4. GLOBAL DEDUPLICATION & DO-NOT-CONTACT DATABASE
+            # -------------------------------------------------
+            st.markdown("---")
+            st.markdown("#### 🛡️ Global Sent History & Blocklist")
+            st.caption(f"Strict anti-spam deduplication prevents emailing any of the {sent_count} recorded addresses.")
+
+            all_records = sent_history.get_all_sent_records()
+            if all_records:
+                with st.expander(f"📋 View Permanent Sent Log ({len(all_records)} contacts)", expanded=False):
+                    history_df = pd.DataFrame(all_records)[["email", "company_name", "topic", "sent_at"]]
+                    st.dataframe(history_df, use_container_width=True, hide_index=True)
+
+                col_mod1, col_mod2 = st.columns([2, 1])
+                with col_mod1:
+                    manual_block_email = st.text_input("Manually Add Email to Blocklist", placeholder="e.g. do-not-email@company.com", key="manual_block_input")
+                with col_mod2:
+                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                    if st.button("➕ Block Email", use_container_width=True):
+                        if manual_block_email and "@" in manual_block_email:
+                            sent_history.add_to_do_not_contact(manual_block_email.strip())
+                            add_activity_log(f"Admin manually added {manual_block_email} to blocklist.", "INFO")
+                            st.toast(f"✅ Added {manual_block_email} to Do-Not-Contact list!", icon="🛡️")
+                            st.rerun()
+                        else:
+                            st.error("Please enter a valid email address.")
+
+                if st.button("🗑️ Clear / Reset Entire Sent Database", use_container_width=True):
+                    sent_history.clear_sent_history()
+                    add_activity_log("Admin wiped global sent history database.", "WARNING")
+                    st.toast("✅ Global sent history cleared!", icon="🗑️")
+                    st.rerun()
+            else:
+                st.caption("Global sent database is empty.")
+
+            # -------------------------------------------------
+            # 5. ENGINE TUNING & INTEGRATIONS
+            # -------------------------------------------------
+            st.markdown("---")
+            st.markdown("#### ⚙️ Engine Tuning")
 
             admin_model = st.selectbox(
                 "Gemini Model",
@@ -287,12 +467,13 @@ with st.sidebar:
             admin_gsheet_target = st.text_input("Sheet Name or URL", placeholder="e.g. B2B Leads 2026", key="admin_gsheet_target")
             admin_auto_sync = st.checkbox("Auto-sync to Google Sheet", value=False, key="admin_auto_sync_cb")
 
-            if st.button("Log Out of Settings", use_container_width=True):
+            if st.button("Log Out of Admin Panel", use_container_width=True):
                 st.session_state["admin_authenticated"] = False
                 st.session_state["admin_logged_in"] = False
+                add_activity_log("Admin logged out.", "INFO")
                 st.rerun()
 
-    st.caption("⚡ **B2B Lead Machine** • Free Lead Discovery & Outreach Engine")
+    st.caption("⚡ **B2B Lead Machine** • Master Outbound Intelligence")
 
 
 # Set runtime parameters (Admin overrides if logged in, otherwise default)
@@ -309,12 +490,15 @@ effective_auto_sync = bool(st.session_state.get("admin_auto_sync_cb", False))
 st.markdown('<div class="main-header">⚡ Automated B2B Lead Machine</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Autonomous Lead Discovery, Verified Email Extraction & AI Cold Pitch Generator</div>', unsafe_allow_html=True)
 
-# 🎁 Free Tier Active Banner
-st.markdown("""
-<div class="free-tier-banner">
-    <strong style="font-size:1.1rem;">🎉 Free Tier Active:</strong> Instant, unrestricted lead discovery with direct CSV/JSON download access. No paywall required!
-</div>
-""", unsafe_allow_html=True)
+# Status Notification Banner based on monetization mode
+if not paywall_is_on:
+    st.markdown("""
+    <div class="free-tier-banner">
+        <strong style="font-size:1.1rem;">🎉 Free Tier Active:</strong> Instant, unrestricted lead discovery with direct CSV/JSON download access. No paywall required!
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.info("🔒 **Paywall Mode Active:** Standard visitors will see preview samples; complete CSV download requires $6.00 USD crypto payment.")
 
 tab_search, tab_csv = st.tabs(["🔍 Keyword Search & Lead Discovery", "📁 Upload Existing CSV"])
 
@@ -347,17 +531,21 @@ with tab_search:
                 status_text = st.empty()
                 prog_bar = st.progress(0)
 
+                add_activity_log(f"Starting discovery for '{search_query.strip()}' (Target: {int(num_leads)} leads)...", "INFO")
                 status_text.info(f"🔎 Discovering businesses matching '{search_query}' via DuckDuckGo...")
+
                 try:
                     discovered_inputs = discover_leads_by_keyword(search_query.strip(), max_results=int(num_leads))
                 except Exception as disc_err:
                     logger.error(f"Discovery error: {disc_err}")
                     discovered_inputs = []
+                    add_activity_log(f"Search discovery error: {disc_err}", "ERROR")
                     status_text.error(f"⚠️ Search discovery encountered a network issue: {disc_err}. Please retry in a few moments.")
 
                 if not discovered_inputs:
                     status_text.error("No companies could be discovered for this query. Try refining your search keywords.")
                 else:
+                    add_activity_log(f"Discovered {len(discovered_inputs)} company domains for '{search_query.strip()}'. Running AI enrichment...", "INFO")
                     status_text.success(f"✅ Discovered {len(discovered_inputs)} businesses! Starting AI scraping and cold pitch generation...")
 
                     try:
@@ -384,6 +572,7 @@ with tab_search:
                         )
 
                         prog_bar.progress(100)
+                        add_activity_log(f"Successfully enriched {len(results)} leads for query '{search_query}'.", "INFO")
                         status_text.success(f"🎉 Successfully enriched {len(results)} leads!")
 
                         st.session_state["leads"] = results
@@ -406,6 +595,7 @@ with tab_search:
 
                     except Exception as pipe_err:
                         logger.error(f"Pipeline execution error: {pipe_err}")
+                        add_activity_log(f"Pipeline execution error: {pipe_err}", "ERROR")
                         status_text.error(f"⚠️ Enrichment pipeline error: {pipe_err}")
 
 
@@ -468,6 +658,7 @@ with tab_csv:
                             )
 
                             prog_bar.progress(100)
+                            add_activity_log(f"Enriched {len(results)} leads from uploaded CSV '{uploaded_file.name}'.", "INFO")
                             status_text.success(f"🎉 Successfully enriched {len(results)} leads from CSV!")
 
                             st.session_state["leads"] = results
@@ -489,6 +680,7 @@ with tab_csv:
 
                         except Exception as csv_pipe_err:
                             logger.error(f"CSV enrichment error: {csv_pipe_err}")
+                            add_activity_log(f"CSV enrichment error: {csv_pipe_err}", "ERROR")
                             status_text.error(f"⚠️ CSV enrichment error: {csv_pipe_err}")
 
         except Exception as e:
@@ -496,7 +688,7 @@ with tab_csv:
 
 
 # =============================================================
-# 📊 Generated Leads Display (100% Free & Full Access)
+# 📊 Generated Leads Display (Free / Paywalled based on Admin Toggle)
 # =============================================================
 if st.session_state["leads"]:
     df = st.session_state["df"]
@@ -519,51 +711,194 @@ if st.session_state["leads"]:
     with m3:
         st.metric("Email Discovery Rate", email_rate)
     with m4:
-        st.metric("Dataset Access", "✅ Unrestricted Free")
+        if is_unlocked:
+            st.metric("Dataset Access", "✅ Full Unrestricted")
+        else:
+            st.metric("Dataset Access", f"🔒 Paywall Active (2 of {total_leads})")
 
-    # Full Interactive Table (Unrestricted for all users)
-    st.dataframe(
-        df[["company_name", "website_url", "primary_email", "company_summary", "personalized_pitch", "status"]],
-        column_config={
-            "website_url": st.column_config.LinkColumn("Website URL"),
-            "primary_email": st.column_config.TextColumn("Contact Email"),
-            "personalized_pitch": st.column_config.TextColumn("Cold Email Pitch", width="large")
-        },
-        use_container_width=True,
-        hide_index=True
-    )
+    # ---------------------------------------------------------
+    # 🔓 UNLOCKED / FREE MODE FULL VIEW
+    # ---------------------------------------------------------
+    if is_unlocked:
+        if is_admin_active and paywall_is_on and not user_has_paid:
+            st.info("🔓 **ADMIN MODE ACTIVE:** You are viewing the full dataset (bypassing crypto paywall).")
 
-    # Full Cold Outreach Pitch Cards
-    with st.expander("✉️ View Personalized Cold Email Pitches for All Leads", expanded=False):
-        for lead in leads:
-            st.markdown(f"**📌 {lead.company_name}** (`{lead.primary_email or 'No email found'}`)")
-            st.markdown(f"**Summary:** {lead.company_summary or 'N/A'}")
-            st.info(lead.personalized_pitch or "N/A")
-            st.divider()
-
-    # 📥 Instant Free CSV & JSON Download Actions
-    st.markdown("### 📥 Instant Free CSV / JSON Export")
-    c_dl1, c_dl2 = st.columns([1, 1])
-    with c_dl1:
-        csv_buffer = io.StringIO()
-        df.to_csv(csv_buffer, index=False)
-        st.download_button(
-            label="📥 Download Full CSV (Free)",
-            data=csv_buffer.getvalue(),
-            file_name=f"enriched_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv",
-            type="primary",
-            use_container_width=True
+        # Full Interactive Table
+        st.dataframe(
+            df[["company_name", "website_url", "primary_email", "company_summary", "personalized_pitch", "status"]],
+            column_config={
+                "website_url": st.column_config.LinkColumn("Website URL"),
+                "primary_email": st.column_config.TextColumn("Contact Email"),
+                "personalized_pitch": st.column_config.TextColumn("Cold Email Pitch", width="large")
+            },
+            use_container_width=True,
+            hide_index=True
         )
-    with c_dl2:
-        json_str = json.dumps([l.model_dump() for l in leads], indent=2)
-        st.download_button(
-            label="📥 Download Full JSON (Free)",
-            data=json_str,
-            file_name=f"enriched_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
-            mime="application/json",
-            use_container_width=True
-        )
+
+        # Full Cold Outreach Pitch Cards
+        with st.expander("✉️ View Personalized Cold Email Pitches for All Leads", expanded=False):
+            for lead in leads:
+                st.markdown(f"**📌 {lead.company_name}** (`{lead.primary_email or 'No email found'}`)")
+                st.markdown(f"**Summary:** {lead.company_summary or 'N/A'}")
+                st.info(lead.personalized_pitch or "N/A")
+                st.divider()
+
+        # 📥 Instant Free CSV & JSON Download Actions
+        st.markdown("### 📥 Download Lead Dataset")
+        c_dl1, c_dl2 = st.columns([1, 1])
+        with c_dl1:
+            csv_buffer = io.StringIO()
+            df.to_csv(csv_buffer, index=False)
+            st.download_button(
+                label="📥 Download Full CSV",
+                data=csv_buffer.getvalue(),
+                file_name=f"enriched_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                type="primary",
+                use_container_width=True
+            )
+        with c_dl2:
+            json_str = json.dumps([l.model_dump() for l in leads], indent=2)
+            st.download_button(
+                label="📥 Download Full JSON",
+                data=json_str,
+                file_name=f"enriched_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+
+    # ---------------------------------------------------------
+    # 🔒 PAYWALLED PREVIEW (When Admin Toggles Paywall ON)
+    # ---------------------------------------------------------
+    else:
+        st.markdown("#### 👁️ Verified Sample Preview (Top 2 Leads)")
+        st.caption("🛡️ *Data preview is copy-protected. Complete the $6.00 USD crypto payment below to unlock the full dataset & download CSV.*")
+
+        sample_leads = leads[:2]
+        hidden_count = max(0, total_leads - len(sample_leads))
+
+        for idx, lead in enumerate(sample_leads, 1):
+            masked_email = mask_email_address(lead.primary_email)
+            st.markdown(f"""
+            <div class="protected-sample-container">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span style="font-size:1.1rem; font-weight:700; color:#1e293b;">📌 Sample #{idx}: {lead.company_name}</span>
+                    <span class="pill">Verified Lead</span>
+                </div>
+                <div style="font-size:0.9rem; color:#475569; margin-bottom:6px;">
+                    <strong>Website:</strong> <a href="{lead.website_url or '#'}" target="_blank">{lead.website_url or 'N/A'}</a> | 
+                    <strong>Contact Email:</strong> <code style="color:#2563eb; background:#eff6ff; padding:2px 6px; border-radius:4px;">{masked_email}</code>
+                </div>
+                <div style="font-size:0.88rem; color:#334155; margin-bottom:8px;">
+                    <strong>Company Summary:</strong> {lead.company_summary or 'N/A'}
+                </div>
+                <div style="background:#f8fafc; border-left:3px solid #3b82f6; padding:10px; border-radius:6px; font-size:0.86rem; color:#1e293b;">
+                    <strong>AI Cold Pitch Preview:</strong> <em>"{lead.personalized_pitch or 'Custom pitch generated by Gemini'}"</em>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        if hidden_count > 0:
+            st.markdown(f"""
+            <div class="locked-teaser-card">
+                <h3 style="color:#334155; margin-top:0; font-weight:800;">🔒 +{hidden_count} More Verified Leads & AI Pitches Locked</h3>
+                <p style="color:#64748b; font-size:0.95rem; margin-bottom:0;">
+                    Full unmasked contact emails, complete company dossiers, customized cold pitches, and the complete CSV/JSON export are protected behind the paywall.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Paywall Gate Box
+        st.markdown(f"""
+        <div class="crypto-hero-box">
+            <h2 style="color: #ffffff; margin-top: 0; font-weight: 800;">⚡ Instant Zero-KYC Crypto Checkout</h2>
+            <p style="color: #cbd5e1; font-size: 1.0rem; margin-bottom: 12px;">
+                Pay <strong>${CRYPTO_PRICE_USD:.2f} USD</strong> with <strong>Bitcoin (BTC), USDT (TRC20/ERC20), Ethereum (ETH), Solana (SOL), Litecoin (LTC)</strong> or 150+ cryptocurrencies.
+            </p>
+            <span class="pill">🔒 100% Automated On-Chain Verification</span>
+            <span class="pill">⚡ Instant CSV Download Upon Confirmation</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        c_cr1, c_cr2 = st.columns([1, 1])
+
+        with c_cr1:
+            st.markdown("#### 1. Generate Payment Invoice")
+            if st.button("⚡ Generate Secure Crypto Invoice ($6 USD)", type="primary", use_container_width=True):
+                if not NOWPAYMENTS_API_KEY or NOWPAYMENTS_API_KEY == "dummy_nowpayments_key":
+                    st.warning("⚠️ NOWPAYMENTS_API_KEY is not configured in secrets.")
+                else:
+                    with st.spinner("Connecting to NOWPayments API..."):
+                        inv = create_nowpayments_invoice(
+                            api_key=NOWPAYMENTS_API_KEY,
+                            price_amount=CRYPTO_PRICE_USD,
+                            price_currency="usd",
+                            order_description=f"B2B Leads Machine - {len(leads)} Verified Leads Export"
+                        )
+                        if inv.get("success"):
+                            st.session_state["crypto_invoice_url"] = inv.get("invoice_url")
+                            st.session_state["crypto_invoice_id"] = inv.get("invoice_id")
+                            add_activity_log(f"Generated NOWPayments invoice #{inv.get('invoice_id')}", "INFO")
+                            st.success("🎉 Crypto invoice generated successfully!")
+                        else:
+                            st.error(f"Failed to generate invoice: {inv.get('error')}")
+
+            if st.session_state.get("crypto_invoice_url"):
+                st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+                st.link_button(
+                    label=f"🚀 Pay ${CRYPTO_PRICE_USD:.2f} with Crypto on NOWPayments",
+                    url=st.session_state["crypto_invoice_url"],
+                    type="primary",
+                    use_container_width=True
+                )
+                st.caption(f"Invoice ID: `{st.session_state.get('crypto_invoice_id')}`")
+
+        with c_cr2:
+            st.markdown("#### 2. Automatic Invoice Verification")
+            st.markdown("Once you complete payment in your wallet, click below to verify invoice on-chain:")
+
+            inv_id_input = st.text_input(
+                "Invoice ID",
+                value=st.session_state.get("crypto_invoice_id") or "",
+                placeholder="e.g. 5527915624",
+                help="The Invoice ID generated by NOWPayments (auto-filled)."
+            )
+
+            if st.button("🔄 Check Payment Status & Unlock CSV", use_container_width=True):
+                if not NOWPAYMENTS_API_KEY or NOWPAYMENTS_API_KEY == "dummy_nowpayments_key":
+                    st.warning("⚠️ NOWPAYMENTS_API_KEY is not configured.")
+                elif not inv_id_input.strip():
+                    st.info("ℹ️ Please generate an invoice or enter your NOWPayments Invoice ID to verify.")
+                else:
+                    with st.spinner("Verifying invoice status with NOWPayments endpoint..."):
+                        stat = check_nowpayments_invoice_status(
+                            api_key=NOWPAYMENTS_API_KEY,
+                            invoice_id=inv_id_input.strip()
+                        )
+                        if stat.get("success"):
+                            status_name = stat.get("status", "waiting")
+                            if stat.get("is_completed"):
+                                st.session_state["payment_verified"] = True
+                                st.session_state["paid"] = True
+                                add_activity_log(f"Crypto invoice #{inv_id_input} verified on-chain. Dataset unlocked.", "INFO")
+                                st.toast("🎉 Crypto payment verified! Full CSV download unlocked.", icon="✅")
+                                st.rerun()
+                            else:
+                                st.info(f"⏳ Current Invoice Status: `{status_name}`. Please complete the transfer on NOWPayments and re-check once confirmed on the blockchain.")
+                        else:
+                            st.error(f"Could not verify invoice: {stat.get('error')}")
+
+            with st.expander("🔑 Manual Passcode Unlock", expanded=False):
+                entered_passcode = st.text_input("Enter Passcode", type="password", placeholder="Enter unlock code...", key="manual_passcode_field")
+                if st.button("Unlock with Code", use_container_width=True):
+                    clean_code = entered_passcode.strip()
+                    if clean_code and (clean_code == UNLOCK_CODE or clean_code == ADMIN_PASSWORD):
+                        st.session_state["payment_verified"] = True
+                        st.session_state["paid"] = True
+                        st.toast("🎉 Passcode verified! Full CSV download unlocked.", icon="✅")
+                        st.rerun()
+                    else:
+                        st.error("⚠️ Invalid code.")
 
     st.markdown("---")
 
@@ -610,6 +945,7 @@ if st.session_state["leads"]:
                             p_email = getattr(lead, "primary_email", None) or (lead.get("primary_email") if isinstance(lead, dict) else "")
                             dispatch_status.text(f"Processing ({idx}/{tot}) {icon} -> {c_name} ({p_email}) [{msg}]")
 
+                        add_activity_log(f"Launching manual outreach campaign to {len(unsent_leads)} unsent contacts...", "INFO")
                         with st.spinner("Connecting to Gmail SMTP & dispatching cold email pitches..."):
                             report = dispatch_campaign(
                                 leads=unsent_leads,
@@ -627,8 +963,10 @@ if st.session_state["leads"]:
                         dispatch_bar.progress(100)
                         st.session_state["campaign_results"] = report
                         if report.get("success"):
+                            add_activity_log(f"Campaign finished: Sent {report.get('sent_count')} emails, skipped {report.get('skipped_duplicates', 0)} duplicates, skipped {report.get('skipped_invalid', 0)} invalid.", "INFO")
                             st.success(f"🎉 Campaign Finished! Successfully sent {report.get('sent_count')} emails ({report.get('skipped_duplicates', 0)} duplicates skipped, {report.get('skipped_invalid', 0)} invalid artifacts skipped).")
                         else:
+                            add_activity_log(f"Campaign failed: {report.get('message')}", "ERROR")
                             st.warning(f"⚠️ {report.get('message')}")
 
         if st.session_state["campaign_results"]:
