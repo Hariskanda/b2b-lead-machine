@@ -3,17 +3,20 @@ import io
 import json
 import logging
 import os
-import threading
+import re
 import urllib.parse
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
 
-from b2b_leadgen.autopilot import autopilot_engine
 from b2b_leadgen.config import settings
-from b2b_leadgen.email_dispatcher import build_outreach_email, dispatch_campaign
+from b2b_leadgen.email_dispatcher import (
+    build_outreach_email,
+    dispatch_campaign,
+    is_valid_business_email
+)
 from b2b_leadgen.finder import discover_leads_by_keyword
 from b2b_leadgen.history import sent_history
 from b2b_leadgen.models import EnrichedLead, LeadInput
@@ -50,7 +53,7 @@ SESSION_DEFAULTS: Dict[str, Any] = {
     "crypto_invoice_id": None,
     "campaign_results": None,
     "sync_status": None,
-    "stop_event": threading.Event(),
+    "is_running": False,          # Run-lock preventing concurrent queue spam
     "activity_logs": []
 }
 
@@ -210,12 +213,15 @@ def mask_email_address(email: Optional[str]) -> str:
     return f"{masked_user}@{domain}"
 
 
-def safe_execute_pipeline(
+def safe_execute_pipeline_sync(
     pipeline: LeadGenPipeline,
     inputs: List[LeadInput],
     progress_callback: Optional[Callable[[EnrichedLead, int, int], None]] = None
 ) -> List[EnrichedLead]:
-    """Safely runs the async enrichment pipeline across any execution environment."""
+    """
+    Executes the enrichment pipeline synchronously in the main thread.
+    No detached background threads or ghost workers are spawned.
+    """
     try:
         return asyncio.run(
             pipeline.run_batch(
@@ -258,6 +264,7 @@ is_admin_active = bool(st.session_state.get("admin_authenticated", False) or st.
 paywall_is_on = bool(st.session_state.get("paywall_enabled", False))
 user_has_paid = bool(st.session_state.get("payment_verified", False) or st.session_state.get("paid", False))
 is_unlocked = (not paywall_is_on) or is_admin_active or user_has_paid
+is_currently_running = bool(st.session_state.get("is_running", False))
 
 
 # =============================================================
@@ -307,16 +314,13 @@ with st.sidebar:
         else:
             st.markdown('<span style="color:#15803d; font-weight:700;">🔓 MASTER ADMIN ACTIVE</span>', unsafe_allow_html=True)
 
-            # 1. EMERGENCY KILL SWITCH
+            # 1. PROCESS STATUS
             st.markdown("---")
-            st.markdown("#### 🛑 Emergency Kill Switch")
-            if st.button("🛑 EMERGENCY STOP ALL TASKS", type="secondary", use_container_width=True):
-                autopilot_engine.stop()
-                if "stop_event" in st.session_state:
-                    st.session_state["stop_event"].set()
-                add_activity_log("EMERGENCY KILL SWITCH TRIGGERED: All background tasks terminated.", "WARNING")
-                st.toast("🛑 Emergency Kill Switch triggered! All tasks stopped.", icon="🛑")
-                st.rerun()
+            st.markdown("#### ⚡ Execution Engine Status")
+            if is_currently_running:
+                st.warning("⏳ Engine Status: Active Synchronous Task Running (Use Streamlit 'Stop' button in top-right to cancel).")
+            else:
+                st.info("⚪ Engine Status: Idle (Main Thread Ready).")
 
             # 2. HIDDEN MONETIZATION PAYWALL TOGGLE
             st.markdown("---")
@@ -468,83 +472,98 @@ with tab_search:
     with col2:
         num_leads = st.number_input("Target Lead Count", min_value=3, max_value=30, value=15, step=1)
 
-    btn_discover = st.button("🚀 Generate Leads & Mini-Audits", type="primary", use_container_width=True)
+    btn_discover = st.button("🚀 Generate Leads & Mini-Audits", type="primary", use_container_width=True, disabled=is_currently_running)
 
     if btn_discover:
         if not search_query.strip():
             st.error("Please enter a valid search query.")
         else:
-            progress_container = st.container()
-            with progress_container:
-                status_text = st.empty()
-                prog_bar = st.progress(0)
+            st.session_state["is_running"] = True
+            try:
+                with st.spinner(f"🔎 Discovering and auditing businesses for '{search_query.strip()}' in main thread..."):
+                    progress_container = st.container()
+                    with progress_container:
+                        status_text = st.empty()
+                        prog_bar = st.progress(0)
 
-                add_activity_log(f"Starting discovery for '{search_query.strip()}' (Target: {int(num_leads)} leads)...", "INFO")
-                status_text.info(f"🔎 Discovering businesses matching '{search_query}' via DuckDuckGo...")
+                        add_activity_log(f"Starting discovery for '{search_query.strip()}' (Target: {int(num_leads)} leads)...", "INFO")
+                        status_text.info(f"🔎 Discovering businesses matching '{search_query}' via DuckDuckGo...")
 
-                try:
-                    discovered_inputs = discover_leads_by_keyword(search_query.strip(), max_results=int(num_leads))
-                except Exception as disc_err:
-                    logger.error(f"Discovery error: {disc_err}")
-                    discovered_inputs = []
-                    add_activity_log(f"Search discovery error: {disc_err}", "ERROR")
-                    status_text.error(f"⚠️ Search discovery encountered a network issue: {disc_err}. Please retry in a few moments.")
+                        try:
+                            discovered_inputs = discover_leads_by_keyword(search_query.strip(), max_results=int(num_leads))
+                        except Exception as disc_err:
+                            logger.error(f"Discovery error: {disc_err}")
+                            discovered_inputs = []
+                            add_activity_log(f"Search discovery error: {disc_err}", "ERROR")
+                            status_text.error(f"⚠️ Search discovery encountered an issue: {disc_err}. Please retry.")
 
-                if not discovered_inputs:
-                    status_text.error("No companies could be discovered for this query. Try refining your search keywords.")
-                else:
-                    add_activity_log(f"Discovered {len(discovered_inputs)} company domains for '{search_query.strip()}'. Generating Custom Mini-Audits...", "INFO")
-                    status_text.success(f"✅ Discovered {len(discovered_inputs)} businesses! Generating AI Mini-Audits and extracting emails...")
+                        if not discovered_inputs:
+                            status_text.error("No companies could be discovered for this query. Try refining your search keywords.")
+                        else:
+                            add_activity_log(f"Discovered {len(discovered_inputs)} company domains for '{search_query.strip()}'. Running AI enrichment...", "INFO")
+                            status_text.success(f"✅ Discovered {len(discovered_inputs)} businesses! Generating AI Mini-Audits and extracting emails...")
 
-                    try:
-                        pipeline = LeadGenPipeline(
-                            api_key=GEMINI_API_KEY,
-                            model=effective_model,
-                            max_concurrency=effective_concurrency,
-                            follow_contact_pages=effective_follow_subpages,
-                            use_checkpoint=False
-                        )
-
-                        total = len(discovered_inputs)
-
-                        def update_ui_progress(lead: EnrichedLead, idx: int, tot: int):
-                            pct = int((idx / tot) * 100) if tot > 0 else 0
-                            prog_bar.progress(min(100, max(0, pct)))
-                            email_tag = f" — Found email: {lead.primary_email}" if lead.primary_email else ""
-                            status_text.text(f"Auditing ({idx}/{tot}): {lead.company_name}{email_tag}")
-
-                        results = safe_execute_pipeline(
-                            pipeline=pipeline,
-                            inputs=discovered_inputs,
-                            progress_callback=update_ui_progress
-                        )
-
-                        prog_bar.progress(100)
-                        add_activity_log(f"Successfully generated mini-audits for {len(results)} leads.", "INFO")
-                        status_text.success(f"🎉 Successfully generated {len(results)} leads with Custom Mini-Audits!")
-
-                        st.session_state["leads"] = results
-                        df_data = [r.model_dump() for r in results]
-                        st.session_state["df"] = pd.DataFrame(df_data)
-                        st.session_state["last_query"] = search_query
-                        st.session_state["campaign_results"] = None
-
-                        if effective_auto_sync and effective_gsheet_target:
                             try:
-                                sync_res = export_leads_to_google_sheet(
-                                    leads=results,
-                                    sheet_name_or_url=effective_gsheet_target,
-                                    worksheet_title="Leads"
+                                pipeline = LeadGenPipeline(
+                                    api_key=GEMINI_API_KEY,
+                                    model=effective_model,
+                                    max_concurrency=effective_concurrency,
+                                    follow_contact_pages=effective_follow_subpages,
+                                    use_checkpoint=False
                                 )
-                                if sync_res.get("success"):
-                                    st.toast(f"✅ Synced {sync_res.get('rows_appended')} leads to Google Sheet!", icon="📊")
-                            except Exception as e:
-                                st.warning(f"Google Sheets auto-sync failed: {e}")
 
-                    except Exception as pipe_err:
-                        logger.error(f"Pipeline execution error: {pipe_err}")
-                        add_activity_log(f"Pipeline execution error: {pipe_err}", "ERROR")
-                        status_text.error(f"⚠️ Enrichment pipeline error: {pipe_err}")
+                                total = len(discovered_inputs)
+
+                                def update_ui_progress(lead: EnrichedLead, idx: int, tot: int):
+                                    pct = int((idx / tot) * 100) if tot > 0 else 0
+                                    prog_bar.progress(min(100, max(0, pct)))
+                                    email_tag = f" — Found email: {lead.primary_email}" if lead.primary_email else ""
+                                    status_text.text(f"Auditing ({idx}/{tot}): {lead.company_name}{email_tag}")
+
+                                results = safe_execute_pipeline_sync(
+                                    pipeline=pipeline,
+                                    inputs=discovered_inputs,
+                                    progress_callback=update_ui_progress
+                                )
+
+                                # Post-filter results to eliminate bad library/version string artifacts
+                                sanitized_results = []
+                                for r in results:
+                                    if r.primary_email:
+                                        valid, _ = is_valid_business_email(r.primary_email)
+                                        if not valid:
+                                            r.primary_email = None
+                                    sanitized_results.append(r)
+
+                                prog_bar.progress(100)
+                                add_activity_log(f"Successfully generated mini-audits for {len(sanitized_results)} leads.", "INFO")
+                                status_text.success(f"🎉 Successfully generated {len(sanitized_results)} leads with Custom Mini-Audits!")
+
+                                st.session_state["leads"] = sanitized_results
+                                df_data = [r.model_dump() for r in sanitized_results]
+                                st.session_state["df"] = pd.DataFrame(df_data)
+                                st.session_state["last_query"] = search_query
+                                st.session_state["campaign_results"] = None
+
+                                if effective_auto_sync and effective_gsheet_target:
+                                    try:
+                                        sync_res = export_leads_to_google_sheet(
+                                            leads=sanitized_results,
+                                            sheet_name_or_url=effective_gsheet_target,
+                                            worksheet_title="Leads"
+                                        )
+                                        if sync_res.get("success"):
+                                            st.toast(f"✅ Synced {sync_res.get('rows_appended')} leads to Google Sheet!", icon="📊")
+                                    except Exception as e:
+                                        st.warning(f"Google Sheets auto-sync failed: {e}")
+
+                            except Exception as pipe_err:
+                                logger.error(f"Pipeline execution error: {pipe_err}")
+                                add_activity_log(f"Pipeline execution error: {pipe_err}", "ERROR")
+                                status_text.error(f"⚠️ Enrichment pipeline error: {pipe_err}")
+
+            finally:
+                st.session_state["is_running"] = False
 
 
 # -------------------------------------------------------------
@@ -568,7 +587,7 @@ with tab_csv:
                 index=list(uploaded_df.columns).index(company_col_detected) if company_col_detected in uploaded_df.columns else 0
             )
 
-            btn_enrich_csv = st.button("⚡ Generate Mini-Audits from Uploaded CSV", type="primary")
+            btn_enrich_csv = st.button("⚡ Generate Mini-Audits from Uploaded CSV", type="primary", disabled=is_currently_running)
 
             if btn_enrich_csv:
                 input_leads = []
@@ -580,56 +599,70 @@ with tab_csv:
                 if not input_leads:
                     st.error("No valid company names found in selected column.")
                 else:
-                    progress_container = st.container()
-                    with progress_container:
-                        status_text = st.empty()
-                        prog_bar = st.progress(0)
+                    st.session_state["is_running"] = True
+                    try:
+                        with st.spinner("Enriching uploaded CSV in main thread..."):
+                            progress_container = st.container()
+                            with progress_container:
+                                status_text = st.empty()
+                                prog_bar = st.progress(0)
 
-                        try:
-                            pipeline = LeadGenPipeline(
-                                api_key=GEMINI_API_KEY,
-                                model=effective_model,
-                                max_concurrency=effective_concurrency,
-                                follow_contact_pages=effective_follow_subpages,
-                                use_checkpoint=False
-                            )
-
-                            def update_csv_progress(lead: EnrichedLead, idx: int, tot: int):
-                                pct = int((idx / tot) * 100) if tot > 0 else 0
-                                prog_bar.progress(min(100, max(0, pct)))
-                                status_text.text(f"Auditing ({idx}/{tot}): {lead.company_name}")
-
-                            results = safe_execute_pipeline(
-                                pipeline=pipeline,
-                                inputs=input_leads,
-                                progress_callback=update_csv_progress
-                            )
-
-                            prog_bar.progress(100)
-                            add_activity_log(f"Enriched {len(results)} leads from uploaded CSV '{uploaded_file.name}'.", "INFO")
-                            status_text.success(f"🎉 Successfully enriched {len(results)} leads from CSV with Custom Mini-Audits!")
-
-                            st.session_state["leads"] = results
-                            st.session_state["df"] = pd.DataFrame([r.model_dump() for r in results])
-                            st.session_state["last_query"] = f"CSV: {uploaded_file.name}"
-                            st.session_state["campaign_results"] = None
-
-                            if effective_auto_sync and effective_gsheet_target:
                                 try:
-                                    sync_res = export_leads_to_google_sheet(
-                                        leads=results,
-                                        sheet_name_or_url=effective_gsheet_target,
-                                        worksheet_title="Leads"
+                                    pipeline = LeadGenPipeline(
+                                        api_key=GEMINI_API_KEY,
+                                        model=effective_model,
+                                        max_concurrency=effective_concurrency,
+                                        follow_contact_pages=effective_follow_subpages,
+                                        use_checkpoint=False
                                     )
-                                    if sync_res.get("success"):
-                                        st.toast(f"✅ Synced {sync_res.get('rows_appended')} leads to Google Sheet!", icon="📊")
-                                except Exception as e:
-                                    st.warning(f"Google Sheets auto-sync failed: {e}")
 
-                        except Exception as csv_pipe_err:
-                            logger.error(f"CSV enrichment error: {csv_pipe_err}")
-                            add_activity_log(f"CSV enrichment error: {csv_pipe_err}", "ERROR")
-                            status_text.error(f"⚠️ CSV enrichment error: {csv_pipe_err}")
+                                    def update_csv_progress(lead: EnrichedLead, idx: int, tot: int):
+                                        pct = int((idx / tot) * 100) if tot > 0 else 0
+                                        prog_bar.progress(min(100, max(0, pct)))
+                                        status_text.text(f"Auditing ({idx}/{tot}): {lead.company_name}")
+
+                                    results = safe_execute_pipeline_sync(
+                                        pipeline=pipeline,
+                                        inputs=input_leads,
+                                        progress_callback=update_csv_progress
+                                    )
+
+                                    sanitized_results = []
+                                    for r in results:
+                                        if r.primary_email:
+                                            valid, _ = is_valid_business_email(r.primary_email)
+                                            if not valid:
+                                                r.primary_email = None
+                                        sanitized_results.append(r)
+
+                                    prog_bar.progress(100)
+                                    add_activity_log(f"Enriched {len(sanitized_results)} leads from uploaded CSV '{uploaded_file.name}'.", "INFO")
+                                    status_text.success(f"🎉 Successfully enriched {len(sanitized_results)} leads from CSV with Custom Mini-Audits!")
+
+                                    st.session_state["leads"] = sanitized_results
+                                    st.session_state["df"] = pd.DataFrame([r.model_dump() for r in sanitized_results])
+                                    st.session_state["last_query"] = f"CSV: {uploaded_file.name}"
+                                    st.session_state["campaign_results"] = None
+
+                                    if effective_auto_sync and effective_gsheet_target:
+                                        try:
+                                            sync_res = export_leads_to_google_sheet(
+                                                leads=sanitized_results,
+                                                sheet_name_or_url=effective_gsheet_target,
+                                                worksheet_title="Leads"
+                                            )
+                                            if sync_res.get("success"):
+                                                st.toast(f"✅ Synced {sync_res.get('rows_appended')} leads to Google Sheet!", icon="📊")
+                                        except Exception as e:
+                                            st.warning(f"Google Sheets auto-sync failed: {e}")
+
+                                except Exception as csv_pipe_err:
+                                    logger.error(f"CSV enrichment error: {csv_pipe_err}")
+                                    add_activity_log(f"CSV enrichment error: {csv_pipe_err}", "ERROR")
+                                    status_text.error(f"⚠️ CSV enrichment error: {csv_pipe_err}")
+
+                    finally:
+                        st.session_state["is_running"] = False
 
         except Exception as e:
             st.error(f"Error reading CSV file: {e}")
@@ -857,12 +890,20 @@ if st.session_state["leads"]:
     st.markdown("---")
 
     # =========================================================
-    # 📨 Value-First Custom Mini-Audit Campaign Launcher (Anti-Spam Deduplicated)
+    # 📨 Value-First Custom Mini-Audit Campaign Launcher (Synchronous Main Thread)
     # =========================================================
     st.markdown("### 📨 Value-First Mini-Audit Campaign Launcher")
-    st.markdown("Dispatches personalized **Custom Mini-Audits** (What they do well, potential blind spot, polite suggestion to fix it) via Gmail SMTP with **strict global deduplication**.")
+    st.markdown("Dispatches personalized **Custom Mini-Audits** via Gmail SMTP synchronously in the main thread with **strict global deduplication**.")
 
-    eligible_leads = [l for l in leads if getattr(l, "primary_email", None) and "@" in str(getattr(l, "primary_email", ""))]
+    # Filter strictly valid business emails (rejects version numbers, bootstrap@, consent-manager@, etc.)
+    eligible_leads = []
+    for l in leads:
+        em = getattr(l, "primary_email", None)
+        if em and isinstance(em, str):
+            is_valid, _ = is_valid_business_email(em)
+            if is_valid:
+                eligible_leads.append(l)
+
     unsent_leads, skipped_leads = sent_history.filter_leads_for_dispatch(eligible_leads)
 
     if eligible_leads:
@@ -882,51 +923,58 @@ if st.session_state["leads"]:
         if len(unsent_leads) == 0:
             st.warning("🛡️ All eligible leads in this dataset have already been contacted in past runs. Global deduplication filter has protected them from receiving duplicate emails.")
         else:
-            if st.button("🚀 Run Audit & Dispatch Campaign (Manual Trigger Only)", type="primary", use_container_width=True):
+            btn_launch_campaign = st.button("🚀 Run Audit & Dispatch Campaign (Manual Trigger Only)", type="primary", use_container_width=True, disabled=is_currently_running)
+
+            if btn_launch_campaign:
                 if not SMTP_USER or not SMTP_PASSWORD:
                     st.warning("⚠️ SMTP credentials (SMTP_USER, SMTP_PASSWORD) not set in secrets.")
                 else:
-                    progress_container = st.container()
-                    with progress_container:
-                        dispatch_status = st.empty()
-                        dispatch_bar = st.progress(0)
+                    st.session_state["is_running"] = True
+                    try:
+                        with st.spinner("Connecting to Gmail SMTP & dispatching custom mini-audits in main thread..."):
+                            progress_container = st.container()
+                            with progress_container:
+                                dispatch_status = st.empty()
+                                dispatch_bar = st.progress(0)
 
-                        def on_email_progress(lead: Any, success: bool, msg: str, idx: int, tot: int):
-                            pct = int((idx / tot) * 100) if tot > 0 else 0
-                            dispatch_bar.progress(min(100, max(0, pct)))
-                            icon = "✅" if success else "❌"
-                            c_name = getattr(lead, "company_name", None) or (lead.get("company_name") if isinstance(lead, dict) else "Lead")
-                            p_email = getattr(lead, "primary_email", None) or (lead.get("primary_email") if isinstance(lead, dict) else "")
-                            dispatch_status.text(f"Processing ({idx}/{tot}) {icon} -> {c_name} ({p_email}) [{msg}]")
+                                def on_email_progress(lead: Any, success: bool, msg: str, idx: int, tot: int):
+                                    pct = int((idx / tot) * 100) if tot > 0 else 0
+                                    dispatch_bar.progress(min(100, max(0, pct)))
+                                    icon = "✅" if success else "❌"
+                                    c_name = getattr(lead, "company_name", None) or (lead.get("company_name") if isinstance(lead, dict) else "Lead")
+                                    p_email = getattr(lead, "primary_email", None) or (lead.get("primary_email") if isinstance(lead, dict) else "")
+                                    dispatch_status.text(f"Processing ({idx}/{tot}) {icon} -> {c_name} ({p_email}) [{msg}]")
 
-                        add_activity_log(f"Launching value-first mini-audit campaign to {len(unsent_leads)} unsent contacts...", "INFO")
-                        with st.spinner("Connecting to Gmail SMTP & dispatching custom mini-audits..."):
-                            report = dispatch_campaign(
-                                leads=unsent_leads,
-                                sender_email=SMTP_USER,
-                                app_password=SMTP_PASSWORD,
-                                app_url=APP_URL,
-                                sender_name=SENDER_NAME,
-                                smtp_host=SMTP_HOST,
-                                smtp_port=SMTP_PORT,
-                                topic=st.session_state.get("last_query", "Manual Mini-Audit Outreach"),
-                                delay_seconds=float(send_delay),
-                                progress_callback=on_email_progress,
-                                stop_event=st.session_state.get("stop_event")
-                            )
+                                add_activity_log(f"Launching value-first mini-audit campaign to {len(unsent_leads)} unsent contacts...", "INFO")
 
-                        dispatch_bar.progress(100)
-                        st.session_state["campaign_results"] = report
-                        if report.get("success"):
-                            add_activity_log(f"Campaign finished: Sent {report.get('sent_count')} mini-audits, skipped {report.get('skipped_duplicates', 0)} duplicates, skipped {report.get('skipped_invalid', 0)} invalid.", "INFO")
-                            st.success(f"🎉 Campaign Finished! Successfully sent {report.get('sent_count')} value-first mini-audits ({report.get('skipped_duplicates', 0)} duplicates skipped, {report.get('skipped_invalid', 0)} invalid artifacts skipped).")
-                        else:
-                            add_activity_log(f"Campaign failed: {report.get('message')}", "ERROR")
-                            st.warning(f"⚠️ {report.get('message')}")
+                                report = dispatch_campaign(
+                                    leads=unsent_leads,
+                                    sender_email=SMTP_USER,
+                                    app_password=SMTP_PASSWORD,
+                                    app_url=APP_URL,
+                                    sender_name=SENDER_NAME,
+                                    smtp_host=SMTP_HOST,
+                                    smtp_port=SMTP_PORT,
+                                    topic=st.session_state.get("last_query", "Manual Mini-Audit Outreach"),
+                                    delay_seconds=float(send_delay),
+                                    progress_callback=on_email_progress
+                                )
+
+                                dispatch_bar.progress(100)
+                                st.session_state["campaign_results"] = report
+                                if report.get("success"):
+                                    add_activity_log(f"Campaign finished: Sent {report.get('sent_count')} mini-audits, skipped {report.get('skipped_duplicates', 0)} duplicates, skipped {report.get('skipped_invalid', 0)} invalid.", "INFO")
+                                    st.success(f"🎉 Campaign Finished! Successfully sent {report.get('sent_count')} value-first mini-audits ({report.get('skipped_duplicates', 0)} duplicates skipped, {report.get('skipped_invalid', 0)} invalid artifacts skipped).")
+                                else:
+                                    add_activity_log(f"Campaign failed: {report.get('message')}", "ERROR")
+                                    st.warning(f"⚠️ {report.get('message')}")
+
+                    finally:
+                        st.session_state["is_running"] = False
 
         if st.session_state["campaign_results"]:
             rep = st.session_state["campaign_results"]
             if rep.get("results"):
                 st.dataframe(pd.DataFrame(rep.get("results", [])), use_container_width=True, hide_index=True)
     else:
-        st.info("ℹ️ No leads with verified email addresses found in the current table to dispatch.")
+        st.info("ℹ️ No leads with verified business email addresses found in the current table to dispatch.")

@@ -15,22 +15,31 @@ logger = logging.getLogger(__name__)
 EMAIL_REGEX = re.compile(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+')
 
 # Common false positive patterns or dummy domains in emails
-DISALLOWED_EMAIL_EXTS = ('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.css', '.js', '.map', '.woff', '.ttf')
-DISALLOWED_DOMAINS = {'example.com', 'domain.com', 'yourcompany.com', 'email.com', 'test.com', 'sentry.io', 'wixpress.com'}
-JUNK_PREFIXES = {'bootstrap', 'splide', 'jquery', 'swiper', 'vue', 'react', 'core-js', 'lodash', 'popper', 'fontawesome', 'webpack', 'babel', 'angular', 'chartjs', 'select2', 'moment', 'axios', 'sentry', 'dummy', 'user', 'username', 'test'}
+DISALLOWED_EMAIL_EXTS = ('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.css', '.js', '.map', '.woff', '.ttf', '.mp4', '.pdf', '.zip')
+DISALLOWED_DOMAINS = {'example.com', 'domain.com', 'yourcompany.com', 'email.com', 'test.com', 'sentry.io', 'wixpress.com', 'sample.com', 'testmail.com', 'mailinator.com', 'tempmail.com', 'yoursite.com', 'company.com'}
+JUNK_PREFIXES = {
+    'bootstrap', 'splide', 'jquery', 'swiper', 'vue', 'react', 'core-js', 'lodash',
+    'popper', 'fontawesome', 'webpack', 'babel', 'angular', 'chartjs', 'select2',
+    'moment', 'axios', 'sentry', 'dummy', 'user', 'username', 'test', 'consent-manager',
+    'cookie-consent', 'cookiebot', 'onetrust', 'recaptcha', 'cloudflare', 'chunk', 'polyfill',
+    'none', 'null', 'undefined', 'nan'
+}
 
 
 def filter_valid_emails(raw_emails: Set[str]) -> List[str]:
-    """Filters out image filenames, library artifacts (bootstrap@4.6.0), dummy emails, and invalid formats."""
+    """Filters out image filenames, library artifacts (bootstrap@5.3.8, consent-manager@5.0.0), dummy emails, and invalid formats."""
     valid = []
     for email in raw_emails:
         email = email.strip().lower().rstrip('.,;:/')
         if not email or '@' not in email or email.count('@') != 1:
             continue
+        if email in ('none', 'null', 'undefined', 'nan'):
+            continue
         user, domain = email.split('@')
         if user in JUNK_PREFIXES:
             continue
-        if re.match(r"^v?\d+(\.\d+)+$", domain):
+        # Reject version numbers in domain or user (e.g. @5.3.8, @4.6.0, @5.0.0, @\d+\.\d+)
+        if re.search(r"^\d+(\.\d+)+", domain) or re.match(r"^v?\d+(\.\d+)+$", domain):
             continue
         if any(email.endswith(ext) for ext in DISALLOWED_EMAIL_EXTS):
             continue

@@ -48,7 +48,13 @@ class TestEmailDispatcher(unittest.TestCase):
         self.assertTrue(valid)
 
         # Invalid library version artifacts and package strings
-        valid, reason = is_valid_business_email("bootstrap@4.6.0")
+        valid, reason = is_valid_business_email("bootstrap@5.3.8")
+        self.assertFalse(valid)
+
+        valid, reason = is_valid_business_email("consent-manager@5.0.0")
+        self.assertFalse(valid)
+
+        valid, reason = is_valid_business_email("none")
         self.assertFalse(valid)
 
         valid, reason = is_valid_business_email("pkg@3.12.5")
@@ -71,15 +77,15 @@ class TestEmailDispatcher(unittest.TestCase):
         subject, html_body, plain_text = build_outreach_email(
             lead=self.sample_lead,
             app_url="http://localhost:8501",
-            sender_name="B2B Lead Machine",
+            sender_name="AI Audit & Lead Closer",
             extra_param_ignored="test"
         )
 
         self.assertIn("Apex Plumbing Services", subject)
-        self.assertIn("AI automation for contractor client intake", plain_text)
+        self.assertIn("complimentary", subject.lower())
+        self.assertIn("Apex Plumbing Services", plain_text)
         self.assertIn("http://localhost:8501", plain_text)
         self.assertIn("http://localhost:8501", html_body)
-        self.assertIn("AI automation for contractor client intake", html_body)
 
     def test_send_single_email(self):
         mock_server = MagicMock()

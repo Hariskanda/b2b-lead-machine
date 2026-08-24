@@ -21,7 +21,9 @@ JUNK_PREFIXES = {
     "moment", "axios", "normalize", "animate", "slick", "fancybox",
     "magnific-popup", "owl.carousel", "owl-carousel", "lightbox",
     "dummy", "placeholder", "yourname", "user", "username", "test",
-    "sentry", "git", "npm", "node_modules", "wixpress", "sentry-cdn"
+    "sentry", "git", "npm", "node_modules", "wixpress", "sentry-cdn",
+    "consent-manager", "cookie-consent", "cookiebot", "onetrust", "recaptcha",
+    "cloudflare", "chunk", "polyfill", "none", "null", "undefined", "nan"
 }
 
 # Generic non-business / placeholder domains to reject
@@ -46,7 +48,7 @@ EMAIL_REGEX = re.compile(
 def is_valid_business_email(email: Optional[str]) -> Tuple[bool, str]:
     """
     Strictly validates whether an email is a legitimate business contact email,
-    filtering out package/version strings (e.g. @3.12.5, @4.6.0, bootstrap@4.6.0, splide@4.1.4),
+    filtering out package/version strings (e.g. @3.12.5, @5.3.8, consent-manager@5.0.0, bootstrap@4.6.0),
     image asset extensions (.png, .jpg), dummy placeholders, and non-business domains.
     Returns (is_valid, reason).
     """
@@ -54,6 +56,9 @@ def is_valid_business_email(email: Optional[str]) -> Tuple[bool, str]:
         return False, "Empty or non-string email"
 
     clean = email.strip().lower().rstrip(".,;:/")
+
+    if clean in ("none", "null", "undefined", "nan", "n/a", "no email found"):
+        return False, "Empty or null placeholder email"
 
     if len(clean) < 6 or len(clean) > 100:
         return False, f"Invalid length ({len(clean)} chars)"
@@ -70,8 +75,8 @@ def is_valid_business_email(email: Optional[str]) -> Tuple[bool, str]:
     if user_part in JUNK_PREFIXES:
         return False, f"Code library artifact detected: '{user_part}'"
 
-    # 2. Reject domain parts that look like semver version numbers (e.g. @3.12.5, @4.6.0, @1.2.3, @4.1.4)
-    if re.match(r"^v?\d+(\.\d+)+$", domain_part):
+    # 2. Reject domain parts that look like semver version numbers (e.g. @3.12.5, @5.3.8, @4.6.0, @1.2.3, @5.0.0)
+    if re.search(r"^\d+(\.\d+)+", domain_part) or re.match(r"^v?\d+(\.\d+)+$", domain_part):
         return False, f"Package version string detected: '@{domain_part}'"
 
     # 3. Reject file extension artifacts (.png, .jpg, .js, .css, etc.)
