@@ -134,12 +134,20 @@ class SentHistoryManager:
                 "used_topics": list(self._used_topics),
                 "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
+            # Save to primary file
             tmp_path = f"{self.file_path}.tmp"
             with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
             os.replace(tmp_path, self.file_path)
+
+            # Sync to sent_history.json
+            if self.file_path != LEGACY_HISTORY_FILE:
+                legacy_tmp = f"{LEGACY_HISTORY_FILE}.tmp"
+                with open(legacy_tmp, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                os.replace(legacy_tmp, LEGACY_HISTORY_FILE)
         except Exception as e:
-            logger.error(f"Error saving sent history to {self.file_path}: {e}")
+            logger.error(f"Error saving sent history to disk: {e}")
 
     def is_email_sent(self, email: Optional[str]) -> bool:
         """Returns True if the email has already been dispatched to in past cycles."""

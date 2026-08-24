@@ -346,11 +346,11 @@ with st.sidebar:
                 admin_niche_target = st.text_input("Automated Target Niche / Location", value="Commercial Plumbing in Austin, TX", key="admin_niche_input")
                 admin_batch_lead_count = st.slider("Leads per Execution Batch", min_value=3, max_value=25, value=10, step=1, key="admin_batch_slider")
 
-                if st.button("▶ Start Automated Pipeline", type="primary", width="stretch"):
+                if st.button("▶ Start Pipeline", type="primary", width="stretch"):
                     st.session_state["running"] = True
                     st.session_state["admin_trigger_search"] = admin_niche_target.strip()
                     st.session_state["admin_trigger_count"] = int(admin_batch_lead_count)
-                    add_activity_log(f"Admin manually started automated pipeline for '{admin_niche_target.strip()}'.", "INFO")
+                    add_activity_log(f"Admin manually started pipeline for '{admin_niche_target.strip()}'.", "INFO")
                     st.rerun()
 
             # -------------------------------------------------
