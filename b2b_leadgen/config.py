@@ -101,9 +101,9 @@ class Settings(BaseSettings):
         validation_alias="UPI_AMOUNT_INR"
     )
 
-    # Gemini Model configuration
+    # Gemini Model configuration (2026 Standards with auto-fallback)
     gemini_model: str = Field(
-        default="gemini-1.5-flash",
+        default="gemini-3.5-flash",
         validation_alias="GEMINI_MODEL"
     )
 

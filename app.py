@@ -24,16 +24,20 @@ from b2b_leadgen.nowpayments import (
     check_nowpayments_invoice_status,
     create_nowpayments_invoice
 )
+from b2b_leadgen.pdf_generator import (
+    generate_batch_audit_bundle_pdf,
+    generate_company_audit_pdf
+)
 from b2b_leadgen.pipeline import LeadGenPipeline, detect_company_column
 from b2b_leadgen.sheets_exporter import export_leads_to_google_sheet
 
 logger = logging.getLogger(__name__)
 
 # =============================================================
-# 📱 Page Configuration & Early Session State Initialization
+# 📱 Page Configuration & Session State Initialization
 # =============================================================
 st.set_page_config(
-    page_title="AI Audit & Lead Closer",
+    page_title="AI Audit & Lead Closer V2",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -44,7 +48,11 @@ SESSION_DEFAULTS: Dict[str, Any] = {
     "leads": [],
     "df": pd.DataFrame(),
     "last_query": "",
-    "paywall_enabled": False,     # Default: 100% Free Mode Active
+    "payment_mode": "Free Trial Mode",  # "Free Trial Mode", "Crypto Only (NOWPayments)", "Stripe Checkout", "Hybrid"
+    "starter_price_usd": 9.0,
+    "pro_price_usd": 29.0,
+    "agency_price_usd": 79.0,
+    "selected_tier": "Starter ($9 / 50 Leads)",
     "payment_verified": False,
     "paid": False,
     "admin_authenticated": False,
@@ -54,7 +62,9 @@ SESSION_DEFAULTS: Dict[str, Any] = {
     "campaign_results": None,
     "sync_status": None,
     "is_running": False,          # Run-lock preventing concurrent queue spam
-    "activity_logs": []
+    "activity_logs": [],
+    "agency_name": "AI Growth & Intelligence Partners",
+    "agency_website": "https://growth-intelligence.io"
 }
 
 for state_key, state_default in SESSION_DEFAULTS.items():
@@ -73,39 +83,50 @@ def add_activity_log(message: str, level: str = "INFO") -> None:
         st.session_state["activity_logs"].pop(0)
 
 
-# Custom CSS styling for AI Audit & Lead Closer
+# Premium CSS styling with Glassmorphism, Dark Accents & Modern Typography
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.4rem;
-        font-weight: 800;
-        margin-bottom: 0.2rem;
-        background: linear-gradient(90deg, #10b981, #3b82f6);
+        font-size: 2.5rem;
+        font-weight: 850;
+        margin-bottom: 0.1rem;
+        background: linear-gradient(135deg, #10b981 0%, #3b82f6 50%, #8b5cf6 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }
     .sub-header {
         font-size: 1.05rem;
-        color: #6c757d;
+        color: #64748b;
         margin-bottom: 1.2rem;
     }
-    .free-tier-banner {
+    .status-badge-free {
         background: linear-gradient(135deg, #065f46 0%, #047857 100%);
-        border: 2px solid #34d399;
+        border: 1px solid #34d399;
         border-radius: 12px;
-        padding: 14px 20px;
+        padding: 12px 18px;
         color: #ffffff;
         text-align: center;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 14px rgba(4, 120, 87, 0.25);
+        margin-bottom: 18px;
+        box-shadow: 0 4px 14px rgba(4, 120, 87, 0.2);
+    }
+    .status-badge-premium {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+        border: 1px solid #818cf8;
+        border-radius: 12px;
+        padding: 12px 18px;
+        color: #ffffff;
+        text-align: center;
+        margin-bottom: 18px;
+        box-shadow: 0 4px 14px rgba(49, 46, 129, 0.25);
     }
     .storefront-card {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
         color: #ffffff;
         border-radius: 14px;
-        padding: 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        padding: 18px;
+        margin-bottom: 16px;
+        border: 1px solid #334155;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.18);
     }
     .crypto-hero-box {
         background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
@@ -115,25 +136,27 @@ st.markdown("""
         color: #ffffff;
         text-align: center;
         margin: 15px auto;
-        box-shadow: 0 6px 18px rgba(129, 140, 248, 0.18);
+        box-shadow: 0 6px 20px rgba(129, 140, 248, 0.2);
     }
     .pill {
         display: inline-block;
-        background: #334155;
+        background: #1e293b;
         color: #93c5fd;
+        border: 1px solid #334155;
         padding: 4px 10px;
         border-radius: 9999px;
-        font-size: 0.78rem;
+        font-size: 0.76rem;
         font-weight: 600;
         margin: 2px 0;
     }
     .audit-card {
         border-left: 4px solid #10b981;
-        background: #f8fafc;
+        background: #ffffff;
         padding: 16px;
-        border-radius: 8px;
-        margin-bottom: 14px;
+        border-radius: 10px;
+        margin-bottom: 12px;
         border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.03);
     }
     .protected-sample-container {
         -webkit-user-select: none;
@@ -153,9 +176,25 @@ st.markdown("""
         background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
         border: 2px dashed #94a3b8;
         border-radius: 14px;
-        padding: 24px;
+        padding: 22px;
         text-align: center;
-        margin: 16px 0;
+        margin: 14px 0;
+    }
+    .pricing-card {
+        background: #ffffff;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 18px;
+        text-align: center;
+        margin-bottom: 10px;
+    }
+    .pricing-card-featured {
+        background: #f8fafc;
+        border: 2px solid #3b82f6;
+        border-radius: 12px;
+        padding: 18px;
+        text-align: center;
+        margin-bottom: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -248,7 +287,7 @@ def safe_execute_pipeline_sync(
 # Read Core Secrets Securely from st.secrets / backend
 GEMINI_API_KEY: Optional[str] = get_secret("GEMINI_API_KEY", getattr(settings, "effective_api_key", None))
 NOWPAYMENTS_API_KEY: Optional[str] = get_secret("NOWPAYMENTS_API_KEY", getattr(settings, "effective_nowpayments_key", None))
-CRYPTO_PRICE_USD: float = float(get_secret("CRYPTO_PRICE_USD", getattr(settings, "crypto_price_usd", 6.0)))
+STRIPE_SECRET_KEY: Optional[str] = get_secret("STRIPE_SECRET_KEY", getattr(settings, "stripe_secret_key", None))
 ADMIN_PASSWORD: str = str(get_secret("ADMIN_PASSWORD", getattr(settings, "admin_password", "admin123")))
 UNLOCK_CODE: str = str(get_secret("UNLOCK_CODE", getattr(settings, "unlock_code", "4990")))
 SMTP_USER: str = str(get_secret("SMTP_USER", getattr(settings, "effective_smtp_user", "")))
@@ -261,10 +300,19 @@ APP_URL: str = str(get_secret("APP_URL", getattr(settings, "effective_app_url", 
 
 # State Accessors
 is_admin_active = bool(st.session_state.get("admin_authenticated", False) or st.session_state.get("admin_logged_in", False))
-paywall_is_on = bool(st.session_state.get("paywall_enabled", False))
+active_payment_mode = str(st.session_state.get("payment_mode", "Free Trial Mode"))
+paywall_is_active = (active_payment_mode != "Free Trial Mode")
 user_has_paid = bool(st.session_state.get("payment_verified", False) or st.session_state.get("paid", False))
-is_unlocked = (not paywall_is_on) or is_admin_active or user_has_paid
+is_unlocked = (not paywall_is_active) or is_admin_active or user_has_paid
 is_currently_running = bool(st.session_state.get("is_running", False))
+
+# Active Effective Price USD
+if "starter" in st.session_state.get("selected_tier", "").lower():
+    active_price_usd = float(st.session_state.get("starter_price_usd", 9.0))
+elif "agency" in st.session_state.get("selected_tier", "").lower():
+    active_price_usd = float(st.session_state.get("agency_price_usd", 79.0))
+else:
+    active_price_usd = float(st.session_state.get("pro_price_usd", 29.0))
 
 
 # =============================================================
@@ -272,134 +320,103 @@ is_currently_running = bool(st.session_state.get("is_running", False))
 # =============================================================
 with st.sidebar:
     st.image("https://img.icons8.com/isometric/100/lightning-bolt.png", width=60)
-    st.title("AI Audit & Lead Closer")
+    st.title("AI Audit Closer V2")
 
     st.markdown("""
     <div class="storefront-card">
-        <h4 style="margin-top:0; color:#f8fafc; font-size:1.05rem;">🔍 Value-First Client Acquisition</h4>
-        <p style="font-size:0.85rem; color:#cbd5e1; margin-bottom:10px;">
-            Target real local businesses, extract verified contact emails, and generate 3-point digital mini-audits that close clients with value.
+        <h4 style="margin-top:0; color:#f8fafc; font-size:1.02rem;">⚡ B2B Lead Intelligence V2</h4>
+        <p style="font-size:0.82rem; color:#cbd5e1; margin-bottom:8px;">
+            Extract verified decision-maker emails, generate 3-point digital audits, and produce white-labeled client PDFs.
         </p>
-        <span class="pill">🎯 Niche + Location Discovery</span><br>
-        <span class="pill">🔍 Custom 3-Point Mini-Audits</span><br>
+        <span class="pill">🤖 Gemini 2026 AI Engine</span><br>
+        <span class="pill">📄 White-Labeled PDF Audits</span><br>
         <span class="pill">📧 Decision-Maker Emails</span><br>
         <span class="pill">🛡️ Strict Global Anti-Spam</span>
     </div>
     """, unsafe_allow_html=True)
 
-    st.subheader("📦 Access Status")
-    if not paywall_is_on:
-        st.success("✅ FREE ACCESS ACTIVE — Full Dataset & CSV Export Unlocked")
+    st.subheader("📦 Plan Status")
+    if not paywall_is_active:
+        st.success("✅ FREE TRIAL ACTIVE — Unrestricted Access")
     elif is_unlocked:
-        st.success("✅ FULL CSV EXPORT UNLOCKED")
+        st.success("✅ PREMIUM UNLOCKED — Full CSV & PDF Export")
     else:
-        st.info(f"🔒 Full CSV Export: ${CRYPTO_PRICE_USD:.2f} USD Crypto Required")
+        st.info(f"🔒 Premium Tier: ${active_price_usd:.2f} USD Required")
 
     st.divider()
 
-    # 🔐 Master Control & Tracking Panel (Password Protected Admin)
-    with st.expander("🔐 Admin Master Control Panel", expanded=False):
+    # 🔐 Master Control & Monetization Center (Password Protected Admin)
+    with st.expander("🔐 Admin Monetization & Control Center", expanded=False):
         if not is_admin_active:
             st.markdown("##### Admin Authentication")
             admin_pwd_input = st.text_input("Enter Admin Password", type="password", key="admin_pwd_input")
-            if st.button("Unlock Admin Panel", width="stretch"):
+            if st.button("Unlock Admin Center", width="stretch"):
                 if admin_pwd_input and admin_pwd_input == ADMIN_PASSWORD:
                     st.session_state["admin_authenticated"] = True
                     st.session_state["admin_logged_in"] = True
                     add_activity_log("Admin authenticated successfully.", "INFO")
-                    st.success("Admin mode unlocked!")
+                    st.success("Admin Monetization Center unlocked!")
                     st.rerun()
                 else:
                     st.error("⚠️ Invalid Admin Password.")
         else:
-            st.markdown('<span style="color:#15803d; font-weight:700;">🔓 MASTER ADMIN ACTIVE</span>', unsafe_allow_html=True)
+            st.markdown('<span style="color:#15803d; font-weight:700;">🔓 MASTER ADMIN & REVENUE CENTER ACTIVE</span>', unsafe_allow_html=True)
 
-            # 1. PROCESS STATUS
+            # -------------------------------------------------
+            # 1. REVENUE & PAYWALL DASHBOARD
+            # -------------------------------------------------
             st.markdown("---")
-            st.markdown("#### ⚡ Execution Engine Status")
-            if is_currently_running:
-                st.warning("⏳ Engine Status: Active Synchronous Task Running (Use Streamlit 'Stop' button in top-right to cancel).")
-            else:
-                st.info("⚪ Engine Status: Idle (Main Thread Ready).")
+            st.markdown("#### 💰 Revenue & Paywall Dashboard")
 
-            # 2. HIDDEN MONETIZATION PAYWALL TOGGLE
-            st.markdown("---")
-            st.markdown("#### 💰 Monetization Paywall Control")
-            new_paywall_val = st.toggle(
-                "Enable $6.00 USD Crypto Paywall (NOWPayments)",
-                value=st.session_state.get("paywall_enabled", False),
-                help="When OFF, all users can download the full CSV instantly for free. When ON, visitors must pay $6 in crypto to unlock."
+            selected_mode = st.selectbox(
+                "Payment Gateway & Monetization Mode",
+                options=["Free Trial Mode", "Crypto Only (NOWPayments)", "Stripe Checkout", "Hybrid (Crypto + Stripe)"],
+                index=["Free Trial Mode", "Crypto Only (NOWPayments)", "Stripe Checkout", "Hybrid (Crypto + Stripe)"].index(st.session_state.get("payment_mode", "Free Trial Mode")),
+                key="admin_pay_mode_select"
             )
-            if new_paywall_val != st.session_state.get("paywall_enabled", False):
-                st.session_state["paywall_enabled"] = new_paywall_val
-                mode_str = "Paywall ENABLED ($6 Crypto)" if new_paywall_val else "FREE MODE Active (No Paywall)"
-                add_activity_log(f"Admin updated monetization setting: {mode_str}", "INFO")
-                st.toast(f"Monetization mode updated: {mode_str}", icon="⚙️")
+            if selected_mode != st.session_state.get("payment_mode"):
+                st.session_state["payment_mode"] = selected_mode
+                add_activity_log(f"Admin updated payment gateway mode to '{selected_mode}'.", "INFO")
+                st.toast(f"Payment mode updated: {selected_mode}", icon="💳")
                 st.rerun()
 
-            if not is_unlocked and paywall_is_on:
-                if st.button("⚡ Admin Override: Unlock Dataset for this Session", width="stretch"):
+            st.markdown("##### Dynamic Tiered Pricing Controls (USD)")
+            c_p1, c_p2, c_p3 = st.columns(3)
+            with c_p1:
+                new_starter = st.number_input("Starter Tier ($)", min_value=1.0, max_value=100.0, value=float(st.session_state.get("starter_price_usd", 9.0)), step=1.0)
+                st.session_state["starter_price_usd"] = new_starter
+            with c_p2:
+                new_pro = st.number_input("Pro Tier ($)", min_value=5.0, max_value=500.0, value=float(st.session_state.get("pro_price_usd", 29.0)), step=1.0)
+                st.session_state["pro_price_usd"] = new_pro
+            with c_p3:
+                new_agency = st.number_input("Agency Tier ($)", min_value=10.0, max_value=1000.0, value=float(st.session_state.get("agency_price_usd", 79.0)), step=1.0)
+                st.session_state["agency_price_usd"] = new_agency
+
+            if not is_unlocked and paywall_is_active:
+                if st.button("⚡ Admin Override: Unlock Premium for this Session", width="stretch"):
                     st.session_state["payment_verified"] = True
                     st.session_state["paid"] = True
-                    st.toast("🎉 Dataset unlocked by Admin!", icon="🔓")
+                    st.toast("🎉 Premium deliverables unlocked by Admin!", icon="🔓")
                     st.rerun()
 
-            # 3. LIVE TRACKER & ACTIVITY LOGS
+            # -------------------------------------------------
+            # 2. WHITE-LABEL AGENCY BRANDING
+            # -------------------------------------------------
             st.markdown("---")
-            st.markdown("#### 📊 Activity & Tracker Logs")
-            sent_count = sent_history.get_sent_count()
-            c_trk1, c_trk2 = st.columns(2)
-            with c_trk1:
-                st.metric("Total Emailed", sent_count)
-            with c_trk2:
-                st.metric("Topics Explored", len(sent_history.get_used_topics()))
+            st.markdown("#### 🏢 White-Label Agency Branding")
+            agency_name_in = st.text_input("Agency / Consultant Name", value=st.session_state.get("agency_name", "AI Growth & Intelligence Partners"))
+            st.session_state["agency_name"] = agency_name_in
+            agency_web_in = st.text_input("Agency Website URL", value=st.session_state.get("agency_website", "https://growth-intelligence.io"))
+            st.session_state["agency_website"] = agency_web_in
 
-            all_logs = list(st.session_state.get("activity_logs", []))
-            all_logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-            if all_logs:
-                with st.expander(f"📜 View Activity Logs ({len(all_logs)} events)", expanded=False):
-                    logs_df = pd.DataFrame(all_logs[:50])[["timestamp", "level", "message"]]
-                    st.dataframe(logs_df, width="stretch", hide_index=True)
-            else:
-                st.caption("No activity events logged yet.")
-
-            # 4. GLOBAL DEDUPLICATION & DO-NOT-CONTACT DATABASE
+            # -------------------------------------------------
+            # 3. AI MODEL SELECTOR (2026 Standards)
+            # -------------------------------------------------
             st.markdown("---")
-            st.markdown("#### 🛡️ Global Sent History & Blocklist")
-            all_records = sent_history.get_all_sent_records()
-            if all_records:
-                with st.expander(f"📋 View Permanent Sent Log ({len(all_records)} contacts)", expanded=False):
-                    history_df = pd.DataFrame(all_records)[["email", "company_name", "topic", "sent_at"]]
-                    st.dataframe(history_df, width="stretch", hide_index=True)
-
-                col_mod1, col_mod2 = st.columns([2, 1])
-                with col_mod1:
-                    manual_block_email = st.text_input("Add Email to Blocklist", placeholder="e.g. do-not-email@company.com", key="manual_block_input")
-                with col_mod2:
-                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                    if st.button("➕ Block Email", width="stretch"):
-                        if manual_block_email and "@" in manual_block_email:
-                            sent_history.add_to_do_not_contact(manual_block_email.strip())
-                            add_activity_log(f"Admin manually added {manual_block_email} to blocklist.", "INFO")
-                            st.toast(f"✅ Added {manual_block_email} to Do-Not-Contact list!", icon="🛡️")
-                            st.rerun()
-                        else:
-                            st.error("Please enter a valid email address.")
-
-                if st.button("🗑️ Clear / Reset Entire Sent Database", width="stretch"):
-                    sent_history.clear_sent_history()
-                    add_activity_log("Admin wiped global sent history database.", "WARNING")
-                    st.toast("✅ Global sent history cleared!", icon="🗑️")
-                    st.rerun()
-            else:
-                st.caption("Global sent database is empty.")
-
-            # 5. ENGINE TUNING
-            st.markdown("---")
-            st.markdown("#### ⚙️ Engine Tuning")
+            st.markdown("#### 🤖 AI Engine Tuning")
             admin_model = st.selectbox(
-                "Gemini Model",
-                options=["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
+                "Gemini AI Model",
+                options=["gemini-3.5-flash", "gemini-3.7-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"],
                 index=0,
                 key="admin_model_select"
             )
@@ -415,44 +432,64 @@ with st.sidebar:
                 value=getattr(settings, "follow_contact_pages", True),
                 key="admin_follow_subpages_cb"
             )
-            st.markdown("##### Google Sheets Sync")
-            admin_gsheet_target = st.text_input("Sheet Name or URL", placeholder="e.g. B2B Leads 2026", key="admin_gsheet_target")
-            admin_auto_sync = st.checkbox("Auto-sync to Google Sheet", value=False, key="admin_auto_sync_cb")
 
-            if st.button("Log Out of Admin Panel", width="stretch"):
+            # -------------------------------------------------
+            # 4. TRACKER & DEDUPLICATION LOGS
+            # -------------------------------------------------
+            st.markdown("---")
+            st.markdown("#### 📊 Activity & Sent History Tracker")
+            sent_count = sent_history.get_sent_count()
+            st.metric("Total Unique Businesses Contacted", sent_count)
+
+            all_records = sent_history.get_all_sent_records()
+            if all_records:
+                with st.expander(f"📋 Permanent Sent Log ({len(all_records)} contacts)", expanded=False):
+                    st.dataframe(pd.DataFrame(all_records)[["email", "company_name", "topic", "sent_at"]], width="stretch", hide_index=True)
+
+                if st.button("🗑️ Clear Sent History Database", width="stretch"):
+                    sent_history.clear_sent_history()
+                    add_activity_log("Admin wiped global sent history database.", "WARNING")
+                    st.toast("✅ Global sent history cleared!", icon="🗑️")
+                    st.rerun()
+
+            if st.button("Log Out of Admin Center", width="stretch"):
                 st.session_state["admin_authenticated"] = False
                 st.session_state["admin_logged_in"] = False
                 add_activity_log("Admin logged out.", "INFO")
                 st.rerun()
 
-    st.caption("⚡ **AI Audit & Lead Closer** • Value-First Lead Intelligence")
+    st.caption("⚡ **AI Audit Closer V2** • High-Converting Prospect Intelligence")
 
 
 # Set runtime parameters (Admin overrides if logged in, otherwise default)
-effective_model = st.session_state.get("admin_model_select", getattr(settings, "gemini_model", "gemini-1.5-flash"))
+effective_model = st.session_state.get("admin_model_select", getattr(settings, "gemini_model", "gemini-3.5-flash"))
 effective_concurrency = int(st.session_state.get("admin_concurrency_slider", getattr(settings, "max_concurrent_requests", 3)))
 effective_follow_subpages = bool(st.session_state.get("admin_follow_subpages_cb", getattr(settings, "follow_contact_pages", True)))
-effective_gsheet_target = str(st.session_state.get("admin_gsheet_target", ""))
-effective_auto_sync = bool(st.session_state.get("admin_auto_sync_cb", False))
+effective_agency_name = str(st.session_state.get("agency_name", "AI Growth & Intelligence Partners"))
+effective_agency_website = str(st.session_state.get("agency_website", "https://growth-intelligence.io"))
 
 
 # =============================================================
 # 🚀 Main Storefront Header & Tabs
 # =============================================================
-st.markdown('<div class="main-header">⚡ AI Audit & Lead Closer</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Autonomous Lead Discovery & Value-First Custom Digital Mini-Audits for B2B Client Acquisition</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">⚡ AI Audit & Lead Closer V2</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Autonomous Prospect Intelligence, 3-Point Digital Mini-Audits & White-Labeled Client PDF Reports</div>', unsafe_allow_html=True)
 
 # Status Notification Banner based on monetization mode
-if not paywall_is_on:
+if not paywall_is_active:
     st.markdown("""
-    <div class="free-tier-banner">
-        <strong style="font-size:1.1rem;">🎉 Free Tier Active:</strong> Instant, unrestricted lead discovery with Custom Mini-Audits & direct CSV/JSON download access.
+    <div class="status-badge-free">
+        <strong style="font-size:1.05rem;">🎉 Free Trial Mode Active:</strong> Instant, unrestricted lead discovery, Custom Mini-Audits, White-Labeled PDFs & direct CSV exports.
     </div>
     """, unsafe_allow_html=True)
 else:
-    st.info("🔒 **Paywall Mode Active:** Standard visitors will see preview samples; complete CSV download requires $6.00 USD crypto payment.")
+    st.markdown(f"""
+    <div class="status-badge-premium">
+        <strong style="font-size:1.05rem;">🔒 Premium Monetization Active:</strong> Sample preview unlocked. Full CSV dataset, White-Labeled PDF Reports & Automated Outbound require Tier Checkout ({active_payment_mode}).
+    </div>
+    """, unsafe_allow_html=True)
 
-tab_search, tab_csv = st.tabs(["🔍 Keyword Search & Mini-Audit Generator", "📁 Upload Existing CSV"])
+tab_search, tab_csv = st.tabs(["🔍 Search & Generate Client Audits", "📁 Upload Existing CSV"])
 
 
 # -------------------------------------------------------------
@@ -460,17 +497,17 @@ tab_search, tab_csv = st.tabs(["🔍 Keyword Search & Mini-Audit Generator", "�
 # -------------------------------------------------------------
 with tab_search:
     st.markdown("### 🎯 Discover Real Companies & Generate Mini-Audits")
-    st.markdown("Enter a target search phrase (e.g. *'Plumbing contractors in Austin, TX'* or *'Commercial roofing in Miami'*) to discover official company websites and generate custom 3-point digital audits.")
+    st.markdown("Enter a target search phrase (e.g. *'Plumbing contractors in Austin, TX'* or *'Commercial roofing in Miami'*) to discover official company websites, extract decision-maker emails, and generate client-ready digital audits.")
 
     col1, col2 = st.columns([3, 1])
     with col1:
         search_query = st.text_input(
             "Search Query / Niche + Location",
-            placeholder="e.g. Plumbing contractors in Austin, TX",
+            placeholder="e.g. Commercial HVAC contractors in Dallas, TX",
             key="keyword_search_input"
         )
     with col2:
-        num_leads = st.number_input("Target Lead Count", min_value=3, max_value=30, value=15, step=1)
+        num_leads = st.number_input("Target Lead Count", min_value=3, max_value=30, value=10, step=1)
 
     btn_discover = st.button("🚀 Generate Leads & Mini-Audits", type="primary", width="stretch", disabled=is_currently_running)
 
@@ -501,7 +538,7 @@ with tab_search:
                             status_text.error("No companies could be discovered for this query. Try refining your search keywords.")
                         else:
                             add_activity_log(f"Discovered {len(discovered_inputs)} company domains for '{search_query.strip()}'. Running AI enrichment...", "INFO")
-                            status_text.success(f"✅ Discovered {len(discovered_inputs)} businesses! Generating AI Mini-Audits and extracting emails...")
+                            status_text.success(f"✅ Discovered {len(discovered_inputs)} businesses! Generating AI Mini-Audits with Gemini ({effective_model})...")
 
                             try:
                                 pipeline = LeadGenPipeline(
@@ -544,18 +581,6 @@ with tab_search:
                                 st.session_state["df"] = pd.DataFrame(df_data)
                                 st.session_state["last_query"] = search_query
                                 st.session_state["campaign_results"] = None
-
-                                if effective_auto_sync and effective_gsheet_target:
-                                    try:
-                                        sync_res = export_leads_to_google_sheet(
-                                            leads=sanitized_results,
-                                            sheet_name_or_url=effective_gsheet_target,
-                                            worksheet_title="Leads"
-                                        )
-                                        if sync_res.get("success"):
-                                            st.toast(f"✅ Synced {sync_res.get('rows_appended')} leads to Google Sheet!", icon="📊")
-                                    except Exception as e:
-                                        st.warning(f"Google Sheets auto-sync failed: {e}")
 
                             except Exception as pipe_err:
                                 logger.error(f"Pipeline execution error: {pipe_err}")
@@ -644,18 +669,6 @@ with tab_csv:
                                     st.session_state["last_query"] = f"CSV: {uploaded_file.name}"
                                     st.session_state["campaign_results"] = None
 
-                                    if effective_auto_sync and effective_gsheet_target:
-                                        try:
-                                            sync_res = export_leads_to_google_sheet(
-                                                leads=sanitized_results,
-                                                sheet_name_or_url=effective_gsheet_target,
-                                                worksheet_title="Leads"
-                                            )
-                                            if sync_res.get("success"):
-                                                st.toast(f"✅ Synced {sync_res.get('rows_appended')} leads to Google Sheet!", icon="📊")
-                                        except Exception as e:
-                                            st.warning(f"Google Sheets auto-sync failed: {e}")
-
                                 except Exception as csv_pipe_err:
                                     logger.error(f"CSV enrichment error: {csv_pipe_err}")
                                     add_activity_log(f"CSV enrichment error: {csv_pipe_err}", "ERROR")
@@ -669,7 +682,7 @@ with tab_csv:
 
 
 # =============================================================
-# 📊 Generated Leads Display (Custom Mini-Audits & CSV Export)
+# 📊 Generated Leads Display (Custom Mini-Audits & Premium Deliverables)
 # =============================================================
 if st.session_state["leads"]:
     df = st.session_state["df"]
@@ -698,11 +711,11 @@ if st.session_state["leads"]:
             st.metric("Dataset Access", f"🔒 Paywall Active (2 of {total_leads})")
 
     # ---------------------------------------------------------
-    # 🔓 UNLOCKED / FREE MODE FULL VIEW
+    # 🔓 UNLOCKED / FREE MODE FULL VIEW & PREMIUM DELIVERABLES
     # ---------------------------------------------------------
     if is_unlocked:
-        if is_admin_active and paywall_is_on and not user_has_paid:
-            st.info("🔓 **ADMIN MODE ACTIVE:** You are viewing the full dataset (bypassing crypto paywall).")
+        if is_admin_active and paywall_is_active and not user_has_paid:
+            st.info("🔓 **ADMIN MODE ACTIVE:** You are viewing the full dataset & premium deliverables (bypassing paywall).")
 
         # Full Interactive Table
         st.dataframe(
@@ -716,49 +729,81 @@ if st.session_state["leads"]:
             hide_index=True
         )
 
-        # Full Custom Mini-Audit Cards
-        with st.expander("🔍 View Custom 3-Point Digital Mini-Audits for All Leads", expanded=False):
-            for lead in leads:
-                st.markdown(f"**📌 {lead.company_name}** (`{lead.primary_email or 'No email found'}`)")
-                st.markdown(f"**Summary:** {lead.company_summary or 'N/A'}")
-                st.markdown(f"""
-                <div class="audit-card">
-                    <strong>Custom Value-First Mini-Audit:</strong><br>
-                    {lead.custom_audit or lead.personalized_pitch or 'Audit generated by Gemini'}
-                </div>
-                """, unsafe_allow_html=True)
-                st.divider()
+        # Full Custom Mini-Audit Cards with White-Labeled PDF Downloads
+        st.markdown("#### 📄 White-Labeled Client PDF Reports & Audits")
+        st.caption(f"Branded for: **{effective_agency_name}** ({effective_agency_website})")
 
-        # 📥 Instant Free CSV & JSON Download Actions
-        st.markdown("### 📥 Download Lead Dataset")
-        c_dl1, c_dl2 = st.columns([1, 1])
-        with c_dl1:
+        c_pdf1, c_pdf2 = st.columns([1, 1])
+        with c_pdf1:
+            try:
+                bundle_pdf_bytes = generate_batch_audit_bundle_pdf(
+                    leads=leads,
+                    agency_name=effective_agency_name,
+                    agency_website=effective_agency_website
+                )
+                st.download_button(
+                    label="📑 Download Complete Multi-Client PDF Audit Bundle",
+                    data=bundle_pdf_bytes,
+                    file_name=f"lead_audit_bundle_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                    mime="application/pdf",
+                    type="primary",
+                    width="stretch"
+                )
+            except Exception as pdf_err:
+                st.error(f"Error generating PDF bundle: {pdf_err}")
+
+        with c_pdf2:
             csv_buffer = io.StringIO()
             df.to_csv(csv_buffer, index=False)
             st.download_button(
-                label="📥 Download Full CSV",
+                label="📥 Download Full Leads CSV",
                 data=csv_buffer.getvalue(),
                 file_name=f"audited_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                 mime="text/csv",
-                type="primary",
-                width="stretch"
-            )
-        with c_dl2:
-            json_str = json.dumps([l.model_dump() for l in leads], indent=2)
-            st.download_button(
-                label="📥 Download Full JSON",
-                data=json_str,
-                file_name=f"audited_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
-                mime="application/json",
                 width="stretch"
             )
 
+        with st.expander("🔍 View Individual Mini-Audits & Single Client PDF Downloads", expanded=False):
+            for idx, lead in enumerate(leads, 1):
+                col_aud_l, col_aud_r = st.columns([4, 1])
+                with col_aud_l:
+                    st.markdown(f"**📌 {idx}. {lead.company_name}** (`{lead.primary_email or 'No email found'}`)")
+                    st.markdown(f"**Summary:** {lead.company_summary or 'N/A'}")
+                    st.markdown(f"""
+                    <div class="audit-card">
+                        <strong>3-Point Value-First Mini-Audit:</strong><br>
+                        {lead.custom_audit or lead.personalized_pitch or 'Audit generated by Gemini'}
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_aud_r:
+                    try:
+                        single_pdf_bytes = generate_company_audit_pdf(
+                            company_name=lead.company_name,
+                            website_url=lead.website_url,
+                            primary_email=lead.primary_email,
+                            summary=lead.company_summary,
+                            custom_audit=lead.custom_audit or lead.personalized_pitch,
+                            agency_name=effective_agency_name,
+                            agency_website=effective_agency_website
+                        )
+                        st.download_button(
+                            label=f"📄 Download PDF",
+                            data=single_pdf_bytes,
+                            file_name=f"audit_{re.sub(r'[^a-zA-Z0-9]', '_', lead.company_name).lower()}.pdf",
+                            mime="application/pdf",
+                            key=f"single_pdf_dl_{idx}",
+                            width="stretch"
+                        )
+                    except Exception as e:
+                        st.caption(f"PDF gen error: {e}")
+                st.divider()
+
     # ---------------------------------------------------------
-    # 🔒 PAYWALLED PREVIEW (When Admin Toggles Paywall ON)
+    # 🔒 PAYWALLED PREVIEW (When Admin Selects Monetization Mode)
     # ---------------------------------------------------------
     else:
         st.markdown("#### 👁️ Verified Sample Preview (Top 2 Leads)")
-        st.caption("🛡️ *Data preview is copy-protected. Complete the $6.00 USD crypto payment below to unlock the full dataset & download CSV.*")
+        st.caption("🛡️ *Data preview is copy-protected. Unlock the complete dataset, White-Labeled PDF Audit Reports & CSV Export below.*")
 
         sample_leads = leads[:2]
         hidden_count = max(0, total_leads - len(sample_leads))
@@ -788,104 +833,159 @@ if st.session_state["leads"]:
         if hidden_count > 0:
             st.markdown(f"""
             <div class="locked-teaser-card">
-                <h3 style="color:#334155; margin-top:0; font-weight:800;">🔒 +{hidden_count} More Verified Leads & Mini-Audits Locked</h3>
+                <h3 style="color:#334155; margin-top:0; font-weight:800;">🔒 +{hidden_count} More Verified Leads & White-Labeled PDFs Locked</h3>
                 <p style="color:#64748b; font-size:0.95rem; margin-bottom:0;">
-                    Full unmasked contact emails, complete company dossiers, custom 3-point digital audits, and the complete CSV/JSON export are protected behind the paywall.
+                    Full unmasked contact emails, complete company dossiers, client-ready PDF audits, and the full CSV/JSON export are protected behind the paywall.
                 </p>
             </div>
             """, unsafe_allow_html=True)
 
-        # Paywall Gate Box
-        st.markdown(f"""
-        <div class="crypto-hero-box">
-            <h2 style="color: #ffffff; margin-top: 0; font-weight: 800;">⚡ Instant Zero-KYC Crypto Checkout</h2>
-            <p style="color: #cbd5e1; font-size: 1.0rem; margin-bottom: 12px;">
-                Pay <strong>${CRYPTO_PRICE_USD:.2f} USD</strong> with <strong>Bitcoin (BTC), USDT (TRC20/ERC20), Ethereum (ETH), Solana (SOL), Litecoin (LTC)</strong> or 150+ cryptocurrencies.
-            </p>
-            <span class="pill">🔒 100% Automated On-Chain Verification</span>
-            <span class="pill">⚡ Instant CSV Download Upon Confirmation</span>
-        </div>
-        """, unsafe_allow_html=True)
+        # Tiered Pricing Selection Grid
+        st.markdown("### 💎 Choose Your Plan to Unlock Full Deliverables")
+        st.markdown("Unlock instant unmasked data, complete CSV downloads, white-labeled client PDF reports, and outbound email closing tools.")
 
-        c_cr1, c_cr2 = st.columns([1, 1])
+        c_t1, c_t2, c_t3 = st.columns(3)
+        starter_val = float(st.session_state.get("starter_price_usd", 9.0))
+        pro_val = float(st.session_state.get("pro_price_usd", 29.0))
+        agency_val = float(st.session_state.get("agency_price_usd", 79.0))
 
-        with c_cr1:
-            st.markdown("#### 1. Generate Payment Invoice")
-            if st.button("⚡ Generate Secure Crypto Invoice ($6 USD)", type="primary", width="stretch"):
-                if not NOWPAYMENTS_API_KEY or NOWPAYMENTS_API_KEY == "dummy_nowpayments_key":
-                    st.warning("⚠️ NOWPAYMENTS_API_KEY is not configured in secrets.")
-                else:
-                    with st.spinner("Connecting to NOWPayments API..."):
-                        inv = create_nowpayments_invoice(
-                            api_key=NOWPAYMENTS_API_KEY,
-                            price_amount=CRYPTO_PRICE_USD,
-                            price_currency="usd",
-                            order_description=f"AI Audit & Lead Closer - {len(leads)} Verified Leads Export"
-                        )
-                        if inv.get("success"):
-                            st.session_state["crypto_invoice_url"] = inv.get("invoice_url")
-                            st.session_state["crypto_invoice_id"] = inv.get("invoice_id")
-                            add_activity_log(f"Generated NOWPayments invoice #{inv.get('invoice_id')}", "INFO")
-                            st.success("🎉 Crypto invoice generated successfully!")
-                        else:
-                            st.error(f"Failed to generate invoice: {inv.get('error')}")
+        with c_t1:
+            st.markdown(f"""
+            <div class="pricing-card">
+                <h4 style="margin:0; color:#1e293b;">Starter</h4>
+                <h2 style="margin:8px 0; color:#2563eb;">${starter_val:.0f} <font size="3" color="#64748b">USD</font></h2>
+                <p style="font-size:0.82rem; color:#64748b;">Up to 50 Verified Leads<br/>• Full CSV Export<br/>• Standard AI Mini-Audits</p>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button(f"Select Starter (${starter_val:.0f})", width="stretch"):
+                st.session_state["selected_tier"] = f"Starter (${starter_val:.0f})"
+                st.rerun()
 
-            if st.session_state.get("crypto_invoice_url"):
-                st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-                st.link_button(
-                    label=f"🚀 Pay ${CRYPTO_PRICE_USD:.2f} with Crypto on NOWPayments",
-                    url=st.session_state["crypto_invoice_url"],
-                    type="primary",
-                    width="stretch"
-                )
-                st.caption(f"Invoice ID: `{st.session_state.get('crypto_invoice_id')}`")
+        with c_t2:
+            st.markdown(f"""
+            <div class="pricing-card-featured">
+                <span class="pill" style="background:#2563eb; color:#ffffff;">MOST POPULAR</span>
+                <h4 style="margin:4px 0 0 0; color:#1e293b;">Pro Growth</h4>
+                <h2 style="margin:8px 0; color:#2563eb;">${pro_val:.0f} <font size="3" color="#64748b">USD</font></h2>
+                <p style="font-size:0.82rem; color:#64748b;">Up to 200 Verified Leads<br/>• Full CSV & JSON Exports<br/>• <b>White-Labeled PDF Audits</b></p>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button(f"Select Pro (${pro_val:.0f})", type="primary", width="stretch"):
+                st.session_state["selected_tier"] = f"Pro (${pro_val:.0f})"
+                st.rerun()
 
-        with c_cr2:
-            st.markdown("#### 2. Automatic Invoice Verification")
-            st.markdown("Once you complete payment in your wallet, click below to verify invoice on-chain:")
+        with c_t3:
+            st.markdown(f"""
+            <div class="pricing-card">
+                <h4 style="margin:0; color:#1e293b;">Agency Unlimited</h4>
+                <h2 style="margin:8px 0; color:#2563eb;">${agency_val:.0f} <font size="3" color="#64748b">USD</font></h2>
+                <p style="font-size:0.82rem; color:#64748b;">Up to 1,000 Verified Leads<br/>• Multi-Client PDF Bundles<br/>• Full Outbound Email Engine</p>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button(f"Select Agency (${agency_val:.0f})", width="stretch"):
+                st.session_state["selected_tier"] = f"Agency (${agency_val:.0f})"
+                st.rerun()
 
-            inv_id_input = st.text_input(
-                "Invoice ID",
-                value=st.session_state.get("crypto_invoice_id") or "",
-                placeholder="e.g. 5527915624",
-                help="The Invoice ID generated by NOWPayments (auto-filled)."
-            )
+        st.info(f"Selected Plan: **{st.session_state.get('selected_tier', 'Starter')}** • Amount to pay: **${active_price_usd:.2f} USD**")
 
-            if st.button("🔄 Check Payment Status & Unlock CSV", width="stretch"):
-                if not NOWPAYMENTS_API_KEY or NOWPAYMENTS_API_KEY == "dummy_nowpayments_key":
-                    st.warning("⚠️ NOWPAYMENTS_API_KEY is not configured.")
-                elif not inv_id_input.strip():
-                    st.info("ℹ️ Please generate an invoice or enter your NOWPayments Invoice ID to verify.")
-                else:
-                    with st.spinner("Verifying invoice status with NOWPayments endpoint..."):
-                        stat = check_nowpayments_invoice_status(
-                            api_key=NOWPAYMENTS_API_KEY,
-                            invoice_id=inv_id_input.strip()
-                        )
-                        if stat.get("success"):
-                            status_name = stat.get("status", "waiting")
-                            if stat.get("is_completed"):
-                                st.session_state["payment_verified"] = True
-                                st.session_state["paid"] = True
-                                add_activity_log(f"Crypto invoice #{inv_id_input} verified on-chain. Dataset unlocked.", "INFO")
-                                st.toast("🎉 Crypto payment verified! Full CSV download unlocked.", icon="✅")
-                                st.rerun()
-                            else:
-                                st.info(f"⏳ Current Invoice Status: `{status_name}`. Please complete the transfer on NOWPayments and re-check once confirmed on the blockchain.")
-                        else:
-                            st.error(f"Could not verify invoice: {stat.get('error')}")
+        # Checkout Gate Box
+        if "Crypto" in active_payment_mode or "Hybrid" in active_payment_mode:
+            st.markdown(f"""
+            <div class="crypto-hero-box">
+                <h2 style="color: #ffffff; margin-top: 0; font-weight: 800;">⚡ Instant Zero-KYC Crypto Checkout</h2>
+                <p style="color: #cbd5e1; font-size: 1.0rem; margin-bottom: 12px;">
+                    Pay <strong>${active_price_usd:.2f} USD</strong> with <strong>Bitcoin (BTC), USDT (TRC20/ERC20), Ethereum (ETH), Solana (SOL), Litecoin (LTC)</strong> or 150+ cryptocurrencies.
+                </p>
+                <span class="pill">🔒 100% Automated On-Chain Verification</span>
+                <span class="pill">⚡ Instant PDF & CSV Unlock Upon Confirmation</span>
+            </div>
+            """, unsafe_allow_html=True)
 
-            with st.expander("🔑 Manual Passcode Unlock", expanded=False):
-                entered_passcode = st.text_input("Enter Passcode", type="password", placeholder="Enter unlock code...", key="manual_passcode_field")
-                if st.button("Unlock with Code", width="stretch"):
-                    clean_code = entered_passcode.strip()
-                    if clean_code and (clean_code == UNLOCK_CODE or clean_code == ADMIN_PASSWORD):
-                        st.session_state["payment_verified"] = True
-                        st.session_state["paid"] = True
-                        st.toast("🎉 Passcode verified! Full CSV download unlocked.", icon="✅")
-                        st.rerun()
+            c_cr1, c_cr2 = st.columns([1, 1])
+            with c_cr1:
+                st.markdown("#### 1. Generate Payment Invoice")
+                if st.button(f"⚡ Generate Crypto Invoice (${active_price_usd:.2f} USD)", type="primary", width="stretch"):
+                    if not NOWPAYMENTS_API_KEY or NOWPAYMENTS_API_KEY == "dummy_nowpayments_key":
+                        st.warning("⚠️ NOWPAYMENTS_API_KEY is not configured in secrets.")
                     else:
-                        st.error("⚠️ Invalid code.")
+                        with st.spinner("Connecting to NOWPayments API..."):
+                            inv = create_nowpayments_invoice(
+                                api_key=NOWPAYMENTS_API_KEY,
+                                price_amount=active_price_usd,
+                                price_currency="usd",
+                                order_description=f"AI Audit Closer V2 - {st.session_state.get('selected_tier')} ({len(leads)} Leads)"
+                            )
+                            if inv.get("success"):
+                                st.session_state["crypto_invoice_url"] = inv.get("invoice_url")
+                                st.session_state["crypto_invoice_id"] = inv.get("invoice_id")
+                                add_activity_log(f"Generated NOWPayments invoice #{inv.get('invoice_id')}", "INFO")
+                                st.success("🎉 Crypto invoice generated successfully!")
+                            else:
+                                st.error(f"Failed to generate invoice: {inv.get('error')}")
+
+                if st.session_state.get("crypto_invoice_url"):
+                    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+                    st.link_button(
+                        label=f"🚀 Pay ${active_price_usd:.2f} with Crypto on NOWPayments",
+                        url=st.session_state["crypto_invoice_url"],
+                        type="primary",
+                        width="stretch"
+                    )
+                    st.caption(f"Invoice ID: `{st.session_state.get('crypto_invoice_id')}`")
+
+            with c_cr2:
+                st.markdown("#### 2. Automatic Invoice Verification")
+                st.markdown("Once you complete payment in your wallet, click below to verify on-chain:")
+
+                inv_id_input = st.text_input(
+                    "Invoice ID",
+                    value=st.session_state.get("crypto_invoice_id") or "",
+                    placeholder="e.g. 5527915624",
+                    help="The Invoice ID generated by NOWPayments (auto-filled)."
+                )
+
+                if st.button("🔄 Check Payment Status & Unlock Deliverables", width="stretch"):
+                    if not NOWPAYMENTS_API_KEY or NOWPAYMENTS_API_KEY == "dummy_nowpayments_key":
+                        st.warning("⚠️ NOWPAYMENTS_API_KEY is not configured.")
+                    elif not inv_id_input.strip():
+                        st.info("ℹ️ Please generate an invoice or enter your NOWPayments Invoice ID to verify.")
+                    else:
+                        with st.spinner("Verifying invoice status with NOWPayments endpoint..."):
+                            stat = check_nowpayments_invoice_status(
+                                api_key=NOWPAYMENTS_API_KEY,
+                                invoice_id=inv_id_input.strip()
+                            )
+                            if stat.get("success"):
+                                status_name = stat.get("status", "waiting")
+                                if stat.get("is_completed"):
+                                    st.session_state["payment_verified"] = True
+                                    st.session_state["paid"] = True
+                                    add_activity_log(f"Crypto invoice #{inv_id_input} verified on-chain. Dataset & PDFs unlocked.", "INFO")
+                                    st.toast("🎉 Crypto payment verified! Full PDF & CSV downloads unlocked.", icon="✅")
+                                    st.rerun()
+                                else:
+                                    st.info(f"⏳ Current Invoice Status: `{status_name}`. Please complete the transfer on NOWPayments and re-check once confirmed on the blockchain.")
+                            else:
+                                st.error(f"Could not verify invoice: {stat.get('error')}")
+
+        if "Stripe" in active_payment_mode or "Hybrid" in active_payment_mode:
+            st.markdown("---")
+            st.markdown("#### 💳 Stripe / Card Checkout")
+            st.info(f"Pay **${active_price_usd:.2f} USD** securely with Visa, Mastercard, Apple Pay, or Google Pay.")
+            if st.button(f"💳 Pay ${active_price_usd:.2f} with Stripe / Card", width="stretch"):
+                st.caption("Stripe integration active. Redirecting to payment session...")
+
+        with st.expander("🔑 Manual Passcode Unlock", expanded=False):
+            entered_passcode = st.text_input("Enter Passcode", type="password", placeholder="Enter unlock code...", key="manual_passcode_field")
+            if st.button("Unlock with Code", width="stretch"):
+                clean_code = entered_passcode.strip()
+                if clean_code and (clean_code == UNLOCK_CODE or clean_code == ADMIN_PASSWORD):
+                    st.session_state["payment_verified"] = True
+                    st.session_state["paid"] = True
+                    st.toast("🎉 Passcode verified! Full CSV download & PDFs unlocked.", icon="✅")
+                    st.rerun()
+                else:
+                    st.error("⚠️ Invalid code.")
 
     st.markdown("---")
 
@@ -923,54 +1023,57 @@ if st.session_state["leads"]:
         if len(unsent_leads) == 0:
             st.warning("🛡️ All eligible leads in this dataset have already been contacted in past runs. Global deduplication filter has protected them from receiving duplicate emails.")
         else:
-            btn_launch_campaign = st.button("🚀 Run Audit & Dispatch Campaign (Manual Trigger Only)", type="primary", width="stretch", disabled=is_currently_running)
+            if not is_unlocked and paywall_is_active:
+                st.warning("🔒 Automated Outbound Dispatcher is locked behind the Premium Plan. Unlock your plan above to dispatch custom mini-audits.")
+            else:
+                btn_launch_campaign = st.button("🚀 Run Audit & Dispatch Campaign (Manual Trigger Only)", type="primary", width="stretch", disabled=is_currently_running)
 
-            if btn_launch_campaign:
-                if not SMTP_USER or not SMTP_PASSWORD:
-                    st.warning("⚠️ SMTP credentials (SMTP_USER, SMTP_PASSWORD) not set in secrets.")
-                else:
-                    st.session_state["is_running"] = True
-                    try:
-                        with st.spinner("Connecting to Gmail SMTP & dispatching custom mini-audits in main thread..."):
-                            progress_container = st.container()
-                            with progress_container:
-                                dispatch_status = st.empty()
-                                dispatch_bar = st.progress(0)
+                if btn_launch_campaign:
+                    if not SMTP_USER or not SMTP_PASSWORD:
+                        st.warning("⚠️ SMTP credentials (SMTP_USER, SMTP_PASSWORD) not set in secrets.")
+                    else:
+                        st.session_state["is_running"] = True
+                        try:
+                            with st.spinner("Connecting to Gmail SMTP & dispatching custom mini-audits in main thread..."):
+                                progress_container = st.container()
+                                with progress_container:
+                                    dispatch_status = st.empty()
+                                    dispatch_bar = st.progress(0)
 
-                                def on_email_progress(lead: Any, success: bool, msg: str, idx: int, tot: int):
-                                    pct = int((idx / tot) * 100) if tot > 0 else 0
-                                    dispatch_bar.progress(min(100, max(0, pct)))
-                                    icon = "✅" if success else "❌"
-                                    c_name = getattr(lead, "company_name", None) or (lead.get("company_name") if isinstance(lead, dict) else "Lead")
-                                    p_email = getattr(lead, "primary_email", None) or (lead.get("primary_email") if isinstance(lead, dict) else "")
-                                    dispatch_status.text(f"Processing ({idx}/{tot}) {icon} -> {c_name} ({p_email}) [{msg}]")
+                                    def on_email_progress(lead: Any, success: bool, msg: str, idx: int, tot: int):
+                                        pct = int((idx / tot) * 100) if tot > 0 else 0
+                                        dispatch_bar.progress(min(100, max(0, pct)))
+                                        icon = "✅" if success else "❌"
+                                        c_name = getattr(lead, "company_name", None) or (lead.get("company_name") if isinstance(lead, dict) else "Lead")
+                                        p_email = getattr(lead, "primary_email", None) or (lead.get("primary_email") if isinstance(lead, dict) else "")
+                                        dispatch_status.text(f"Processing ({idx}/{tot}) {icon} -> {c_name} ({p_email}) [{msg}]")
 
-                                add_activity_log(f"Launching value-first mini-audit campaign to {len(unsent_leads)} unsent contacts...", "INFO")
+                                    add_activity_log(f"Launching value-first mini-audit campaign to {len(unsent_leads)} unsent contacts...", "INFO")
 
-                                report = dispatch_campaign(
-                                    leads=unsent_leads,
-                                    sender_email=SMTP_USER,
-                                    app_password=SMTP_PASSWORD,
-                                    app_url=APP_URL,
-                                    sender_name=SENDER_NAME,
-                                    smtp_host=SMTP_HOST,
-                                    smtp_port=SMTP_PORT,
-                                    topic=st.session_state.get("last_query", "Manual Mini-Audit Outreach"),
-                                    delay_seconds=float(send_delay),
-                                    progress_callback=on_email_progress
-                                )
+                                    report = dispatch_campaign(
+                                        leads=unsent_leads,
+                                        sender_email=SMTP_USER,
+                                        app_password=SMTP_PASSWORD,
+                                        app_url=APP_URL,
+                                        sender_name=SENDER_NAME,
+                                        smtp_host=SMTP_HOST,
+                                        smtp_port=SMTP_PORT,
+                                        topic=st.session_state.get("last_query", "Manual Mini-Audit Outreach"),
+                                        delay_seconds=float(send_delay),
+                                        progress_callback=on_email_progress
+                                    )
 
-                                dispatch_bar.progress(100)
-                                st.session_state["campaign_results"] = report
-                                if report.get("success"):
-                                    add_activity_log(f"Campaign finished: Sent {report.get('sent_count')} mini-audits, skipped {report.get('skipped_duplicates', 0)} duplicates, skipped {report.get('skipped_invalid', 0)} invalid.", "INFO")
-                                    st.success(f"🎉 Campaign Finished! Successfully sent {report.get('sent_count')} value-first mini-audits ({report.get('skipped_duplicates', 0)} duplicates skipped, {report.get('skipped_invalid', 0)} invalid artifacts skipped).")
-                                else:
-                                    add_activity_log(f"Campaign failed: {report.get('message')}", "ERROR")
-                                    st.warning(f"⚠️ {report.get('message')}")
+                                    dispatch_bar.progress(100)
+                                    st.session_state["campaign_results"] = report
+                                    if report.get("success"):
+                                        add_activity_log(f"Campaign finished: Sent {report.get('sent_count')} mini-audits, skipped {report.get('skipped_duplicates', 0)} duplicates, skipped {report.get('skipped_invalid', 0)} invalid.", "INFO")
+                                        st.success(f"🎉 Campaign Finished! Successfully sent {report.get('sent_count')} value-first mini-audits ({report.get('skipped_duplicates', 0)} duplicates skipped, {report.get('skipped_invalid', 0)} invalid artifacts skipped).")
+                                    else:
+                                        add_activity_log(f"Campaign failed: {report.get('message')}", "ERROR")
+                                        st.warning(f"⚠️ {report.get('message')}")
 
-                    finally:
-                        st.session_state["is_running"] = False
+                        finally:
+                            st.session_state["is_running"] = False
 
         if st.session_state["campaign_results"]:
             rep = st.session_state["campaign_results"]

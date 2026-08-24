@@ -92,45 +92,60 @@ class GeminiLeadExtractor:
 
         prompt = build_extraction_prompt(company_name, scraped_page)
 
-        try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config={
-                    'response_mime_type': 'application/json',
-                    'response_schema': CompanyExtractionResult,
-                }
-            )
+        # Build 2026 Gemini model fallback chain
+        candidate_models = []
+        if self.model:
+            candidate_models.append(self.model)
+        for m in ["gemini-3.5-flash", "gemini-3.7-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
+            if m not in candidate_models:
+                candidate_models.append(m)
 
-            # Check for parsed object or parse response text
-            if hasattr(response, "parsed") and response.parsed is not None:
-                if isinstance(response.parsed, CompanyExtractionResult):
-                    return response.parsed
-                elif isinstance(response.parsed, dict):
-                    return CompanyExtractionResult.model_validate(response.parsed)
+        for candidate_model in candidate_models:
+            try:
+                response = self.client.models.generate_content(
+                    model=candidate_model,
+                    contents=prompt,
+                    config={
+                        'response_mime_type': 'application/json',
+                        'response_schema': CompanyExtractionResult,
+                    }
+                )
 
-            if response.text:
-                return CompanyExtractionResult.model_validate_json(response.text)
+                # Check for parsed object or parse response text
+                if hasattr(response, "parsed") and response.parsed is not None:
+                    if isinstance(response.parsed, CompanyExtractionResult):
+                        return response.parsed
+                    elif isinstance(response.parsed, dict):
+                        return CompanyExtractionResult.model_validate(response.parsed)
 
-            raise ValueError("Empty response received from Gemini API.")
+                if response.text:
+                    return CompanyExtractionResult.model_validate_json(response.text)
 
-        except Exception as e:
-            logger.error(f"Gemini extraction failed for {company_name}: {e}")
-            fallback_email = scraped_page.discovered_emails[0] if scraped_page.discovered_emails else None
-            fallback_summary = (
-                scraped_page.meta_description
-                or f"{company_name} provides specialized professional services."
-            )
-            fallback_audit = (
-                f"• 🟢 Strengths: Established brand presence and customer offerings.\n"
-                f"• 🔍 Opportunity: Streamlining inbound client conversion and response velocity.\n"
-                f"• 💡 Recommendation: Deploy automated client intake workflows to boost conversion rates."
-            )
-            return CompanyExtractionResult(
-                summary=fallback_summary,
-                primary_email=fallback_email,
-                custom_audit=fallback_audit,
-                personalized_pitch=fallback_audit,
-                confidence_score=0.3,
-                email_source="heuristic_fallback" if fallback_email else "none"
-            )
+            except Exception as e:
+                err_msg = str(e).lower()
+                logger.warning(f"Model '{candidate_model}' extraction failed for {company_name}: {e}")
+                # If 404/not found or unsupported, continue to next candidate in fallback chain
+                if "404" in err_msg or "not found" in err_msg or "invalid" in err_msg:
+                    continue
+                # For other errors, try fallback model as well
+                continue
+
+        logger.error(f"All Gemini model candidates exhausted for {company_name}. Using fallback heuristic extraction.")
+        fallback_email = scraped_page.discovered_emails[0] if scraped_page.discovered_emails else None
+        fallback_summary = (
+            scraped_page.meta_description
+            or f"{company_name} provides specialized professional services."
+        )
+        fallback_audit = (
+            f"• 🟢 Strengths: Established brand presence and customer offerings.\n"
+            f"• 🔍 Opportunity: Streamlining inbound client conversion and response velocity.\n"
+            f"• 💡 Recommendation: Deploy automated client intake workflows to boost conversion rates."
+        )
+        return CompanyExtractionResult(
+            summary=fallback_summary,
+            primary_email=fallback_email,
+            custom_audit=fallback_audit,
+            personalized_pitch=fallback_audit,
+            confidence_score=0.3,
+            email_source="heuristic_fallback" if fallback_email else "none"
+        )
