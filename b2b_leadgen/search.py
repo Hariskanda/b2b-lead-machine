@@ -5,11 +5,12 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-# Strict blacklist patterns: directories, aggregators, job boards, social networks, and review sites
+# Strict blacklist patterns: directories, aggregators, job boards, social networks, and healthcare aggregators
 BLACKLIST_DOMAINS = [
-    'glassdoor', 'olx', 'jooble', 'linkedin', 'yelp', 'justdial',
-    'indiamart', 'facebook', 'instagram', 'salaryexpert', 'indeed',
-    'yellowpages', 'angi', 'angieslist', 'thumbtack', 'houzz', 'homeadvisor',
+    'practo', 'justdial', 'sulekha', 'indiamart', 'jd', 'apollodiagnostics',
+    'pharmeasy', '1mg', 'glassdoor', 'olx', 'jooble', 'linkedin', 'yelp',
+    'facebook', 'instagram', 'salaryexpert', 'indeed', 'yellowpages',
+    'angi', 'angieslist', 'thumbtack', 'houzz', 'homeadvisor',
     'bbb', 'mapquest', 'superpages', 'expertise', 'nextdoor',
     'twitter', 'x', 'youtube', 'wikipedia', 'google', 'bing',
     'yahoo', 'tripadvisor', 'clutch', 'upcity', 'themanifest',

@@ -91,7 +91,8 @@ class AsyncWebScraper:
         user_agent: Optional[str] = None,
         **kwargs: Any
     ):
-        self.timeout = float(timeout or getattr(settings, "scraping_timeout_seconds", 15.0) or 15.0)
+        # Strict 5-second timeout for fast execution and fast-fail
+        self.timeout = float(timeout if timeout is not None else getattr(settings, "scraping_timeout_seconds", 5.0) or 5.0)
         self.follow_contact_pages = bool(follow_contact_pages)
         self.max_subpages = int(max_subpages)
         ua = user_agent or getattr(settings, "scraping_user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
@@ -102,7 +103,7 @@ class AsyncWebScraper:
         }
 
     async def scrape_url(self, url: str) -> ScrapedPage:
-        """Fetches and parses the given URL, optionally discovering contact subpages."""
+        """Fetches and parses the given URL with a strict 5s timeout, optionally discovering contact subpages."""
         if not url:
             return ScrapedPage(url="", status_code=0)
 
@@ -119,7 +120,7 @@ class AsyncWebScraper:
         try:
             async with httpx.AsyncClient(
                 headers=self.headers,
-                timeout=self.timeout,
+                timeout=httpx.Timeout(self.timeout, connect=3.0),
                 follow_redirects=True,
                 verify=False
             ) as client:
@@ -157,6 +158,9 @@ class AsyncWebScraper:
                     discovered_emails=valid_emails
                 )
 
+        except (httpx.TimeoutException, httpx.ConnectTimeout, httpx.ReadTimeout):
+            logger.info(f"⚡ Fast-failing slow website (>5s timeout): {clean_url}")
+            return ScrapedPage(url=clean_url, status_code=408, clean_text="")
         except Exception as e:
             logger.warning(f"Error scraping {clean_url}: {e}")
             return ScrapedPage(url=clean_url, status_code=0)

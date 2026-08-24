@@ -624,8 +624,10 @@ with tab_search:
                                 def update_ui_progress(lead: EnrichedLead, idx: int, tot: int):
                                     pct = int((idx / tot) * 100) if tot > 0 else 0
                                     prog_bar.progress(min(100, max(0, pct)))
-                                    email_tag = f" — Found email: {lead.primary_email}" if lead.primary_email else ""
-                                    status_text.text(f"Auditing ({idx}/{tot}): {lead.company_name}{email_tag}")
+                                    email_tag = f" — 📧 Found: `{lead.primary_email}`" if lead.primary_email else ""
+                                    status_text.markdown(
+                                        f"⚡ **Analyzing {idx} of {tot} leads:** `{lead.company_name}` • *Skipping directories & slow sites (5s timeout)*...{email_tag}"
+                                    )
 
                                 results = safe_execute_pipeline_sync(
                                     pipeline=pipeline,
@@ -718,7 +720,10 @@ with tab_csv:
                                     def update_csv_progress(lead: EnrichedLead, idx: int, tot: int):
                                         pct = int((idx / tot) * 100) if tot > 0 else 0
                                         prog_bar.progress(min(100, max(0, pct)))
-                                        status_text.text(f"Auditing ({idx}/{tot}): {lead.company_name}")
+                                        email_tag = f" — 📧 Found: `{lead.primary_email}`" if lead.primary_email else ""
+                                        status_text.markdown(
+                                            f"⚡ **Auditing CSV {idx} of {tot} leads:** `{lead.company_name}` • *Skipping directories & slow sites (5s timeout)*...{email_tag}"
+                                        )
 
                                     results = safe_execute_pipeline_sync(
                                         pipeline=pipeline,

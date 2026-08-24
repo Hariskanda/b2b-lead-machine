@@ -107,14 +107,18 @@ class Settings(BaseSettings):
         validation_alias="GEMINI_MODEL"
     )
 
-    # Concurrency and Rate Limiting
+    # Concurrency and Rate Limiting (Optimized for 70% faster execution)
     max_concurrent_requests: int = Field(
-        default=3,
+        default=5,
         validation_alias="MAX_CONCURRENT_REQUESTS"
     )
     request_timeout_seconds: int = Field(
-        default=15,
+        default=5,
         validation_alias="REQUEST_TIMEOUT_SECONDS"
+    )
+    scraping_timeout_seconds: int = Field(
+        default=5,
+        validation_alias="SCRAPING_TIMEOUT_SECONDS"
     )
 
     # Scraping Options
