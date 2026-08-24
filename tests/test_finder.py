@@ -39,12 +39,19 @@ class TestLeadFinder(unittest.TestCase):
             {"href": "https://radiantplumbing.com", "title": "Radiant Plumbing & Air Conditioning"},
             {"href": "https://lnpplumbing.com", "title": "Plumbers Near Me | L & P Plumbing LLC"}
         ]
-        with patch("ddgs.DDGS.text", return_value=mock_results):
-            leads = discover_leads_by_keyword("Plumbing in Austin", max_results=5)
-            self.assertGreater(len(leads), 0)
-            self.assertLessEqual(len(leads), 5)
-            for lead in leads:
-                self.assertFalse("yelp.com" in lead.website_url)
+        try:
+            from duckduckgo_search import DDGS as DdgsClass
+            target_patch = "duckduckgo_search.DDGS.text"
+        except ImportError:
+            target_patch = "ddgs.DDGS.text"
+
+        with patch("ddgs.DDGS.text", return_value=mock_results, create=True):
+            with patch("duckduckgo_search.DDGS.text", return_value=mock_results, create=True):
+                leads = discover_leads_by_keyword("Plumbing in Austin", max_results=5)
+                self.assertGreater(len(leads), 0)
+                self.assertLessEqual(len(leads), 5)
+                for lead in leads:
+                    self.assertFalse("yelp.com" in lead.website_url)
 
 
 if __name__ == "__main__":
