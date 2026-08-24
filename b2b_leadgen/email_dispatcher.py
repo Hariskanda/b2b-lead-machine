@@ -1,6 +1,7 @@
 import logging
 import re
 import smtplib
+import threading
 import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -23,6 +24,13 @@ JUNK_PREFIXES = {
     "sentry", "git", "npm", "node_modules", "wixpress", "sentry-cdn"
 }
 
+# Generic non-business / placeholder domains to reject
+DISALLOWED_DOMAINS = {
+    "example.com", "domain.com", "yourcompany.com", "email.com", "test.com",
+    "sentry.io", "wixpress.com", "sample.com", "testmail.com", "mailinator.com",
+    "tempmail.com", "yoursite.com", "company.com", "mycompany.com"
+}
+
 # Invalid extension endings
 INVALID_EXTENSIONS = (
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
@@ -38,8 +46,8 @@ EMAIL_REGEX = re.compile(
 def is_valid_business_email(email: Optional[str]) -> Tuple[bool, str]:
     """
     Strictly validates whether an email is a legitimate business contact email,
-    filtering out library version tags (e.g. bootstrap@4.6.0, splide@4.1.4),
-    image asset extensions, dummy placeholders, and code artifacts.
+    filtering out package/version strings (e.g. @3.12.5, @4.6.0, bootstrap@4.6.0, splide@4.1.4),
+    image asset extensions (.png, .jpg), dummy placeholders, and non-business domains.
     Returns (is_valid, reason).
     """
     if not email or not isinstance(email, str):
@@ -62,9 +70,9 @@ def is_valid_business_email(email: Optional[str]) -> Tuple[bool, str]:
     if user_part in JUNK_PREFIXES:
         return False, f"Code library artifact detected: '{user_part}'"
 
-    # 2. Reject domain parts that look like semver version numbers (e.g. @4.6.0, @1.2.3, @4.1.4)
+    # 2. Reject domain parts that look like semver version numbers (e.g. @3.12.5, @4.6.0, @1.2.3, @4.1.4)
     if re.match(r"^v?\d+(\.\d+)+$", domain_part):
-        return False, f"Version number artifact detected: '@{domain_part}'"
+        return False, f"Package version string detected: '@{domain_part}'"
 
     # 3. Reject file extension artifacts (.png, .jpg, .js, .css, etc.)
     if domain_part.endswith(INVALID_EXTENSIONS) or any(clean.endswith(ext) for ext in INVALID_EXTENSIONS):
@@ -80,9 +88,9 @@ def is_valid_business_email(email: Optional[str]) -> Tuple[bool, str]:
     if not tld.isalpha() or len(tld) < 2:
         return False, f"Invalid domain TLD: '.{tld}'"
 
-    # 6. Reject common placeholder domains
-    if domain_part in ("domain.com", "example.com", "test.com", "yoursite.com", "company.com", "email.com"):
-        return False, f"Placeholder domain: '{domain_part}'"
+    # 6. Reject common placeholder / dummy domains
+    if domain_part in DISALLOWED_DOMAINS:
+        return False, f"Non-business placeholder domain: '{domain_part}'"
 
     return True, "Valid"
 
@@ -241,11 +249,11 @@ def _connect_smtp_server(
     password: str
 ) -> smtplib.SMTP:
     """
-    Initializes and connects to the SMTP server with TLS/SSL negotiation and authentication.
+    Initializes and connects fresh to the SMTP server with TLS/SSL negotiation and authentication.
     Resolves 'please run connect() first' by ensuring full connection setup before return.
     """
     clean_password = password.replace(" ", "").strip()
-    logger.info(f"Connecting to SMTP server at {host}:{port}...")
+    logger.info(f"Connecting fresh to SMTP server at {host}:{port}...")
 
     if port == 465:
         server = smtplib.SMTP_SSL(host, port, timeout=30)
@@ -294,18 +302,20 @@ def dispatch_campaign(
     sender_name: Optional[str] = None,
     smtp_host: Optional[str] = None,
     smtp_port: Optional[int] = None,
-    price_usd: float = 6.0,
+    price_usd: float = 0.0,
     topic: str = "",
     delay_seconds: float = 5.0,
     progress_callback: Optional[Callable[[Any, bool, str, int, int], None]] = None,
+    stop_event: Optional[threading.Event] = None,
     **kwargs: Any
 ) -> Dict[str, Any]:
     """
     Autonomously dispatches personalized pitches via Gmail SMTP with:
-    1. Robust SMTP connection & auto-reconnection handling (resolving 'please run connect() first').
-    2. Strict email validation filter (skipping code artifacts like bootstrap@4.6.0 or splide@4.1.4).
+    1. Fresh SMTP connection initialization & graceful teardown (eliminating 'please run connect() first').
+    2. Strict email validation filter (skipping version strings like @3.12.5, bootstrap@4.6.0, splide@4.1.4).
     3. Sent-history deduplication check (preventing duplicate sends).
     4. Gmail rate-limiting protection with configurable safety delays (default 5.0s).
+    5. Clean stop_event checking to terminate immediately without ghost threads.
     """
     user = (sender_email or getattr(settings, "effective_smtp_user", "") or "").strip()
     password = (app_password or getattr(settings, "effective_smtp_password", "") or "").strip()
@@ -356,15 +366,19 @@ def dispatch_campaign(
 
     server = None
     try:
-        # 1. Establish initial verified connection before iteration
+        # 1. Establish fresh verified connection before iteration
         server = _connect_smtp_server(host, port, user, password)
 
         for idx, lead in enumerate(candidates, 1):
+            if stop_event and stop_event.is_set():
+                logger.warning("Outbound dispatch halted by stop_event.")
+                break
+
             raw_recipient = str(_get_attr(lead, "primary_email", "")).strip()
             c_name = str(_get_attr(lead, "company_name", "there"))
             p_pitch = str(_get_attr(lead, "personalized_pitch", ""))
 
-            # 🛡️ 2. Strict Email Validation Filter (e.g. Reject bootstrap@4.6.0, splide@4.1.4, invalid assets)
+            # 🛡️ 2. Strict Email Validation Filter (e.g. Reject @3.12.5, bootstrap@4.6.0, splide@4.1.4, invalid assets)
             is_valid, validation_reason = is_valid_business_email(raw_recipient)
             if not is_valid:
                 skipped_invalid += 1
@@ -405,6 +419,8 @@ def dispatch_campaign(
             send_success = False
             err_msg = ""
             for attempt in range(2):
+                if stop_event and stop_event.is_set():
+                    break
                 try:
                     send_single_email(
                         server=server,
@@ -418,14 +434,13 @@ def dispatch_campaign(
                     send_success = True
                     break
                 except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, BrokenPipeError, ConnectionResetError) as disc_err:
-                    logger.warning(f"SMTP connection dropped on attempt {attempt+1}: {disc_err}. Reconnecting...")
+                    logger.warning(f"SMTP connection dropped on attempt {attempt+1}: {disc_err}. Reconnecting fresh...")
                     try:
                         server = _connect_smtp_server(host, port, user, password)
                     except Exception as rec_err:
                         err_msg = f"SMTP Reconnect failed: {rec_err}"
                         break
                 except smtplib.SMTPResponseException as resp_err:
-                    # Gmail Rate Limit / Quota Check (421, 450, 451, 452, 550)
                     code = resp_err.smtp_code
                     msg = str(resp_err.smtp_error)
                     if code in (421, 450, 451, 452, 550) and ("limit" in msg.lower() or "quota" in msg.lower() or "blocked" in msg.lower()):
@@ -467,7 +482,10 @@ def dispatch_campaign(
 
             # ⏱️ 5. Rate-Limit Safety Delay between sends (e.g. 5-10s)
             if idx < total_candidates and delay_seconds > 0:
-                time.sleep(delay_seconds)
+                for _ in range(int(delay_seconds * 2)):
+                    if stop_event and stop_event.is_set():
+                        break
+                    time.sleep(0.5)
 
     except Exception as e:
         logger.error(f"SMTP Connection / Authentication failure: {e}")

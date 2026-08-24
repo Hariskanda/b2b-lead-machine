@@ -47,10 +47,13 @@ class TestEmailDispatcher(unittest.TestCase):
         valid, reason = is_valid_business_email("sales.dept@company.co.uk")
         self.assertTrue(valid)
 
-        # Invalid library version artifacts
+        # Invalid library version artifacts and package strings
         valid, reason = is_valid_business_email("bootstrap@4.6.0")
         self.assertFalse(valid)
-        self.assertIn("artifact", reason.lower())
+
+        valid, reason = is_valid_business_email("pkg@3.12.5")
+        self.assertFalse(valid)
+        self.assertIn("version", reason.lower())
 
         valid, reason = is_valid_business_email("splide@4.1.4")
         self.assertFalse(valid)
@@ -59,6 +62,9 @@ class TestEmailDispatcher(unittest.TestCase):
         self.assertFalse(valid)
 
         valid, reason = is_valid_business_email("user@example.com")
+        self.assertFalse(valid)
+
+        valid, reason = is_valid_business_email("test@domain.com")
         self.assertFalse(valid)
 
     def test_build_outreach_email(self):

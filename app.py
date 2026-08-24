@@ -957,7 +957,8 @@ if st.session_state["leads"]:
                                 smtp_port=SMTP_PORT,
                                 topic=st.session_state.get("last_query", "Manual Batch Outreach"),
                                 delay_seconds=float(send_delay),
-                                progress_callback=on_email_progress
+                                progress_callback=on_email_progress,
+                                stop_event=st.session_state.get("stop_event")
                             )
 
                         dispatch_bar.progress(100)
