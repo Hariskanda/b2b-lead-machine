@@ -106,6 +106,12 @@ class AsyncWebScraper:
         if not url:
             return ScrapedPage(url="", status_code=0)
 
+        # Skip blacklisted domains immediately without making HTTP request
+        from b2b_leadgen.search import is_blacklisted_domain
+        if is_blacklisted_domain(url):
+            logger.info(f"🚫 WebScraper skipping blacklisted domain: {url}")
+            return ScrapedPage(url=url, status_code=403, clean_text="")
+
         clean_url = url.strip()
         if not clean_url.startswith("http://") and not clean_url.startswith("https://"):
             clean_url = "https://" + clean_url

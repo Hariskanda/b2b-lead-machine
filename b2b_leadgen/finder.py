@@ -4,7 +4,7 @@ from typing import List, Set
 from urllib.parse import urlparse
 
 from b2b_leadgen.models import LeadInput
-from b2b_leadgen.search import clean_base_url, is_valid_company_domain
+from b2b_leadgen.search import clean_base_url, is_valid_company_domain, is_blacklisted_domain
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,11 @@ GENERIC_PHRASES = [
 
 
 def is_directory_domain(url: str) -> bool:
-    """Checks if a URL belongs to a directory, aggregator, or non-business site."""
+    """Checks if a URL belongs to a directory, aggregator, or blacklisted non-business site."""
+    if not url:
+        return True
+    if is_blacklisted_domain(url):
+        return True
     try:
         parsed = urlparse(url)
         host = (parsed.netloc or "").lower().split(":")[0]

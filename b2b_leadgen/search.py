@@ -5,44 +5,60 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-# Common directory, social, and aggregator domains to filter out when seeking official company websites
-EXCLUDED_DOMAINS = {
-    "linkedin.com", "www.linkedin.com",
-    "crunchbase.com", "www.crunchbase.com",
-    "wikipedia.org", "en.wikipedia.org", "www.wikipedia.org",
-    "twitter.com", "www.twitter.com", "x.com", "www.x.com",
-    "facebook.com", "www.facebook.com",
-    "instagram.com", "www.instagram.com",
-    "youtube.com", "www.youtube.com",
-    "glassdoor.com", "www.glassdoor.com",
-    "zoominfo.com", "www.zoominfo.com",
-    "bloomberg.com", "www.bloomberg.com",
-    "pitchbook.com", "www.pitchbook.com",
-    "yelp.com", "www.yelp.com",
-    "reddit.com", "www.reddit.com",
-    "github.com", "www.github.com",
-    "medium.com", "www.medium.com",
-    "g2.com", "www.g2.com",
-    "capterra.com", "www.capterra.com",
-    "trustpilot.com", "www.trustpilot.com",
-    "craft.co", "www.craft.co"
-}
+# Strict blacklist patterns: directories, aggregators, job boards, social networks, and review sites
+BLACKLIST_DOMAINS = [
+    'glassdoor', 'olx', 'jooble', 'linkedin', 'yelp', 'justdial',
+    'indiamart', 'facebook', 'instagram', 'salaryexpert', 'indeed',
+    'yellowpages', 'angi', 'angieslist', 'thumbtack', 'houzz', 'homeadvisor',
+    'bbb', 'mapquest', 'superpages', 'expertise', 'nextdoor',
+    'twitter', 'x', 'youtube', 'wikipedia', 'google', 'bing',
+    'yahoo', 'tripadvisor', 'clutch', 'upcity', 'themanifest',
+    'porch', 'homeguide', 'topratedlocal', 'birdeye', 'plumbersup',
+    'chamberofcommerce', 'citysearch', 'manta', 'loc8nearme',
+    'capterra', 'g2', 'trustpilot', 'craft', 'zoominfo',
+    'bloomberg', 'pitchbook', 'reddit', 'github', 'medium'
+]
+
+
+def is_blacklisted_domain(url: str) -> bool:
+    """
+    Checks if a URL belongs to a blacklisted aggregator, social, job board, or directory site.
+    Uses precise domain label matching to prevent false positive substring matches
+    (e.g., radiantplumbing.com containing 'bing').
+    """
+    if not url or not isinstance(url, str):
+        return True
+    try:
+        parsed = urlparse(url)
+        host = (parsed.netloc or "").lower().split(":")[0]
+        if not host:
+            host = url.lower().split("/")[0].split(":")[0]
+        if host.startswith("www."):
+            host = host[4:]
+        if not host:
+            return False
+
+        host_parts = host.split(".")
+        for b in BLACKLIST_DOMAINS:
+            # Matches exact domain label (e.g., 'glassdoor' in ['glassdoor', 'com'])
+            if b in host_parts:
+                return True
+            # Matches exact host or subdomains (e.g. 'in.jooble.org', 'dir.indiamart.com')
+            if host == b or host.startswith(b + ".") or (f".{b}." in host):
+                return True
+        return False
+    except Exception:
+        return False
 
 
 def is_valid_company_domain(url: str) -> bool:
     """Checks if a URL belongs to a potential company website and not an excluded directory/social site."""
+    if is_blacklisted_domain(url):
+        return False
     try:
         parsed = urlparse(url)
-        netloc = parsed.netloc.lower()
-        if not netloc:
-            return False
-        # Remove port if present
-        host = netloc.split(":")[0]
-        # Check against excluded domains or subdomains of excluded domains
-        for excluded in EXCLUDED_DOMAINS:
-            if host == excluded or host.endswith(f".{excluded}"):
-                return False
-        return True
+        netloc = (parsed.netloc or "").lower().split(":")[0]
+        return bool(netloc and "." in netloc)
     except Exception:
         return False
 
@@ -82,30 +98,13 @@ async def search_company_website(company_name: str) -> Optional[str]:
             if link and is_valid_company_domain(link):
                 return clean_base_url(link)
     except Exception as e:
-        logger.warning(f"DuckDuckGo search error for '{clean_name}': {e}. Trying fallback search...")
+        logger.warning(f"DuckDuckGo search failed for {clean_name}: {e}")
 
-    # Step 2: Fallback query without quotes
-    try:
-        try:
-            from ddgs import DDGS
-        except ImportError:
-            from duckduckgo_search import DDGS
-        try:
-            ddgs = DDGS(verify=False)
-        except TypeError:
-            ddgs = DDGS()
-        query = f'{clean_name} software company homepage'
-        results = list(ddgs.text(query, max_results=6))
-        for res in results:
-            link = res.get("href") or res.get("link") or res.get("url")
-            if link and is_valid_company_domain(link):
-                return clean_base_url(link)
-    except Exception as e:
-        logger.warning(f"Fallback search error for '{clean_name}': {e}")
-
-    # Step 3: Heuristic direct domain guess (e.g. Stripe -> https://stripe.com)
-    sanitized_slug = re.sub(r'[^a-zA-Z0-9]', '', clean_name.lower())
-    if sanitized_slug:
-        return f"https://www.{sanitized_slug}.com"
+    # Step 2: Fallback Heuristic Domain Construction
+    sanitized_name = re.sub(r'[^a-zA-Z0-9]', '', clean_name).lower()
+    if sanitized_name:
+        fallback_url = f"https://www.{sanitized_name}.com"
+        if is_valid_company_domain(fallback_url):
+            return fallback_url
 
     return None

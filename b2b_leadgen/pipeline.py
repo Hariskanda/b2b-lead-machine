@@ -10,7 +10,7 @@ from b2b_leadgen.config import settings
 from b2b_leadgen.extractor import GeminiLeadExtractor
 from b2b_leadgen.models import EnrichedLead, LeadInput
 from b2b_leadgen.scraper import AsyncWebScraper
-from b2b_leadgen.search import search_company_website
+from b2b_leadgen.search import search_company_website, is_blacklisted_domain
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,17 @@ class LeadGenPipeline:
                     error_message="Could not discover official website URL"
                 )
 
-            # 2. Scrape website content
+            # 2. Check strict blacklist to skip directories, job boards, aggregators and prevent 403 errors
+            if is_blacklisted_domain(url):
+                logger.info(f"⏩ Skipping blacklisted directory/social domain for '{company_name}': {url}")
+                return EnrichedLead(
+                    company_name=company_name,
+                    website_url=url,
+                    status="skipped_blacklisted",
+                    error_message="Blacklisted aggregator, social, or directory domain skipped"
+                )
+
+            # 3. Scrape website content
             scraped_page = None
             try:
                 scraped_page = await self.scraper.scrape_url(url)

@@ -8,6 +8,16 @@ class TestLeadFinder(unittest.TestCase):
         self.assertTrue(is_directory_domain("https://www.yelp.com/biz/radiant-plumbing-austin"))
         self.assertTrue(is_directory_domain("https://www.yellowpages.com/austin-tx/plumbers"))
         self.assertTrue(is_directory_domain("https://www.angi.com/companylist/austin/plumbing.htm"))
+        # Test required blacklist domains
+        self.assertTrue(is_directory_domain("https://www.glassdoor.com/Reviews/company-reviews.htm"))
+        self.assertTrue(is_directory_domain("https://www.olx.in/services/plumber"))
+        self.assertTrue(is_directory_domain("https://in.jooble.org/jobs-plumbing"))
+        self.assertTrue(is_directory_domain("https://www.linkedin.com/company/apex-plumbing"))
+        self.assertTrue(is_directory_domain("https://www.justdial.com/Austin/Plumbers"))
+        self.assertTrue(is_directory_domain("https://dir.indiamart.com/contractor.html"))
+        self.assertTrue(is_directory_domain("https://www.facebook.com/pages/plumbing"))
+        self.assertTrue(is_directory_domain("https://www.instagram.com/plumbingco"))
+        self.assertTrue(is_directory_domain("https://www.salaryexpert.com/salary/plumber"))
         self.assertFalse(is_directory_domain("https://radiantplumbing.com"))
         self.assertFalse(is_directory_domain("https://www.clarkekentplumbing.com"))
 

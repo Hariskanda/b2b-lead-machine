@@ -302,7 +302,7 @@ with st.sidebar:
         if not is_admin_active:
             st.markdown("##### Admin Authentication")
             admin_pwd_input = st.text_input("Enter Admin Password", type="password", key="admin_pwd_input")
-            if st.button("Unlock Admin Panel", use_container_width=True):
+            if st.button("Unlock Admin Panel", width="stretch"):
                 if admin_pwd_input and admin_pwd_input == ADMIN_PASSWORD:
                     st.session_state["admin_authenticated"] = True
                     st.session_state["admin_logged_in"] = True
@@ -338,7 +338,7 @@ with st.sidebar:
                 st.rerun()
 
             if not is_unlocked and paywall_is_on:
-                if st.button("⚡ Admin Override: Unlock Dataset for this Session", use_container_width=True):
+                if st.button("⚡ Admin Override: Unlock Dataset for this Session", width="stretch"):
                     st.session_state["payment_verified"] = True
                     st.session_state["paid"] = True
                     st.toast("🎉 Dataset unlocked by Admin!", icon="🔓")
@@ -359,7 +359,7 @@ with st.sidebar:
             if all_logs:
                 with st.expander(f"📜 View Activity Logs ({len(all_logs)} events)", expanded=False):
                     logs_df = pd.DataFrame(all_logs[:50])[["timestamp", "level", "message"]]
-                    st.dataframe(logs_df, use_container_width=True, hide_index=True)
+                    st.dataframe(logs_df, width="stretch", hide_index=True)
             else:
                 st.caption("No activity events logged yet.")
 
@@ -370,14 +370,14 @@ with st.sidebar:
             if all_records:
                 with st.expander(f"📋 View Permanent Sent Log ({len(all_records)} contacts)", expanded=False):
                     history_df = pd.DataFrame(all_records)[["email", "company_name", "topic", "sent_at"]]
-                    st.dataframe(history_df, use_container_width=True, hide_index=True)
+                    st.dataframe(history_df, width="stretch", hide_index=True)
 
                 col_mod1, col_mod2 = st.columns([2, 1])
                 with col_mod1:
                     manual_block_email = st.text_input("Add Email to Blocklist", placeholder="e.g. do-not-email@company.com", key="manual_block_input")
                 with col_mod2:
                     st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                    if st.button("➕ Block Email", use_container_width=True):
+                    if st.button("➕ Block Email", width="stretch"):
                         if manual_block_email and "@" in manual_block_email:
                             sent_history.add_to_do_not_contact(manual_block_email.strip())
                             add_activity_log(f"Admin manually added {manual_block_email} to blocklist.", "INFO")
@@ -386,7 +386,7 @@ with st.sidebar:
                         else:
                             st.error("Please enter a valid email address.")
 
-                if st.button("🗑️ Clear / Reset Entire Sent Database", use_container_width=True):
+                if st.button("🗑️ Clear / Reset Entire Sent Database", width="stretch"):
                     sent_history.clear_sent_history()
                     add_activity_log("Admin wiped global sent history database.", "WARNING")
                     st.toast("✅ Global sent history cleared!", icon="🗑️")
@@ -419,7 +419,7 @@ with st.sidebar:
             admin_gsheet_target = st.text_input("Sheet Name or URL", placeholder="e.g. B2B Leads 2026", key="admin_gsheet_target")
             admin_auto_sync = st.checkbox("Auto-sync to Google Sheet", value=False, key="admin_auto_sync_cb")
 
-            if st.button("Log Out of Admin Panel", use_container_width=True):
+            if st.button("Log Out of Admin Panel", width="stretch"):
                 st.session_state["admin_authenticated"] = False
                 st.session_state["admin_logged_in"] = False
                 add_activity_log("Admin logged out.", "INFO")
@@ -472,7 +472,7 @@ with tab_search:
     with col2:
         num_leads = st.number_input("Target Lead Count", min_value=3, max_value=30, value=15, step=1)
 
-    btn_discover = st.button("🚀 Generate Leads & Mini-Audits", type="primary", use_container_width=True, disabled=is_currently_running)
+    btn_discover = st.button("🚀 Generate Leads & Mini-Audits", type="primary", width="stretch", disabled=is_currently_running)
 
     if btn_discover:
         if not search_query.strip():
@@ -578,7 +578,7 @@ with tab_csv:
     if uploaded_file is not None:
         try:
             uploaded_df = pd.read_csv(uploaded_file)
-            st.dataframe(uploaded_df.head(5), use_container_width=True)
+            st.dataframe(uploaded_df.head(5), width="stretch")
 
             company_col_detected = detect_company_column(list(uploaded_df.columns))
             selected_col = st.selectbox(
@@ -712,7 +712,7 @@ if st.session_state["leads"]:
                 "primary_email": st.column_config.TextColumn("Contact Email"),
                 "custom_audit": st.column_config.TextColumn("Custom Mini-Audit", width="large")
             },
-            use_container_width=True,
+            width="stretch",
             hide_index=True
         )
 
@@ -741,7 +741,7 @@ if st.session_state["leads"]:
                 file_name=f"audited_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                 mime="text/csv",
                 type="primary",
-                use_container_width=True
+                width="stretch"
             )
         with c_dl2:
             json_str = json.dumps([l.model_dump() for l in leads], indent=2)
@@ -750,7 +750,7 @@ if st.session_state["leads"]:
                 data=json_str,
                 file_name=f"audited_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
                 mime="application/json",
-                use_container_width=True
+                width="stretch"
             )
 
     # ---------------------------------------------------------
@@ -811,7 +811,7 @@ if st.session_state["leads"]:
 
         with c_cr1:
             st.markdown("#### 1. Generate Payment Invoice")
-            if st.button("⚡ Generate Secure Crypto Invoice ($6 USD)", type="primary", use_container_width=True):
+            if st.button("⚡ Generate Secure Crypto Invoice ($6 USD)", type="primary", width="stretch"):
                 if not NOWPAYMENTS_API_KEY or NOWPAYMENTS_API_KEY == "dummy_nowpayments_key":
                     st.warning("⚠️ NOWPAYMENTS_API_KEY is not configured in secrets.")
                 else:
@@ -836,7 +836,7 @@ if st.session_state["leads"]:
                     label=f"🚀 Pay ${CRYPTO_PRICE_USD:.2f} with Crypto on NOWPayments",
                     url=st.session_state["crypto_invoice_url"],
                     type="primary",
-                    use_container_width=True
+                    width="stretch"
                 )
                 st.caption(f"Invoice ID: `{st.session_state.get('crypto_invoice_id')}`")
 
@@ -851,7 +851,7 @@ if st.session_state["leads"]:
                 help="The Invoice ID generated by NOWPayments (auto-filled)."
             )
 
-            if st.button("🔄 Check Payment Status & Unlock CSV", use_container_width=True):
+            if st.button("🔄 Check Payment Status & Unlock CSV", width="stretch"):
                 if not NOWPAYMENTS_API_KEY or NOWPAYMENTS_API_KEY == "dummy_nowpayments_key":
                     st.warning("⚠️ NOWPAYMENTS_API_KEY is not configured.")
                 elif not inv_id_input.strip():
@@ -877,7 +877,7 @@ if st.session_state["leads"]:
 
             with st.expander("🔑 Manual Passcode Unlock", expanded=False):
                 entered_passcode = st.text_input("Enter Passcode", type="password", placeholder="Enter unlock code...", key="manual_passcode_field")
-                if st.button("Unlock with Code", use_container_width=True):
+                if st.button("Unlock with Code", width="stretch"):
                     clean_code = entered_passcode.strip()
                     if clean_code and (clean_code == UNLOCK_CODE or clean_code == ADMIN_PASSWORD):
                         st.session_state["payment_verified"] = True
@@ -923,7 +923,7 @@ if st.session_state["leads"]:
         if len(unsent_leads) == 0:
             st.warning("🛡️ All eligible leads in this dataset have already been contacted in past runs. Global deduplication filter has protected them from receiving duplicate emails.")
         else:
-            btn_launch_campaign = st.button("🚀 Run Audit & Dispatch Campaign (Manual Trigger Only)", type="primary", use_container_width=True, disabled=is_currently_running)
+            btn_launch_campaign = st.button("🚀 Run Audit & Dispatch Campaign (Manual Trigger Only)", type="primary", width="stretch", disabled=is_currently_running)
 
             if btn_launch_campaign:
                 if not SMTP_USER or not SMTP_PASSWORD:
@@ -975,6 +975,6 @@ if st.session_state["leads"]:
         if st.session_state["campaign_results"]:
             rep = st.session_state["campaign_results"]
             if rep.get("results"):
-                st.dataframe(pd.DataFrame(rep.get("results", [])), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(rep.get("results", [])), width="stretch", hide_index=True)
     else:
         st.info("ℹ️ No leads with verified business email addresses found in the current table to dispatch.")
