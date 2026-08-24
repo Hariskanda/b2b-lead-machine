@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import pandas as pd
 import streamlit as st
 
+from b2b_leadgen.autopilot import autopilot_engine
 from b2b_leadgen.config import settings
 from b2b_leadgen.email_dispatcher import (
     build_outreach_email,
@@ -363,7 +364,66 @@ with st.sidebar:
             st.markdown('<span style="color:#15803d; font-weight:700;">🔓 MASTER ADMIN & REVENUE CENTER ACTIVE</span>', unsafe_allow_html=True)
 
             # -------------------------------------------------
-            # 1. REVENUE & PAYWALL DASHBOARD
+            # 1. 24/7 BACKGROUND AUTOPILOT ENGINE (MANUAL THREADING CONTROL)
+            # -------------------------------------------------
+            st.markdown("---")
+            st.markdown("#### ⚡ 24/7 Background Autopilot Engine")
+            ap_status = autopilot_engine.get_status()
+            ap_running = ap_status.get("is_running", False)
+
+            if ap_running:
+                st.markdown(f'<div style="background:#064e3b; border:1px solid #34d399; border-radius:8px; padding:10px; color:#ffffff; font-weight:600; margin-bottom:8px;">🟢 AUTOPILOT ACTIVE • Cycle #{ap_status.get("total_cycles", 0)} • Niche: {ap_status.get("current_niche", "Starting...")}</div>', unsafe_allow_html=True)
+            else:
+                st.markdown('<div style="background:#1e293b; border:1px solid #475569; border-radius:8px; padding:10px; color:#94a3b8; font-weight:600; margin-bottom:8px;">⚪ AUTOPILOT IDLE (Manual Start Required)</div>', unsafe_allow_html=True)
+
+            c_ap1, c_ap2 = st.columns(2)
+            with c_ap1:
+                st.metric("Total Cycles", ap_status.get("total_cycles", 0))
+                st.metric("Leads Discovered", ap_status.get("total_leads_discovered", 0))
+            with c_ap2:
+                st.metric("Emails Sent", ap_status.get("total_emails_sent", 0))
+                st.metric("Duplicates Skipped", ap_status.get("total_duplicates_skipped", 0))
+
+            if not ap_running:
+                ap_batch_size = st.slider("Batch Size per Cycle (Leads)", min_value=2, max_value=15, value=5, step=1, key="ap_batch_slider")
+                ap_interval = st.slider("Cycle Delay Interval (Seconds)", min_value=30, max_value=300, value=120, step=15, key="ap_interval_slider")
+                ap_continuous = st.checkbox("Run Continuously", value=True, key="ap_continuous_cb")
+                ap_duration = st.number_input("Max Duration (Hours)", min_value=0.5, max_value=72.0, value=24.0, step=1.0, key="ap_duration_in") if not ap_continuous else 24.0
+
+                if st.button("▶ Start Autopilot Engine", type="primary", width="stretch"):
+                    if not SMTP_USER or not SMTP_PASSWORD:
+                        st.warning("⚠️ SMTP credentials (SMTP_USER, SMTP_PASSWORD) not configured in secrets.")
+                    else:
+                        autopilot_engine.start(
+                            gemini_api_key=GEMINI_API_KEY,
+                            smtp_user=SMTP_USER,
+                            smtp_password=SMTP_PASSWORD,
+                            app_url=APP_URL,
+                            sender_name=SENDER_NAME,
+                            smtp_host=SMTP_HOST,
+                            smtp_port=SMTP_PORT,
+                            price_usd=active_price_usd,
+                            batch_size=int(ap_batch_size),
+                            interval_seconds=int(ap_interval),
+                            run_continuously=ap_continuous,
+                            duration_hours=float(ap_duration)
+                        )
+                        add_activity_log("Admin manually started 24/7 Autopilot Engine thread.", "INFO")
+                        st.toast("🚀 Autopilot Engine started!", icon="⚡")
+                        st.rerun()
+            else:
+                if st.button("⏹ Stop Autopilot Engine", type="secondary", width="stretch"):
+                    autopilot_engine.stop()
+                    add_activity_log("Admin manually signaled stop to Autopilot Engine thread.", "WARNING")
+                    st.toast("🛑 Autopilot Engine stopping...", icon="⏹")
+                    st.rerun()
+
+            if ap_status.get("logs"):
+                with st.expander("📜 View Live Autopilot Logs", expanded=False):
+                    st.dataframe(pd.DataFrame(ap_status.get("logs", [])), width="stretch", hide_index=True)
+
+            # -------------------------------------------------
+            # 2. REVENUE & PAYWALL DASHBOARD
             # -------------------------------------------------
             st.markdown("---")
             st.markdown("#### 💰 Revenue & Paywall Dashboard")
@@ -400,7 +460,7 @@ with st.sidebar:
                     st.rerun()
 
             # -------------------------------------------------
-            # 2. WHITE-LABEL AGENCY BRANDING
+            # 3. WHITE-LABEL AGENCY BRANDING
             # -------------------------------------------------
             st.markdown("---")
             st.markdown("#### 🏢 White-Label Agency Branding")
@@ -410,13 +470,13 @@ with st.sidebar:
             st.session_state["agency_website"] = agency_web_in
 
             # -------------------------------------------------
-            # 3. AI MODEL SELECTOR (2026 Standards)
+            # 4. AI MODEL SELECTOR (2026 Standards)
             # -------------------------------------------------
             st.markdown("---")
             st.markdown("#### 🤖 AI Engine Tuning")
             admin_model = st.selectbox(
                 "Gemini AI Model",
-                options=["gemini-3.5-flash", "gemini-3.7-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"],
+                options=["gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.7-flash", "gemini-2.0-flash", "gemini-1.5-flash"],
                 index=0,
                 key="admin_model_select"
             )
@@ -434,7 +494,7 @@ with st.sidebar:
             )
 
             # -------------------------------------------------
-            # 4. TRACKER & DEDUPLICATION LOGS
+            # 5. TRACKER & DEDUPLICATION LOGS
             # -------------------------------------------------
             st.markdown("---")
             st.markdown("#### 📊 Activity & Sent History Tracker")

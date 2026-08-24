@@ -171,9 +171,10 @@ class AutopilotEngine:
                     self.log(f"✅ Discovered {len(discovered)} company domains. Running AI enrichment...")
 
                     # 3. Enrich Leads via Pipeline
+                    effective_autopilot_model = getattr(settings, "gemini_model", "gemini-2.5-flash") or "gemini-2.5-flash"
                     pipeline = LeadGenPipeline(
                         api_key=gemini_api_key,
-                        model="gemini-1.5-flash",
+                        model=effective_autopilot_model,
                         max_concurrency=2,
                         follow_contact_pages=True,
                         use_checkpoint=False
@@ -195,7 +196,7 @@ class AutopilotEngine:
 
                     # 5. Dispatch Email Campaign with crypto/USD pricing CTA and record sent history
                     if unsent_leads and smtp_user and smtp_password:
-                        self.log(f"📨 Dispatching cold pitches to {len(unsent_leads)} recipients from {smtp_user} (Topic: '{niche}')...")
+                        self.log(f"📨 Dispatching value-first mini-audits to {len(unsent_leads)} recipients from {smtp_user} (Topic: '{niche}')...")
                         report = dispatch_campaign(
                             leads=unsent_leads,
                             sender_email=smtp_user,
@@ -206,7 +207,8 @@ class AutopilotEngine:
                             smtp_port=smtp_port,
                             price_usd=price_usd,
                             topic=niche,
-                            delay_seconds=5.0
+                            delay_seconds=5.0,
+                            stop_event=self._stop_event
                         )
                         sent = report.get("sent_count", 0)
                         self.total_emails_sent += sent
