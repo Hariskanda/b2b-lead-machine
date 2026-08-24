@@ -112,34 +112,45 @@ def build_outreach_email(
     **kwargs: Any
 ) -> Tuple[str, str, str]:
     """
-    Builds the personalized cold outreach email for a company directing them
-    to the verified lead intelligence dataset portal with instant free CSV access.
+    Builds the personalized value-first email for a company leading with their
+    Custom Mini-Audit (strengths, growth opportunity, actionable recommendation).
     Returns (subject, html_body, plain_text_body).
     """
     company_name = _get_attr(lead, "company_name") or "there"
-    pitch = (
-        _get_attr(lead, "personalized_pitch")
-        or f"I came across {company_name} and was very impressed by your service offerings. We help businesses in your space streamline lead acquisition and client operations."
+    audit_text = (
+        _get_attr(lead, "custom_audit")
+        or _get_attr(lead, "personalized_pitch")
+        or (
+            f"• 🟢 Strengths: Strong customer focus and market presence.\n"
+            f"• 🔍 Opportunity: Automating real-time lead intake and website response times.\n"
+            f"• 💡 Recommendation: Deploy a 24/7 digital intake workflow to capture more high-intent client inquiries."
+        )
     )
     effective_url = (app_url or getattr(settings, "effective_app_url", "http://localhost:8501") or "http://localhost:8501").rstrip("/")
     effective_name = sender_name or getattr(settings, "sender_name", "B2B Lead Machine")
 
-    subject = f"Growth opportunity for {company_name}"
+    subject = f"Complimentary Growth & Digital Audit for {company_name}"
 
     plain_text = f"""Hi {company_name} Team,
 
-{pitch}
+I recently came across {company_name} and put together a quick, complimentary mini-audit of your online presence and client conversion flow:
 
-We have compiled a verified, real-time database of high-intent B2B prospects and target decision-makers in your market. You can explore the live dataset directly on our portal:
+{audit_text}
+
+We specialize in helping businesses in your space implement lightweight automation and targeted outreach to capture more qualified inquiries without increasing workload.
+
+You can also explore our full live directory and prospect intelligence dataset on our portal:
 👉 {effective_url}
-
-(Instant free dataset preview & full CSV download available on the portal).
 
 Best regards,
 {effective_name}
-Automated Outbound Intelligence
+Digital Growth & AI Intelligence
 {effective_url}
 """
+
+    html_audit = "<br>".join(
+        [f"<strong>{line.split(':', 1)[0]}:</strong> {line.split(':', 1)[1]}" if ":" in line else line for line in audit_text.split("\n") if line.strip()]
+    )
 
     html_body = f"""<!DOCTYPE html>
 <html>
@@ -164,33 +175,44 @@ Automated Outbound Intelligence
             box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
         }}
         .header {{
-            background: linear-gradient(135deg, #2563eb, #4f46e5);
+            background: linear-gradient(135deg, #0f172a, #1e293b);
             color: #ffffff;
             padding: 24px;
             text-align: center;
         }}
+        .badge {{
+            display: inline-block;
+            background: #047857;
+            color: #ffffff;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }}
         .content {{
             padding: 28px;
         }}
-        .pitch-box {{
-            background: #f1f5f9;
-            border-left: 4px solid #3b82f6;
-            padding: 16px;
-            border-radius: 6px;
+        .audit-box {{
+            background: #f8fafc;
+            border-left: 4px solid #10b981;
+            padding: 18px;
+            border-radius: 8px;
             margin: 18px 0;
-            font-size: 15px;
+            font-size: 14.5px;
             color: #0f172a;
+            line-height: 1.7;
         }}
         .cta-button {{
             display: inline-block;
-            background-color: #2563eb;
+            background-color: #0f172a;
             color: #ffffff !important;
             text-decoration: none;
-            padding: 14px 28px;
+            padding: 13px 26px;
             border-radius: 8px;
             font-weight: 600;
-            font-size: 15px;
-            margin: 20px 0;
+            font-size: 14px;
+            margin: 18px 0;
             text-align: center;
         }}
         .footer {{
@@ -206,33 +228,32 @@ Automated Outbound Intelligence
 <body>
     <div class="container">
         <div class="header">
-            <h2 style="margin: 0; font-weight: 700;">Opportunity for {company_name}</h2>
+            <span class="badge">🔍 Value-First Digital Audit</span>
+            <h2 style="margin: 0; font-weight: 700; color: #ffffff;">Growth Audit: {company_name}</h2>
         </div>
         <div class="content">
             <p>Hi <strong>{company_name} Team</strong>,</p>
             
-            <div class="pitch-box">
-                {pitch}
+            <p>I took a quick look at your online customer journey and put together a 3-point digital mini-audit for your team:</p>
+            
+            <div class="audit-box">
+                {html_audit}
             </div>
 
-            <p>We've built an autonomous lead intelligence system that continuously tracks and verifies targeted business contacts and prospect data in your niche.</p>
+            <p>We help businesses in your space streamline customer acquisition and capture high-intent inquiries on autopilot.</p>
             
             <p style="text-align: center;">
                 <a href="{effective_url}" class="cta-button" target="_blank">
-                    ⚡ View Verified Lead List & Download CSV
+                    ⚡ View Live Directory & Full Intelligence Dataset
                 </a>
-            </p>
-
-            <p style="font-size: 13px; color: #64748b; text-align: center;">
-                ✨ <em>Free instant access & full CSV download available on portal.</em>
             </p>
 
             <p>Best regards,<br>
             <strong>{effective_name}</strong><br>
-            <span style="color: #64748b; font-size: 13px;">B2B Lead Machine Outbound System</span></p>
+            <span style="color: #64748b; font-size: 13px;">AI Audit & Lead Intelligence Engine</span></p>
         </div>
         <div class="footer">
-            Sent via B2B Lead Machine Outbound Dispatcher • <a href="{effective_url}" style="color: #64748b;">Visit App</a>
+            Delivered via AI Audit & Lead Closer Engine • <a href="{effective_url}" style="color: #64748b;">Visit App</a>
         </div>
     </div>
 </body>

@@ -11,6 +11,7 @@ class LeadInput(BaseModel):
 class CompanyExtractionResult(BaseModel):
     """
     Schema passed directly to Google GenAI for structured JSON extraction.
+    Generates a high-value Custom Mini-Audit rather than generic cold sales pitch.
     """
     summary: str = Field(
         description="A strictly 1-sentence concise summary explaining what the company does and its core value proposition."
@@ -19,8 +20,12 @@ class CompanyExtractionResult(BaseModel):
         default=None,
         description="The primary contact, sales, support, or general inquiry email address found. Set to null if no valid email is present."
     )
+    custom_audit: str = Field(
+        default="",
+        description="A value-first 3-bullet mini-audit analyzing the business: 1) What they do well, 2) A potential blind spot (SEO, booking, missing service), and 3) A polite, actionable recommendation to fix it."
+    )
     personalized_pitch: str = Field(
-        description="A personalized, high-converting 2-sentence icebreaker cold email tailored specifically to this company, referencing their service offering and offering a value-add collaboration or efficiency boost."
+        description="The custom mini-audit breakdown or value-first icebreaker note tailored specifically to this business."
     )
     confidence_score: float = Field(
         default=0.9,
@@ -51,6 +56,7 @@ class EnrichedLead(BaseModel):
     website_url: Optional[str] = None
     primary_email: Optional[str] = None
     company_summary: Optional[str] = None
+    custom_audit: Optional[str] = None
     personalized_pitch: Optional[str] = None
     confidence_score: Optional[float] = None
     email_source: Optional[str] = None

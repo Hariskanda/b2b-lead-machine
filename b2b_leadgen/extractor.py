@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def build_extraction_prompt(company_name: str, scraped_page: ScrapedPage) -> str:
-    """Builds the structured extraction prompt for Google Gemini."""
+    """Builds the structured extraction prompt for Google Gemini to produce a high-value Custom Mini-Audit."""
     discovered_emails_str = (
         ", ".join(scraped_page.discovered_emails)
         if scraped_page.discovered_emails
@@ -20,12 +20,18 @@ def build_extraction_prompt(company_name: str, scraped_page: ScrapedPage) -> str
     )
 
     prompt = f"""
-You are an expert B2B sales development representative and researcher. Analyze the following scraped website data for "{company_name}" and output:
+You are an expert digital growth auditor and B2B research consultant. Analyze the scraped website data for "{company_name}" and provide an actionable, value-first Custom Mini-Audit rather than a generic sales pitch.
+
+Output the following structured JSON fields:
 1. summary: A concise, strictly 1-sentence description of what the company does and its core value proposition.
 2. primary_email: The primary contact, sales, support, or general inquiry email address found. Set to null if no valid email is found.
-3. personalized_pitch: A compelling, highly customized 2-sentence cold outreach icebreaker email to this company. Mention their specific service/focus from the website text and suggest how our partnership or automation solution can accelerate their workflow.
-4. confidence_score: Confidence score between 0.0 and 1.0.
-5. email_source: Origin of the email ('homepage', 'contact_page', 'mailto', 'inferred', or 'none').
+3. custom_audit: A structured 3-bullet mini-audit formatted as:
+   • 🟢 Strengths: [1 concise sentence on what they do well based on website text]
+   • 🔍 Blind Spot / Growth Opportunity: [1 concise sentence on a potential missed opportunity, e.g., missing automated lead capture, SEO meta gaps, or mobile booking]
+   • 💡 Recommendation: [1 polite, actionable suggestion on how to fix it and capture more qualified clients]
+4. personalized_pitch: The formatted mini-audit text above combined with a warm, polite closing offering a free digital consultation.
+5. confidence_score: Confidence score between 0.0 and 1.0.
+6. email_source: Origin of the email ('homepage', 'contact_page', 'mailto', 'inferred', or 'none').
 
 ### Company Information
 - Name: {company_name}
@@ -61,7 +67,7 @@ class GeminiLeadExtractor:
 
     def extract_company_info(self, company_name: str, scraped_page: ScrapedPage) -> CompanyExtractionResult:
         """
-        Calls Gemini using Google GenAI SDK with structured output validation.
+        Calls Gemini using Google GenAI SDK with structured output validation for a Custom Mini-Audit.
         """
         if not self.client:
             logger.warning(f"Google GenAI client unavailable for {company_name}. Using fallback heuristic extraction.")
@@ -70,14 +76,16 @@ class GeminiLeadExtractor:
                 scraped_page.meta_description
                 or f"{company_name} provides specialized services and solutions."
             )
-            fallback_pitch = (
-                f"Hi {company_name} team, I noticed your focus on {scraped_page.title or company_name} and was impressed by your offerings. "
-                f"We help organizations like yours automate lead acquisition and scale client operations seamlessly."
+            fallback_audit = (
+                f"• 🟢 Strengths: Strong service focus in {scraped_page.title or company_name}.\n"
+                f"• 🔍 Opportunity: Enhancing real-time digital lead intake and automated follow-ups.\n"
+                f"• 💡 Recommendation: Implement an instant digital inquiry workflow to capture website visitors 24/7."
             )
             return CompanyExtractionResult(
                 summary=fallback_summary,
                 primary_email=fallback_email,
-                personalized_pitch=fallback_pitch,
+                custom_audit=fallback_audit,
+                personalized_pitch=fallback_audit,
                 confidence_score=0.6 if fallback_email else 0.4,
                 email_source="heuristic_dom" if fallback_email else "none"
             )
@@ -111,16 +119,18 @@ class GeminiLeadExtractor:
             fallback_email = scraped_page.discovered_emails[0] if scraped_page.discovered_emails else None
             fallback_summary = (
                 scraped_page.meta_description
-                or f"{company_name} provides specialized services."
+                or f"{company_name} provides specialized professional services."
             )
-            fallback_pitch = (
-                f"Hi {company_name} team, I came across your business and love what you're building. "
-                f"I'd love to share how our modern tech solutions can help expand your reach."
+            fallback_audit = (
+                f"• 🟢 Strengths: Established brand presence and customer offerings.\n"
+                f"• 🔍 Opportunity: Streamlining inbound client conversion and response velocity.\n"
+                f"• 💡 Recommendation: Deploy automated client intake workflows to boost conversion rates."
             )
             return CompanyExtractionResult(
                 summary=fallback_summary,
                 primary_email=fallback_email,
-                personalized_pitch=fallback_pitch,
+                custom_audit=fallback_audit,
+                personalized_pitch=fallback_audit,
                 confidence_score=0.3,
                 email_source="heuristic_fallback" if fallback_email else "none"
             )

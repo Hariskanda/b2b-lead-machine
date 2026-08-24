@@ -186,6 +186,7 @@ class LeadGenPipeline:
                     website_url=url,
                     primary_email=extraction.primary_email,
                     company_summary=extraction.summary,
+                    custom_audit=extraction.custom_audit,
                     personalized_pitch=extraction.personalized_pitch,
                     confidence_score=extraction.confidence_score,
                     email_source=extraction.email_source,
@@ -194,12 +195,18 @@ class LeadGenPipeline:
             except Exception as e:
                 logger.error(f"Extraction failed for {company_name}: {e}")
                 fallback_email = scraped_page.discovered_emails[0] if scraped_page.discovered_emails else None
+                fallback_audit = (
+                    f"• 🟢 Strengths: Strong commercial service capabilities.\n"
+                    f"• 🔍 Opportunity: Streamlining inbound client conversion.\n"
+                    f"• 💡 Recommendation: Implement an automated inquiry response system."
+                )
                 return EnrichedLead(
                     company_name=company_name,
                     website_url=url,
                     primary_email=fallback_email,
                     company_summary=scraped_page.meta_description or f"{company_name} provides professional services.",
-                    personalized_pitch=f"Hi {company_name} team, loved checking out your website. We help businesses in your space automate outreach and acquisition.",
+                    custom_audit=fallback_audit,
+                    personalized_pitch=fallback_audit,
                     status="success" if fallback_email else "extraction_failed",
                     error_message=str(e)
                 )

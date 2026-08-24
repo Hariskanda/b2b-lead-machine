@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # 📱 Page Configuration & Early Session State Initialization
 # =============================================================
 st.set_page_config(
-    page_title="B2B Lead Machine",
+    page_title="AI Audit & Lead Closer",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -41,7 +41,7 @@ SESSION_DEFAULTS: Dict[str, Any] = {
     "leads": [],
     "df": pd.DataFrame(),
     "last_query": "",
-    "paywall_enabled": False,     # Default: Free Mode Active for all users
+    "paywall_enabled": False,     # Default: 100% Free Mode Active
     "payment_verified": False,
     "paid": False,
     "admin_authenticated": False,
@@ -70,14 +70,14 @@ def add_activity_log(message: str, level: str = "INFO") -> None:
         st.session_state["activity_logs"].pop(0)
 
 
-# Custom CSS styling with Mobile Responsiveness & Copy Protection
+# Custom CSS styling for AI Audit & Lead Closer
 st.markdown("""
 <style>
     .main-header {
         font-size: 2.4rem;
         font-weight: 800;
         margin-bottom: 0.2rem;
-        background: linear-gradient(90deg, #4A90E2, #9013FE);
+        background: linear-gradient(90deg, #10b981, #3b82f6);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }
@@ -114,14 +114,6 @@ st.markdown("""
         margin: 15px auto;
         box-shadow: 0 6px 18px rgba(129, 140, 248, 0.18);
     }
-    .unlocked-box {
-        background-color: #f0fdf4;
-        border: 2px solid #22c55e;
-        border-radius: 12px;
-        padding: 20px;
-        text-align: center;
-        margin: 20px 0;
-    }
     .pill {
         display: inline-block;
         background: #334155;
@@ -132,7 +124,14 @@ st.markdown("""
         font-weight: 600;
         margin: 2px 0;
     }
-    /* 🛡️ Copy Protection & Scrape Deterrence for Paywalled Preview */
+    .audit-card {
+        border-left: 4px solid #10b981;
+        background: #f8fafc;
+        padding: 16px;
+        border-radius: 8px;
+        margin-bottom: 14px;
+        border: 1px solid #e2e8f0;
+    }
     .protected-sample-container {
         -webkit-user-select: none;
         -moz-user-select: none;
@@ -154,21 +153,6 @@ st.markdown("""
         padding: 24px;
         text-align: center;
         margin: 16px 0;
-    }
-    .paywall-gate-card {
-        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
-        border: 2px solid #818cf8;
-        border-radius: 16px;
-        padding: 24px;
-        color: #ffffff;
-        text-align: center;
-        margin: 20px 0;
-        box-shadow: 0 8px 24px rgba(49, 46, 129, 0.25);
-    }
-    .kill-switch-btn {
-        background-color: #dc2626 !important;
-        color: white !important;
-        font-weight: 700 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -265,7 +249,7 @@ SMTP_USER: str = str(get_secret("SMTP_USER", getattr(settings, "effective_smtp_u
 SMTP_PASSWORD: str = str(get_secret("SMTP_PASSWORD", getattr(settings, "effective_smtp_password", "")))
 SMTP_HOST: str = str(get_secret("SMTP_HOST", getattr(settings, "smtp_host", "smtp.gmail.com")))
 SMTP_PORT: int = int(get_secret("SMTP_PORT", getattr(settings, "smtp_port", 587)))
-SENDER_NAME: str = str(get_secret("SENDER_NAME", getattr(settings, "sender_name", "B2B Lead Machine")))
+SENDER_NAME: str = str(get_secret("SENDER_NAME", getattr(settings, "sender_name", "AI Audit & Lead Closer")))
 APP_URL: str = str(get_secret("APP_URL", getattr(settings, "effective_app_url", "http://localhost:8501")))
 
 
@@ -281,18 +265,18 @@ is_unlocked = (not paywall_is_on) or is_admin_active or user_has_paid
 # =============================================================
 with st.sidebar:
     st.image("https://img.icons8.com/isometric/100/lightning-bolt.png", width=60)
-    st.title("B2B Lead Machine")
+    st.title("AI Audit & Lead Closer")
 
     st.markdown("""
     <div class="storefront-card">
-        <h4 style="margin-top:0; color:#f8fafc; font-size:1.05rem;">⚡ Prospecting on Autopilot</h4>
+        <h4 style="margin-top:0; color:#f8fafc; font-size:1.05rem;">🔍 Value-First Client Acquisition</h4>
         <p style="font-size:0.85rem; color:#cbd5e1; margin-bottom:10px;">
-            Target real local businesses, extract verified contact emails, and generate customized AI sales pitches in seconds.
+            Target real local businesses, extract verified contact emails, and generate 3-point digital mini-audits that close clients with value.
         </p>
         <span class="pill">🎯 Niche + Location Discovery</span><br>
+        <span class="pill">🔍 Custom 3-Point Mini-Audits</span><br>
         <span class="pill">📧 Decision-Maker Emails</span><br>
-        <span class="pill">✍️ AI Cold Pitches</span><br>
-        <span class="pill">🛡️ Strict Global Deduplication</span>
+        <span class="pill">🛡️ Strict Global Anti-Spam</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -323,22 +307,10 @@ with st.sidebar:
         else:
             st.markdown('<span style="color:#15803d; font-weight:700;">🔓 MASTER ADMIN ACTIVE</span>', unsafe_allow_html=True)
 
-            # -------------------------------------------------
-            # 1. EMERGENCY KILL SWITCH & THREAD CONTROL
-            # -------------------------------------------------
+            # 1. EMERGENCY KILL SWITCH
             st.markdown("---")
             st.markdown("#### 🛑 Emergency Kill Switch")
-            st.caption("Instantly terminates all background loops, workers, and active outreach pipelines safely.")
-
-            ap_status = autopilot_engine.get_status()
-            col_ks1, col_ks2 = st.columns([1, 1])
-            with col_ks1:
-                if ap_status["is_running"]:
-                    st.success("🟢 Background Autopilot: ACTIVE")
-                else:
-                    st.info("⚪ Background Autopilot: IDLE")
-
-            if st.button("🛑 EMERGENCY STOP ALL BACKGROUND TASKS", type="secondary", use_container_width=True):
+            if st.button("🛑 EMERGENCY STOP ALL TASKS", type="secondary", use_container_width=True):
                 autopilot_engine.stop()
                 if "stop_event" in st.session_state:
                     st.session_state["stop_event"].set()
@@ -346,11 +318,9 @@ with st.sidebar:
                 st.toast("🛑 Emergency Kill Switch triggered! All tasks stopped.", icon="🛑")
                 st.rerun()
 
-            # -------------------------------------------------
-            # 2. FREE MODE / CRYPTO PAYWALL TOGGLE
-            # -------------------------------------------------
+            # 2. HIDDEN MONETIZATION PAYWALL TOGGLE
             st.markdown("---")
-            st.markdown("#### 💰 Monetization & Paywall Control")
+            st.markdown("#### 💰 Monetization Paywall Control")
             new_paywall_val = st.toggle(
                 "Enable $6.00 USD Crypto Paywall (NOWPayments)",
                 value=st.session_state.get("paywall_enabled", False),
@@ -370,44 +340,28 @@ with st.sidebar:
                     st.toast("🎉 Dataset unlocked by Admin!", icon="🔓")
                     st.rerun()
 
-            # -------------------------------------------------
-            # 3. LIVE TRACKER & ACTIVITY LOG VIEWER
-            # -------------------------------------------------
+            # 3. LIVE TRACKER & ACTIVITY LOGS
             st.markdown("---")
             st.markdown("#### 📊 Activity & Tracker Logs")
-
             sent_count = sent_history.get_sent_count()
-            used_topics = sent_history.get_used_topics()
-            total_skips = ap_status.get("total_duplicates_skipped", 0)
-
             c_trk1, c_trk2 = st.columns(2)
             with c_trk1:
-                st.metric("Total Emailed Globally", sent_count)
+                st.metric("Total Emailed", sent_count)
             with c_trk2:
-                st.metric("Duplicates Skipped", total_skips)
+                st.metric("Topics Explored", len(sent_history.get_used_topics()))
 
-            all_logs = []
-            if "activity_logs" in st.session_state:
-                all_logs.extend(st.session_state["activity_logs"])
-            if ap_status.get("logs"):
-                all_logs.extend(ap_status.get("logs", []))
-
+            all_logs = list(st.session_state.get("activity_logs", []))
             all_logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-
             if all_logs:
-                with st.expander(f"📜 View Live Activity Logs ({len(all_logs)} events)", expanded=False):
+                with st.expander(f"📜 View Activity Logs ({len(all_logs)} events)", expanded=False):
                     logs_df = pd.DataFrame(all_logs[:50])[["timestamp", "level", "message"]]
                     st.dataframe(logs_df, use_container_width=True, hide_index=True)
             else:
                 st.caption("No activity events logged yet.")
 
-            # -------------------------------------------------
             # 4. GLOBAL DEDUPLICATION & DO-NOT-CONTACT DATABASE
-            # -------------------------------------------------
             st.markdown("---")
             st.markdown("#### 🛡️ Global Sent History & Blocklist")
-            st.caption(f"Strict anti-spam deduplication prevents emailing any of the {sent_count} recorded addresses.")
-
             all_records = sent_history.get_all_sent_records()
             if all_records:
                 with st.expander(f"📋 View Permanent Sent Log ({len(all_records)} contacts)", expanded=False):
@@ -416,7 +370,7 @@ with st.sidebar:
 
                 col_mod1, col_mod2 = st.columns([2, 1])
                 with col_mod1:
-                    manual_block_email = st.text_input("Manually Add Email to Blocklist", placeholder="e.g. do-not-email@company.com", key="manual_block_input")
+                    manual_block_email = st.text_input("Add Email to Blocklist", placeholder="e.g. do-not-email@company.com", key="manual_block_input")
                 with col_mod2:
                     st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
                     if st.button("➕ Block Email", use_container_width=True):
@@ -436,19 +390,15 @@ with st.sidebar:
             else:
                 st.caption("Global sent database is empty.")
 
-            # -------------------------------------------------
-            # 5. ENGINE TUNING & INTEGRATIONS
-            # -------------------------------------------------
+            # 5. ENGINE TUNING
             st.markdown("---")
             st.markdown("#### ⚙️ Engine Tuning")
-
             admin_model = st.selectbox(
                 "Gemini Model",
                 options=["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
                 index=0,
                 key="admin_model_select"
             )
-
             admin_concurrency = st.slider(
                 "Max Concurrency",
                 min_value=1,
@@ -456,13 +406,11 @@ with st.sidebar:
                 value=int(getattr(settings, "max_concurrent_requests", 3)),
                 key="admin_concurrency_slider"
             )
-
             admin_follow_subpages = st.checkbox(
                 "Follow Contact/About Pages",
                 value=getattr(settings, "follow_contact_pages", True),
                 key="admin_follow_subpages_cb"
             )
-
             st.markdown("##### Google Sheets Sync")
             admin_gsheet_target = st.text_input("Sheet Name or URL", placeholder="e.g. B2B Leads 2026", key="admin_gsheet_target")
             admin_auto_sync = st.checkbox("Auto-sync to Google Sheet", value=False, key="admin_auto_sync_cb")
@@ -473,7 +421,7 @@ with st.sidebar:
                 add_activity_log("Admin logged out.", "INFO")
                 st.rerun()
 
-    st.caption("⚡ **B2B Lead Machine** • Master Outbound Intelligence")
+    st.caption("⚡ **AI Audit & Lead Closer** • Value-First Lead Intelligence")
 
 
 # Set runtime parameters (Admin overrides if logged in, otherwise default)
@@ -487,28 +435,28 @@ effective_auto_sync = bool(st.session_state.get("admin_auto_sync_cb", False))
 # =============================================================
 # 🚀 Main Storefront Header & Tabs
 # =============================================================
-st.markdown('<div class="main-header">⚡ Automated B2B Lead Machine</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Autonomous Lead Discovery, Verified Email Extraction & AI Cold Pitch Generator</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">⚡ AI Audit & Lead Closer</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Autonomous Lead Discovery & Value-First Custom Digital Mini-Audits for B2B Client Acquisition</div>', unsafe_allow_html=True)
 
 # Status Notification Banner based on monetization mode
 if not paywall_is_on:
     st.markdown("""
     <div class="free-tier-banner">
-        <strong style="font-size:1.1rem;">🎉 Free Tier Active:</strong> Instant, unrestricted lead discovery with direct CSV/JSON download access. No paywall required!
+        <strong style="font-size:1.1rem;">🎉 Free Tier Active:</strong> Instant, unrestricted lead discovery with Custom Mini-Audits & direct CSV/JSON download access.
     </div>
     """, unsafe_allow_html=True)
 else:
     st.info("🔒 **Paywall Mode Active:** Standard visitors will see preview samples; complete CSV download requires $6.00 USD crypto payment.")
 
-tab_search, tab_csv = st.tabs(["🔍 Keyword Search & Lead Discovery", "📁 Upload Existing CSV"])
+tab_search, tab_csv = st.tabs(["🔍 Keyword Search & Mini-Audit Generator", "📁 Upload Existing CSV"])
 
 
 # -------------------------------------------------------------
-# TAB 1: Autonomous Keyword Discovery
+# TAB 1: Autonomous Keyword Discovery & Audit Generator
 # -------------------------------------------------------------
 with tab_search:
-    st.markdown("### 🎯 Discover Real Companies by Niche & Location")
-    st.markdown("Enter a target search phrase (e.g. *'Plumbing contractors in Austin, TX'* or *'Commercial roofing in Miami'*) to autonomously discover official company websites and enrich them.")
+    st.markdown("### 🎯 Discover Real Companies & Generate Mini-Audits")
+    st.markdown("Enter a target search phrase (e.g. *'Plumbing contractors in Austin, TX'* or *'Commercial roofing in Miami'*) to discover official company websites and generate custom 3-point digital audits.")
 
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -520,7 +468,7 @@ with tab_search:
     with col2:
         num_leads = st.number_input("Target Lead Count", min_value=3, max_value=30, value=15, step=1)
 
-    btn_discover = st.button("🚀 Generate Leads Table", type="primary", use_container_width=True)
+    btn_discover = st.button("🚀 Generate Leads & Mini-Audits", type="primary", use_container_width=True)
 
     if btn_discover:
         if not search_query.strip():
@@ -545,8 +493,8 @@ with tab_search:
                 if not discovered_inputs:
                     status_text.error("No companies could be discovered for this query. Try refining your search keywords.")
                 else:
-                    add_activity_log(f"Discovered {len(discovered_inputs)} company domains for '{search_query.strip()}'. Running AI enrichment...", "INFO")
-                    status_text.success(f"✅ Discovered {len(discovered_inputs)} businesses! Starting AI scraping and cold pitch generation...")
+                    add_activity_log(f"Discovered {len(discovered_inputs)} company domains for '{search_query.strip()}'. Generating Custom Mini-Audits...", "INFO")
+                    status_text.success(f"✅ Discovered {len(discovered_inputs)} businesses! Generating AI Mini-Audits and extracting emails...")
 
                     try:
                         pipeline = LeadGenPipeline(
@@ -563,7 +511,7 @@ with tab_search:
                             pct = int((idx / tot) * 100) if tot > 0 else 0
                             prog_bar.progress(min(100, max(0, pct)))
                             email_tag = f" — Found email: {lead.primary_email}" if lead.primary_email else ""
-                            status_text.text(f"Processing ({idx}/{tot}): {lead.company_name}{email_tag}")
+                            status_text.text(f"Auditing ({idx}/{tot}): {lead.company_name}{email_tag}")
 
                         results = safe_execute_pipeline(
                             pipeline=pipeline,
@@ -572,8 +520,8 @@ with tab_search:
                         )
 
                         prog_bar.progress(100)
-                        add_activity_log(f"Successfully enriched {len(results)} leads for query '{search_query}'.", "INFO")
-                        status_text.success(f"🎉 Successfully enriched {len(results)} leads!")
+                        add_activity_log(f"Successfully generated mini-audits for {len(results)} leads.", "INFO")
+                        status_text.success(f"🎉 Successfully generated {len(results)} leads with Custom Mini-Audits!")
 
                         st.session_state["leads"] = results
                         df_data = [r.model_dump() for r in results]
@@ -600,11 +548,11 @@ with tab_search:
 
 
 # -------------------------------------------------------------
-# TAB 2: CSV Lead Enrichment
+# TAB 2: CSV Lead Enrichment & Mini-Audit Generator
 # -------------------------------------------------------------
 with tab_csv:
-    st.markdown("### 📁 Upload Existing CSV")
-    st.markdown("Upload a CSV containing company names to enrich them with verified contact emails, summaries, and personalized cold pitches.")
+    st.markdown("### 📁 Upload Existing CSV for Mini-Audits")
+    st.markdown("Upload a CSV containing company names to enrich them with verified contact emails, company summaries, and value-first 3-point digital audits.")
 
     uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
 
@@ -620,7 +568,7 @@ with tab_csv:
                 index=list(uploaded_df.columns).index(company_col_detected) if company_col_detected in uploaded_df.columns else 0
             )
 
-            btn_enrich_csv = st.button("⚡ Enrich Uploaded CSV", type="primary")
+            btn_enrich_csv = st.button("⚡ Generate Mini-Audits from Uploaded CSV", type="primary")
 
             if btn_enrich_csv:
                 input_leads = []
@@ -649,7 +597,7 @@ with tab_csv:
                             def update_csv_progress(lead: EnrichedLead, idx: int, tot: int):
                                 pct = int((idx / tot) * 100) if tot > 0 else 0
                                 prog_bar.progress(min(100, max(0, pct)))
-                                status_text.text(f"Enriching ({idx}/{tot}): {lead.company_name}")
+                                status_text.text(f"Auditing ({idx}/{tot}): {lead.company_name}")
 
                             results = safe_execute_pipeline(
                                 pipeline=pipeline,
@@ -659,7 +607,7 @@ with tab_csv:
 
                             prog_bar.progress(100)
                             add_activity_log(f"Enriched {len(results)} leads from uploaded CSV '{uploaded_file.name}'.", "INFO")
-                            status_text.success(f"🎉 Successfully enriched {len(results)} leads from CSV!")
+                            status_text.success(f"🎉 Successfully enriched {len(results)} leads from CSV with Custom Mini-Audits!")
 
                             st.session_state["leads"] = results
                             st.session_state["df"] = pd.DataFrame([r.model_dump() for r in results])
@@ -688,14 +636,14 @@ with tab_csv:
 
 
 # =============================================================
-# 📊 Generated Leads Display (Free / Paywalled based on Admin Toggle)
+# 📊 Generated Leads Display (Custom Mini-Audits & CSV Export)
 # =============================================================
 if st.session_state["leads"]:
     df = st.session_state["df"]
     leads: list[EnrichedLead] = st.session_state["leads"]
 
     st.markdown("---")
-    st.markdown("### 📋 Generated Leads Dataset")
+    st.markdown("### 📋 Generated Leads & Custom Mini-Audits")
 
     # KPI Metrics
     total_leads = len(leads)
@@ -725,22 +673,27 @@ if st.session_state["leads"]:
 
         # Full Interactive Table
         st.dataframe(
-            df[["company_name", "website_url", "primary_email", "company_summary", "personalized_pitch", "status"]],
+            df[["company_name", "website_url", "primary_email", "company_summary", "custom_audit", "status"]],
             column_config={
                 "website_url": st.column_config.LinkColumn("Website URL"),
                 "primary_email": st.column_config.TextColumn("Contact Email"),
-                "personalized_pitch": st.column_config.TextColumn("Cold Email Pitch", width="large")
+                "custom_audit": st.column_config.TextColumn("Custom Mini-Audit", width="large")
             },
             use_container_width=True,
             hide_index=True
         )
 
-        # Full Cold Outreach Pitch Cards
-        with st.expander("✉️ View Personalized Cold Email Pitches for All Leads", expanded=False):
+        # Full Custom Mini-Audit Cards
+        with st.expander("🔍 View Custom 3-Point Digital Mini-Audits for All Leads", expanded=False):
             for lead in leads:
                 st.markdown(f"**📌 {lead.company_name}** (`{lead.primary_email or 'No email found'}`)")
                 st.markdown(f"**Summary:** {lead.company_summary or 'N/A'}")
-                st.info(lead.personalized_pitch or "N/A")
+                st.markdown(f"""
+                <div class="audit-card">
+                    <strong>Custom Value-First Mini-Audit:</strong><br>
+                    {lead.custom_audit or lead.personalized_pitch or 'Audit generated by Gemini'}
+                </div>
+                """, unsafe_allow_html=True)
                 st.divider()
 
         # 📥 Instant Free CSV & JSON Download Actions
@@ -752,7 +705,7 @@ if st.session_state["leads"]:
             st.download_button(
                 label="📥 Download Full CSV",
                 data=csv_buffer.getvalue(),
-                file_name=f"enriched_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                file_name=f"audited_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                 mime="text/csv",
                 type="primary",
                 use_container_width=True
@@ -762,7 +715,7 @@ if st.session_state["leads"]:
             st.download_button(
                 label="📥 Download Full JSON",
                 data=json_str,
-                file_name=f"enriched_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                file_name=f"audited_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
                 mime="application/json",
                 use_container_width=True
             )
@@ -792,8 +745,9 @@ if st.session_state["leads"]:
                 <div style="font-size:0.88rem; color:#334155; margin-bottom:8px;">
                     <strong>Company Summary:</strong> {lead.company_summary or 'N/A'}
                 </div>
-                <div style="background:#f8fafc; border-left:3px solid #3b82f6; padding:10px; border-radius:6px; font-size:0.86rem; color:#1e293b;">
-                    <strong>AI Cold Pitch Preview:</strong> <em>"{lead.personalized_pitch or 'Custom pitch generated by Gemini'}"</em>
+                <div class="audit-card">
+                    <strong>AI Custom Mini-Audit Preview:</strong><br>
+                    {lead.custom_audit or lead.personalized_pitch or 'Custom audit generated by Gemini'}
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -801,9 +755,9 @@ if st.session_state["leads"]:
         if hidden_count > 0:
             st.markdown(f"""
             <div class="locked-teaser-card">
-                <h3 style="color:#334155; margin-top:0; font-weight:800;">🔒 +{hidden_count} More Verified Leads & AI Pitches Locked</h3>
+                <h3 style="color:#334155; margin-top:0; font-weight:800;">🔒 +{hidden_count} More Verified Leads & Mini-Audits Locked</h3>
                 <p style="color:#64748b; font-size:0.95rem; margin-bottom:0;">
-                    Full unmasked contact emails, complete company dossiers, customized cold pitches, and the complete CSV/JSON export are protected behind the paywall.
+                    Full unmasked contact emails, complete company dossiers, custom 3-point digital audits, and the complete CSV/JSON export are protected behind the paywall.
                 </p>
             </div>
             """, unsafe_allow_html=True)
@@ -833,7 +787,7 @@ if st.session_state["leads"]:
                             api_key=NOWPAYMENTS_API_KEY,
                             price_amount=CRYPTO_PRICE_USD,
                             price_currency="usd",
-                            order_description=f"B2B Leads Machine - {len(leads)} Verified Leads Export"
+                            order_description=f"AI Audit & Lead Closer - {len(leads)} Verified Leads Export"
                         )
                         if inv.get("success"):
                             st.session_state["crypto_invoice_url"] = inv.get("invoice_url")
@@ -903,10 +857,10 @@ if st.session_state["leads"]:
     st.markdown("---")
 
     # =========================================================
-    # 📨 Explicit Manual Outreach Campaign Launcher (Anti-Spam Deduplicated)
+    # 📨 Value-First Custom Mini-Audit Campaign Launcher (Anti-Spam Deduplicated)
     # =========================================================
-    st.markdown("### 📨 Manual Outbound Campaign Launcher")
-    st.markdown("Dispatches personalized cold email pitches from your configured Gmail account with **strict global deduplication** to ensure no contact ever receives duplicate emails.")
+    st.markdown("### 📨 Value-First Mini-Audit Campaign Launcher")
+    st.markdown("Dispatches personalized **Custom Mini-Audits** (What they do well, potential blind spot, polite suggestion to fix it) via Gmail SMTP with **strict global deduplication**.")
 
     eligible_leads = [l for l in leads if getattr(l, "primary_email", None) and "@" in str(getattr(l, "primary_email", ""))]
     unsent_leads, skipped_leads = sent_history.filter_leads_for_dispatch(eligible_leads)
@@ -919,7 +873,7 @@ if st.session_state["leads"]:
         with col_adm_info:
             st.info(f"• **Fresh Unsent Contacts:** {len(unsent_leads)}\n• **Already Contacted (Globally Skipped):** {len(skipped_leads)}\n• **Sender:** `{SMTP_USER}`\n• **App URL:** `{APP_URL}`")
         with col_adm_prev:
-            with st.expander(f"👁️ Preview Email to {sample_lead.company_name}", expanded=False):
+            with st.expander(f"👁️ Preview Mini-Audit Email to {sample_lead.company_name}", expanded=False):
                 st.markdown(f"**Subject:** `{subj}`")
                 st.text(txt_prev)
 
@@ -928,7 +882,7 @@ if st.session_state["leads"]:
         if len(unsent_leads) == 0:
             st.warning("🛡️ All eligible leads in this dataset have already been contacted in past runs. Global deduplication filter has protected them from receiving duplicate emails.")
         else:
-            if st.button("🚀 Launch Outreach Campaign (Manual Trigger Only)", type="primary", use_container_width=True):
+            if st.button("🚀 Run Audit & Dispatch Campaign (Manual Trigger Only)", type="primary", use_container_width=True):
                 if not SMTP_USER or not SMTP_PASSWORD:
                     st.warning("⚠️ SMTP credentials (SMTP_USER, SMTP_PASSWORD) not set in secrets.")
                 else:
@@ -945,8 +899,8 @@ if st.session_state["leads"]:
                             p_email = getattr(lead, "primary_email", None) or (lead.get("primary_email") if isinstance(lead, dict) else "")
                             dispatch_status.text(f"Processing ({idx}/{tot}) {icon} -> {c_name} ({p_email}) [{msg}]")
 
-                        add_activity_log(f"Launching manual outreach campaign to {len(unsent_leads)} unsent contacts...", "INFO")
-                        with st.spinner("Connecting to Gmail SMTP & dispatching cold email pitches..."):
+                        add_activity_log(f"Launching value-first mini-audit campaign to {len(unsent_leads)} unsent contacts...", "INFO")
+                        with st.spinner("Connecting to Gmail SMTP & dispatching custom mini-audits..."):
                             report = dispatch_campaign(
                                 leads=unsent_leads,
                                 sender_email=SMTP_USER,
@@ -955,7 +909,7 @@ if st.session_state["leads"]:
                                 sender_name=SENDER_NAME,
                                 smtp_host=SMTP_HOST,
                                 smtp_port=SMTP_PORT,
-                                topic=st.session_state.get("last_query", "Manual Batch Outreach"),
+                                topic=st.session_state.get("last_query", "Manual Mini-Audit Outreach"),
                                 delay_seconds=float(send_delay),
                                 progress_callback=on_email_progress,
                                 stop_event=st.session_state.get("stop_event")
@@ -964,8 +918,8 @@ if st.session_state["leads"]:
                         dispatch_bar.progress(100)
                         st.session_state["campaign_results"] = report
                         if report.get("success"):
-                            add_activity_log(f"Campaign finished: Sent {report.get('sent_count')} emails, skipped {report.get('skipped_duplicates', 0)} duplicates, skipped {report.get('skipped_invalid', 0)} invalid.", "INFO")
-                            st.success(f"🎉 Campaign Finished! Successfully sent {report.get('sent_count')} emails ({report.get('skipped_duplicates', 0)} duplicates skipped, {report.get('skipped_invalid', 0)} invalid artifacts skipped).")
+                            add_activity_log(f"Campaign finished: Sent {report.get('sent_count')} mini-audits, skipped {report.get('skipped_duplicates', 0)} duplicates, skipped {report.get('skipped_invalid', 0)} invalid.", "INFO")
+                            st.success(f"🎉 Campaign Finished! Successfully sent {report.get('sent_count')} value-first mini-audits ({report.get('skipped_duplicates', 0)} duplicates skipped, {report.get('skipped_invalid', 0)} invalid artifacts skipped).")
                         else:
                             add_activity_log(f"Campaign failed: {report.get('message')}", "ERROR")
                             st.warning(f"⚠️ {report.get('message')}")
