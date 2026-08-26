@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from b2b_leadgen.finder import is_directory_domain, clean_company_name, discover_leads_by_keyword
 
 
@@ -45,19 +45,16 @@ class TestLeadFinder(unittest.TestCase):
             {"href": "https://radiantplumbing.com", "title": "Radiant Plumbing & Air Conditioning"},
             {"href": "https://lnpplumbing.com", "title": "Plumbers Near Me | L & P Plumbing LLC"}
         ]
-        try:
-            from duckduckgo_search import DDGS as DdgsClass
-            target_patch = "duckduckgo_search.DDGS.text"
-        except ImportError:
-            target_patch = "ddgs.DDGS.text"
+        mock_ddgs_instance = MagicMock()
+        mock_ddgs_instance.text.return_value = mock_results
 
-        with patch("ddgs.DDGS.text", return_value=mock_results, create=True):
-            with patch("duckduckgo_search.DDGS.text", return_value=mock_results, create=True):
-                leads = discover_leads_by_keyword("Plumbing in Austin", max_results=5)
-                self.assertGreater(len(leads), 0)
-                self.assertLessEqual(len(leads), 5)
-                for lead in leads:
-                    self.assertFalse("yelp.com" in lead.website_url)
+        with patch("ddgs.DDGS", return_value=mock_ddgs_instance, create=True), \
+             patch("duckduckgo_search.DDGS", return_value=mock_ddgs_instance, create=True):
+            leads = discover_leads_by_keyword("Plumbing in Austin", max_results=5)
+            self.assertGreater(len(leads), 0)
+            self.assertLessEqual(len(leads), 5)
+            for lead in leads:
+                self.assertFalse("yelp.com" in lead.website_url)
 
 
 if __name__ == "__main__":

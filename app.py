@@ -23,10 +23,10 @@ from b2b_leadgen.pipeline import LeadGenPipeline, detect_company_column
 logger = logging.getLogger(__name__)
 
 # =============================================================
-# 1. GLOBAL PAGE CONFIG & HIGH-CONTRAST CSS INJECTION
+# 1. GLOBAL PAGE CONFIG & GLASSMORPHISM WALLPAPER CSS
 # =============================================================
 st.set_page_config(
-    page_title="ApexLeads AI",
+    page_title="ApexLeads AI | B2B Lead Intelligence",
     page_icon="⚡",
     layout="wide"
 )
@@ -37,7 +37,7 @@ ADMIN_CONTACT_EMAIL = "hariskandapg@gmail.com"
 ADMIN_PASSCODE = "admin123"
 UNLOCK_PASSCODE = "4990"
 
-# Inject High-Contrast CSS and visibility hotfix
+# Inject High-Resolution Dark Tech Wallpaper & Frosted Glass CSS
 st.markdown("""
 <style>
     /* Remove default Streamlit header/footer clutter */
@@ -47,40 +47,67 @@ st.markdown("""
     div[data-testid="stToolbar"] {visibility: hidden;}
     div[data-testid="stDecoration"] {visibility: hidden;}
 
-    /* Global text visibility */
+    /* Background Image with Dark Tech Gradient Overlay */
+    .stApp {
+        background: linear-gradient(rgba(10, 15, 30, 0.88), rgba(10, 15, 30, 0.95)), 
+                    url('https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1920&q=80') !important;
+        background-size: cover !important;
+        background-position: center !important;
+        background-attachment: fixed !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* Frosted glass container cards */
+    .css-card, div[data-testid="stVerticalBlock"] > div[style*="border"], .glass-card {
+        background: rgba(30, 41, 59, 0.75) !important;
+        backdrop-filter: blur(12px) !important;
+        -webkit-backdrop-filter: blur(12px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-radius: 16px !important;
+        padding: 24px !important;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37) !important;
+        margin-bottom: 20px !important;
+    }
+
+    /* Force all text pure white */
     html, body, [class*="css"], .stMarkdown, p, h1, h2, h3, h4, span, label {
         color: #FFFFFF !important;
     }
+
     /* Input box visibility */
-    .stTextInput > div > div > input {
-        background-color: #1E293B !important;
+    .stTextInput > div > div > input, .stNumberInput input {
+        background-color: rgba(30, 41, 59, 0.9) !important;
         color: #FFFFFF !important;
         border: 1px solid #475569 !important;
         border-radius: 8px !important;
     }
-    /* Primary Buttons */
+
+    /* Primary Action Buttons */
     .stButton > button {
         background: linear-gradient(90deg, #3B82F6, #8B5CF6) !important;
         color: #FFFFFF !important;
         font-weight: bold !important;
         border: none !important;
-        padding: 10px 24px !important;
-        border-radius: 8px !important;
-        box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35) !important;
+        padding: 12px 28px !important;
+        border-radius: 10px !important;
+        box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4) !important;
+        transition: all 0.2s ease-in-out !important;
     }
     .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 22px rgba(56, 189, 248, 0.55) !important;
     }
+
     /* Tab navigation high visibility */
     button[data-baseweb="tab"] {
         color: #94A3B8 !important;
         font-size: 16px !important;
-        font-weight: 600 !important;
+        font-weight: 700 !important;
+        padding: 10px 20px !important;
     }
     button[data-baseweb="tab"][aria-selected="true"] {
         color: #38BDF8 !important;
-        border-bottom-color: #38BDF8 !important;
+        border-bottom: 3px solid #38BDF8 !important;
     }
 
     /* Top Header Bar */
@@ -88,16 +115,16 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 16px 24px;
-        background: linear-gradient(180deg, rgba(17, 24, 39, 0.95) 0%, rgba(15, 23, 42, 0.85) 100%);
+        padding: 18px 28px;
+        background: rgba(15, 23, 42, 0.85);
         backdrop-filter: blur(16px);
-        border: 1px solid #334155;
-        border-radius: 14px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 16px;
+        margin-bottom: 22px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
     }
     .brand-title {
-        font-size: 1.4rem;
+        font-size: 1.45rem;
         font-weight: 850;
         background: linear-gradient(135deg, #ffffff 0%, #38bdf8 50%, #a855f7 100%);
         -webkit-background-clip: text;
@@ -115,25 +142,39 @@ st.markdown("""
         box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
     }
 
-    /* Card Containers */
-    .saas-card {
-        border: 1px solid #334155;
-        border-radius: 12px;
-        padding: 20px;
-        background-color: #111827;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-        margin-bottom: 20px;
+    /* Visual Feature Showcase Card */
+    .feature-showcase-card {
+        background: rgba(17, 24, 39, 0.8);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        transition: transform 0.2s ease, border-color 0.2s ease;
+        margin-bottom: 18px;
     }
-
-    /* Audit Display Card */
-    .audit-card {
-        border-left: 4px solid #10b981;
-        background: #111827;
+    .feature-showcase-card:hover {
+        transform: translateY(-4px);
+        border-color: #38bdf8;
+    }
+    .feature-img {
+        width: 100%;
+        height: 140px;
+        object-fit: cover;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .feature-body {
         padding: 16px;
-        border-radius: 8px;
-        margin-bottom: 12px;
-        border: 1px solid #1f2937;
-        color: #f8fafc !important;
+    }
+    .feature-pill {
+        display: inline-block;
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
     }
 
     /* Large Mailto Button */
@@ -143,7 +184,7 @@ st.markdown("""
         color: #ffffff !important;
         text-decoration: none;
         padding: 14px 32px;
-        border-radius: 10px;
+        border-radius: 12px;
         font-weight: 700;
         font-size: 1.05rem;
         box-shadow: 0 4px 18px rgba(37, 99, 235, 0.45);
@@ -154,6 +195,19 @@ st.markdown("""
     .mailto-upgrade-btn:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 24px rgba(56, 189, 248, 0.55);
+    }
+
+    /* Ad / Sponsor Container */
+    .ad-banner-card {
+        background: linear-gradient(90deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 27, 75, 0.9) 50%, rgba(15, 23, 42, 0.9) 100%);
+        border: 1px dashed #6366f1;
+        border-radius: 14px;
+        padding: 18px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 30px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -229,9 +283,7 @@ def generate_mailto_url(user_email: str) -> str:
     return f"mailto:{ADMIN_CONTACT_EMAIL}?subject={subject}&body={body}"
 
 
-# =============================================================
-# 3. PREVENT SCREEN BLANKING: INITIALIZE STATE IMMEDIATELY
-# =============================================================
+# Initialize State Immediately
 if "credits" not in st.session_state:
     st.session_state.credits = 3
 if "user_email" not in st.session_state or not st.session_state.user_email:
@@ -289,6 +341,20 @@ with st.sidebar:
 
     st.divider()
 
+    # Sidebar Sponsor / Partner Card
+    st.markdown("""
+    <div style="background:rgba(30,41,59,0.8); border:1px solid #6366f1; border-radius:12px; padding:14px; text-align:center;">
+        <span style="font-size:0.65rem; background:#ca8a04; color:#ffffff; padding:2px 6px; border-radius:4px; font-weight:700;">⭐ PARTNER SPOTLIGHT</span>
+        <div style="font-size:0.88rem; font-weight:700; color:#f8fafc; margin-top:6px;">Cold Email Infrastructure</div>
+        <p style="font-size:0.78rem; color:#cbd5e1; margin-top:4px; margin-bottom:8px; line-height:1.4;">
+            Scale deliverability with dedicated sending pools & domain warm-up.
+        </p>
+        <span style="font-size:0.72rem; color:#93c5fd; border:1px solid #334155; padding:2px 8px; border-radius:9999px;">Sponsored Partner</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.divider()
+
     # Quick Email Request link
     st.markdown("#### 💎 Need More Credits?")
     mailto_sidebar = generate_mailto_url(st.session_state.user_email)
@@ -313,17 +379,64 @@ with st.sidebar:
 
 
 # =============================================================
-# 2. ALWAYS-ACCESSIBLE STREAMLIT NATIVE TABS
+# 2. HERO SHOWCASE & 3-COLUMN VISUAL HIGHLIGHTS
+# =============================================================
+c_h1, c_h2, c_h3 = st.columns(3)
+with c_h1:
+    st.markdown("""
+    <div class="feature-showcase-card">
+        <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=400&q=80" class="feature-img"/>
+        <div class="feature-body">
+            <span class="feature-pill" style="background:#0369a1; color:#e0f2fe;">🌐 Lead Discovery</span>
+            <h4 style="color:#ffffff; margin:4px 0 2px 0;">Automated Lead Hunter</h4>
+            <p style="color:#94a3b8; font-size:0.84rem; line-height:1.4; margin-bottom:0;">
+                High-speed extraction of verified decision-maker emails across any metro.
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with c_h2:
+    st.markdown("""
+    <div class="feature-showcase-card">
+        <img src="https://images.unsplash.com/photo-1677442136019-21780efad99a?auto=format&fit=crop&w=400&q=80" class="feature-img"/>
+        <div class="feature-body">
+            <span class="feature-pill" style="background:#4338ca; color:#e0e7ff;">🤖 Gemini 2026</span>
+            <h4 style="color:#ffffff; margin:4px 0 2px 0;">AI Website Audits</h4>
+            <p style="color:#94a3b8; font-size:0.84rem; line-height:1.4; margin-bottom:0;">
+                Identifies conversion leaks, blind spots, and generates 3-point growth levers.
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with c_h3:
+    st.markdown("""
+    <div class="feature-showcase-card">
+        <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=400&q=80" class="feature-img"/>
+        <div class="feature-body">
+            <span class="feature-pill" style="background:#047857; color:#d1fae5;">📄 Executive Asset</span>
+            <h4 style="color:#ffffff; margin:4px 0 2px 0;">One-Click Executive PDF</h4>
+            <p style="color:#94a3b8; font-size:0.84rem; line-height:1.4; margin-bottom:0;">
+                Download complete white-labeled PDF audits stamped with your agency name.
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# =============================================================
+# 3. CLEAN TABS & PRO DASHBOARD CONTROLS
 # =============================================================
 tab1, tab2, tab3 = st.tabs([
-    "🚀 Lead & Audit Engine (Dashboard)",
-    "📄 Saved Leads & PDF",
-    "💎 Search Credits & Admin"
+    "⚡ Lead Generation Hub",
+    "📋 Scraped Data & PDF Export",
+    "💎 Credits & Upgrade"
 ])
 
 
 # =============================================================
-# TAB 1: LEAD & AUDIT ENGINE (DASHBOARD)
+# TAB 1: LEAD GENERATION HUB
 # =============================================================
 with tab1:
     with st.container(border=True):
@@ -351,7 +464,7 @@ with tab1:
         if not combined_query:
             st.error("Please enter a target niche or location.")
         elif st.session_state.credits <= 0:
-            st.error("⚠️ You have exhausted your free search credits. Please visit the **💎 Search Credits & Admin** tab to request more credits from Haris.")
+            st.error("⚠️ You have exhausted your free search credits. Please visit the **💎 Credits & Upgrade** tab to request more credits from Haris.")
         else:
             st.session_state.running = True
             try:
@@ -396,7 +509,7 @@ with tab1:
 
                             st.session_state.leads_data = results
                             st.session_state.df = pd.DataFrame([r.model_dump() for r in results])
-                            st.toast("Leads generated! View them in '📄 Saved Leads & PDF' tab.", icon="✅")
+                            st.toast("Leads generated! View them in '📋 Scraped Data & PDF Export' tab.", icon="✅")
                             st.rerun()
 
             except Exception as e:
@@ -454,11 +567,11 @@ with tab1:
 
 
 # =============================================================
-# TAB 2: SAVED LEADS & PDF
+# TAB 2: SCRAPED DATA & PDF EXPORT
 # =============================================================
 with tab2:
     if not st.session_state.leads_data:
-        st.info("No leads generated yet. Enter your search query in **🚀 Lead & Audit Engine (Dashboard)** and click 'Generate Leads'.")
+        st.info("No leads generated yet. Enter your search query in **⚡ Lead Generation Hub** and click 'Generate Leads'.")
     else:
         leads: List[EnrichedLead] = st.session_state.leads_data
         df = st.session_state.df
@@ -562,7 +675,7 @@ with tab2:
 
 
 # =============================================================
-# TAB 3: SEARCH CREDITS & ADMIN
+# TAB 3: CREDITS & UPGRADE
 # =============================================================
 with tab3:
     with st.container(border=True):
@@ -604,3 +717,23 @@ with tab3:
                 st.rerun()
             else:
                 st.error("Invalid passcode.")
+
+
+# =============================================================
+# 4. BOTTOM AD BANNER / SPONSOR CONTAINER
+# =============================================================
+st.markdown("""
+<div class="ad-banner-card">
+    <div style="display:flex; align-items:center; gap:14px;">
+        <span style="font-size:1.4rem;">🚀</span>
+        <div>
+            <span style="font-size:0.65rem; background:#ca8a04; color:#ffffff; padding:2px 6px; border-radius:4px; font-weight:700; letter-spacing:0.05em;">SPONSORED PARTNER</span>
+            <div style="font-size:0.95rem; font-weight:800; color:#ffffff; margin-top:2px;">Scale Your Agency Outbound Infrastructure</div>
+            <div style="font-size:0.82rem; color:#cbd5e1;">Get dedicated cold email inboxes with 99.8% placement. Partner slot available.</div>
+        </div>
+    </div>
+    <div>
+        <span style="font-size:0.75rem; border:1px solid #6366f1; color:#93c5fd; padding:4px 12px; border-radius:9999px;">Ad Placement Slot</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
