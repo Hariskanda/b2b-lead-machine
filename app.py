@@ -23,21 +23,21 @@ from b2b_leadgen.pipeline import LeadGenPipeline, detect_company_column
 logger = logging.getLogger(__name__)
 
 # =============================================================
-# 1. PAGE CONFIG & BULLETPROOF CSS
+# 1. PAGE CONFIG & MODERN SLATE SAAS CSS
 # =============================================================
 st.set_page_config(
-    page_title="ApexLeads AI",
+    page_title="ApexLeads AI - B2B Intelligence",
     page_icon="⚡",
     layout="wide"
 )
 
 APP_NAME = "ApexLeads AI"
-APP_TAGLINE = "B2B Outbound Intelligence & Automated Growth Audits"
+APP_SUBTITLE = "B2B Intelligence & Automated Growth Audits"
 ADMIN_CONTACT_EMAIL = "hariskandapg@gmail.com"
 ADMIN_PASSCODE = "admin123"
 UNLOCK_PASSCODE = "4990"
 
-# Inject High-Contrast Pure CSS (Zero External Dependencies)
+# Inject High-Contrast Slate Theme CSS
 st.markdown("""
 <style>
     /* Remove default Streamlit header/footer clutter */
@@ -47,28 +47,26 @@ st.markdown("""
     div[data-testid="stToolbar"] {visibility: hidden;}
     div[data-testid="stDecoration"] {visibility: hidden;}
 
-    /* Dark radial gradient theme */
+    /* Slate Modern Dark Background */
     .stApp {
-        background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #0f172a 50%, #020617 100%) !important;
+        background-color: #0f172a !important;
         color: #FFFFFF !important;
         font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
     }
 
-    /* Force all text pure high-contrast white */
+    /* Force all text pure white or light silver */
     h1, h2, h3, h4, h5, p, span, label, div, .stMarkdown {
         color: #FFFFFF !important;
     }
 
-    /* Glassmorphic card containers */
-    .glass-card {
-        background: rgba(30, 41, 59, 0.7) !important;
-        backdrop-filter: blur(12px) !important;
-        -webkit-backdrop-filter: blur(12px) !important;
-        border: 1px solid rgba(148, 163, 184, 0.25) !important;
-        border-radius: 14px !important;
+    /* Cards & Containers */
+    .slate-card {
+        background-color: #1E293B !important;
+        border: 1px solid #334155 !important;
+        border-radius: 12px !important;
         padding: 20px !important;
-        margin-bottom: 18px !important;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
+        margin-bottom: 16px !important;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25) !important;
     }
 
     /* Top Platform Header */
@@ -77,16 +75,16 @@ st.markdown("""
         justify-content: space-between;
         align-items: center;
         padding: 16px 24px;
-        background: rgba(15, 23, 42, 0.85);
-        border: 1px solid rgba(148, 163, 184, 0.2);
-        border-radius: 14px;
+        background-color: #1E293B;
+        border: 1px solid #334155;
+        border-radius: 12px;
         margin-bottom: 20px;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
     }
     .brand-title {
         font-size: 1.45rem;
         font-weight: 850;
-        background: linear-gradient(135deg, #ffffff 0%, #38bdf8 50%, #a855f7 100%);
+        background: linear-gradient(135deg, #ffffff 0%, #38bdf8 50%, #818cf8 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         letter-spacing: -0.02em;
@@ -102,11 +100,11 @@ st.markdown("""
         box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
     }
 
-    /* Native CSS Feature Highlight Cards */
+    /* Feature Highlight Boxes */
     .feature-box {
-        background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
-        border: 1px solid rgba(99, 102, 241, 0.3);
-        border-radius: 14px;
+        background-color: #1E293B;
+        border: 1px solid #334155;
+        border-radius: 12px;
         padding: 18px;
         margin-bottom: 16px;
         transition: transform 0.2s ease, border-color 0.2s ease;
@@ -134,7 +132,7 @@ st.markdown("""
         border-radius: 8px !important;
     }
 
-    /* Styled High-Contrast Action Buttons */
+    /* Action Buttons with Blue/Violet Gradient */
     .stButton > button {
         background: linear-gradient(90deg, #3B82F6, #8B5CF6) !important;
         color: #FFFFFF !important;
@@ -150,7 +148,7 @@ st.markdown("""
         box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5) !important;
     }
 
-    /* Tab navigation high visibility */
+    /* Tab navigation visibility */
     button[data-baseweb="tab"] {
         color: #94A3B8 !important;
         font-size: 16px !important;
@@ -165,7 +163,7 @@ st.markdown("""
     /* Audit Display Card */
     .audit-card {
         border-left: 4px solid #10b981;
-        background: #111827;
+        background-color: #111827;
         padding: 16px;
         border-radius: 8px;
         margin-bottom: 12px;
@@ -173,31 +171,31 @@ st.markdown("""
         color: #ffffff !important;
     }
 
-    /* Large Mailto Upgrade Button */
+    /* Mailto Button */
     .mailto-upgrade-btn {
         display: inline-block;
         background: linear-gradient(90deg, #3b82f6, #8b5cf6);
         color: #ffffff !important;
         text-decoration: none;
-        padding: 14px 32px;
-        border-radius: 10px;
+        padding: 12px 28px;
+        border-radius: 8px;
         font-weight: 700;
-        font-size: 1.05rem;
-        box-shadow: 0 4px 18px rgba(37, 99, 235, 0.45);
+        font-size: 1rem;
+        box-shadow: 0 4px 16px rgba(37, 99, 235, 0.45);
         border: 1px solid #60a5fa;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
-        margin: 14px 0;
+        margin: 12px 0;
     }
     .mailto-upgrade-btn:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 24px rgba(56, 189, 248, 0.55);
+        box-shadow: 0 6px 22px rgba(56, 189, 248, 0.55);
     }
 </style>
 """, unsafe_allow_html=True)
 
 
 # =============================================================
-# 2. GLOBAL STATE INITIALIZATION
+# 2. PERSISTENT STATE MANAGEMENT
 # =============================================================
 if "user_email" not in st.session_state or not st.session_state.user_email:
     st.session_state.user_email = "guest@apexleads.ai"
@@ -277,10 +275,9 @@ def safe_execute_pipeline_sync(
 
 def generate_credit_extension_mailto(user_email: str) -> str:
     """Creates a clean mailto link for credit extension requests."""
-    clean_email = user_email.strip() if user_email else "user@agency.com"
     subject = urllib.parse.quote("Credit Extension Request")
     body = urllib.parse.quote(
-        f"Hi Haris,\n\nMy account ({clean_email}) has exhausted its search credits on ApexLeads AI.\nI would like to request more credits.\n\nThank you!"
+        "Hi Haris,\n\nMy account has used all free credits. Please extend my limit.\n\nThank you!"
     )
     return f"mailto:{ADMIN_CONTACT_EMAIL}?subject={subject}&body={body}"
 
@@ -291,15 +288,15 @@ effective_concurrency = int(getattr(settings, "max_concurrent_requests", 5))
 
 
 # =============================================================
-# TOP HEADER BAR
+# TOP PLATFORM HEADER
 # =============================================================
 st.markdown(f"""
 <div class="apex-header">
     <div style="display:flex; align-items:center; gap:12px;">
         <span style="font-size:1.5rem;">⚡</span>
         <div>
-            <span class="brand-title">{APP_NAME}</span>
-            <div style="font-size:0.75rem; color:#94a3b8;">{APP_TAGLINE}</div>
+            <span class="brand-title">{APP_NAME} - B2B Intelligence</span>
+            <div style="font-size:0.78rem; color:#94a3b8;">{APP_SUBTITLE}</div>
         </div>
     </div>
     <div style="display:flex; align-items:center; gap:16px;">
@@ -311,20 +308,31 @@ st.markdown(f"""
 
 
 # =============================================================
-# 3. SIDEBAR (ALWAYS VISIBLE)
+# 3. SIDEBAR CONTROLS & MONETIZATION
 # =============================================================
 with st.sidebar:
     st.markdown(f"### ⚡ **{APP_NAME}**")
+    st.markdown("B2B Intelligence Platform")
     st.markdown(f"👤 **Account:** `{st.session_state.user_email}`")
     st.metric("Remaining Search Credits", st.session_state.credits)
 
-    # Credit Extension Mailto Button
-    mailto_sidebar_credits = generate_credit_extension_mailto(st.session_state.user_email)
-    st.markdown(f"""
-    <a href="{mailto_sidebar_credits}" target="_blank" style="display:block; text-align:center; background:#1e293b; color:#38bdf8; border:1px solid #334155; padding:10px; border-radius:8px; text-decoration:none; font-weight:700; font-size:0.86rem; margin-top:8px;">
-        📧 Email Haris to Extend Credits
-    </a>
-    """, unsafe_allow_html=True)
+    # Limit Exceeded Warning & Mailto Extension
+    if st.session_state.credits == 0:
+        st.error("⚠️ **Credits Exhausted!**")
+        st.caption("You have used all free search credits.")
+        mailto_extension = generate_credit_extension_mailto(st.session_state.user_email)
+        st.markdown(f"""
+        <a href="{mailto_extension}" target="_blank" style="display:block; text-align:center; background:#ef4444; color:#ffffff; padding:10px; border-radius:8px; text-decoration:none; font-weight:700; font-size:0.86rem; margin-top:4px;">
+            📧 Request Credit Extension
+        </a>
+        """, unsafe_allow_html=True)
+    else:
+        mailto_extension = generate_credit_extension_mailto(st.session_state.user_email)
+        st.markdown(f"""
+        <a href="{mailto_extension}" target="_blank" style="display:block; text-align:center; background:#1e293b; color:#38bdf8; border:1px solid #334155; padding:8px 12px; border-radius:8px; text-decoration:none; font-weight:700; font-size:0.84rem; margin-top:6px;">
+            📧 Request More Credits
+        </a>
+        """, unsafe_allow_html=True)
 
     st.divider()
 
@@ -338,11 +346,11 @@ with st.sidebar:
 
     st.divider()
 
-    # 📢 SPONSOR / AD SPOT CONTAINER
+    # 📢 DEDICATED SPONSOR SPOTLIGHT AD SLOT
     st.markdown("""
-    <div style="background:rgba(30,41,59,0.85); border:1px solid #38BDF8; border-radius:12px; padding:16px; text-align:center; box-shadow:0 4px 16px rgba(56,189,248,0.15);">
+    <div style="background-color:#1E293B; border:1px solid #38BDF8; border-radius:12px; padding:16px; text-align:center; box-shadow:0 4px 16px rgba(56,189,248,0.15);">
         <div style="font-size:0.75rem; font-weight:800; color:#38BDF8; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:6px;">📢 SPONSOR SPOTLIGHT</div>
-        <div style="font-size:0.88rem; font-weight:700; color:#F8FAFC; margin-bottom:6px;">Promote Your B2B Tool or Agency</div>
+        <div style="font-size:0.88rem; font-weight:700; color:#FFFFFF; margin-bottom:6px;">Promote Your B2B Tool or Agency</div>
         <p style="font-size:0.78rem; color:#CBD5E1; line-height:1.4; margin-bottom:12px;">
             Promote your B2B software, service, or agency to active sales professionals here.
         </p>
@@ -352,8 +360,8 @@ with st.sidebar:
 
     st.divider()
 
-    # Hidden / Collapsible Admin Panel
-    with st.expander("🔑 Admin Controls", expanded=False):
+    # Admin Passcode Expander
+    with st.expander("🔑 Admin Passcode Controls", expanded=False):
         passcode_in = st.text_input("Enter Passcode to reset to 10 credits", type="password")
         if st.button("Reset Credits to 10", width="stretch"):
             if passcode_in.strip() in [ADMIN_PASSCODE, UNLOCK_PASSCODE]:
@@ -365,7 +373,7 @@ with st.sidebar:
 
 
 # =============================================================
-# 4. PERMANENT 3-TAB MAIN LAYOUT (NEVER HIDE TABS)
+# 4. PRIMARY TAB NAVIGATION (ALWAYS VISIBLE)
 # =============================================================
 tab_engine, tab_results, tab_sponsors = st.tabs([
     "🚀 Lead & Audit Engine",
@@ -375,7 +383,7 @@ tab_engine, tab_results, tab_sponsors = st.tabs([
 
 
 # =============================================================
-# 5. TAB 1: LEAD & AUDIT ENGINE
+# TAB 1: 🚀 LEAD & AUDIT ENGINE
 # =============================================================
 with tab_engine:
     # Feature Highlights Showcase (Native CSS & SVG Badges)
@@ -438,7 +446,7 @@ with tab_engine:
         with c_stat:
             st.metric("Remaining Search Credits", st.session_state.credits)
 
-    # Lead Generation Action
+    # Lead Generation Execution
     if btn_generate:
         combined_query = f"{niche_query.strip()} in {location_query.strip()}".strip() if location_query.strip() else niche_query.strip()
 
@@ -498,7 +506,7 @@ with tab_engine:
             finally:
                 st.session_state.is_scraping = False
 
-    # Optional CSV Upload Section
+    # Optional CSV Batch Upload Section
     with st.expander("📁 Or Enrich an Existing CSV File", expanded=False):
         uploaded_file = st.file_uploader("Upload CSV with company names", type=["csv"])
         if uploaded_file is not None:
@@ -548,22 +556,22 @@ with tab_engine:
 
     # 🎯 Bottom Leaderboard Ad Container (728x90 style)
     st.markdown("""
-    <div style="background:rgba(30, 41, 59, 0.5); border:1px dashed #64748B; border-radius:12px; padding:18px 24px; display:flex; justify-content:space-between; align-items:center; margin-top:28px;">
+    <div style="background-color:#1E293B; border:1px dashed #64748B; border-radius:12px; padding:18px 24px; display:flex; justify-content:space-between; align-items:center; margin-top:28px;">
         <div>
-            <div style="font-size:0.92rem; font-weight:700; color:#F8FAFC;">🎯 ADVERTISEMENT SPACE AVAILABLE — Reach hundreds of B2B marketers daily.</div>
+            <div style="font-size:0.92rem; font-weight:700; color:#FFFFFF;">🎯 ADVERTISEMENT SPACE AVAILABLE — Reach hundreds of B2B marketers daily.</div>
             <div style="font-size:0.80rem; color:#94A3B8; margin-top:4px;">
                 Interested in advertising? Contact: <a href="mailto:hariskandapg@gmail.com?subject=Leaderboard%20Ad%20Inquiry" style="color:#38BDF8; text-decoration:none; font-weight:600;">hariskandapg@gmail.com</a>
             </div>
         </div>
         <div>
-            <a href="mailto:hariskandapg@gmail.com?subject=Leaderboard%20Ad%20Inquiry" target="_blank" style="background:#1E293B; border:1px solid #38BDF8; color:#38BDF8; padding:6px 14px; border-radius:6px; font-size:0.82rem; text-decoration:none; font-weight:600;">Reserve Spot</a>
+            <a href="mailto:hariskandapg@gmail.com?subject=Leaderboard%20Ad%20Inquiry" target="_blank" style="background:#0F172A; border:1px solid #38BDF8; color:#38BDF8; padding:6px 14px; border-radius:6px; font-size:0.82rem; text-decoration:none; font-weight:600;">Reserve Spot</a>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
 
 # =============================================================
-# 6. TAB 2: SCRAPED LEADS & PDF EXPORT
+# TAB 2: 📊 SCRAPED LEADS & PDF EXPORT
 # =============================================================
 with tab_results:
     if not st.session_state.leads_data:
@@ -671,22 +679,22 @@ with tab_results:
 
     # 🎯 Bottom Leaderboard Ad Container (728x90 style)
     st.markdown("""
-    <div style="background:rgba(30, 41, 59, 0.5); border:1px dashed #64748B; border-radius:12px; padding:18px 24px; display:flex; justify-content:space-between; align-items:center; margin-top:28px;">
+    <div style="background-color:#1E293B; border:1px dashed #64748B; border-radius:12px; padding:18px 24px; display:flex; justify-content:space-between; align-items:center; margin-top:28px;">
         <div>
-            <div style="font-size:0.92rem; font-weight:700; color:#F8FAFC;">🎯 ADVERTISEMENT SPACE AVAILABLE — Reach hundreds of B2B marketers daily.</div>
+            <div style="font-size:0.92rem; font-weight:700; color:#FFFFFF;">🎯 ADVERTISEMENT SPACE AVAILABLE — Reach hundreds of B2B marketers daily.</div>
             <div style="font-size:0.80rem; color:#94A3B8; margin-top:4px;">
                 Interested in advertising? Contact: <a href="mailto:hariskandapg@gmail.com?subject=Leaderboard%20Ad%20Inquiry" style="color:#38BDF8; text-decoration:none; font-weight:600;">hariskandapg@gmail.com</a>
             </div>
         </div>
         <div>
-            <a href="mailto:hariskandapg@gmail.com?subject=Leaderboard%20Ad%20Inquiry" target="_blank" style="background:#1E293B; border:1px solid #38BDF8; color:#38BDF8; padding:6px 14px; border-radius:6px; font-size:0.82rem; text-decoration:none; font-weight:600;">Reserve Spot</a>
+            <a href="mailto:hariskandapg@gmail.com?subject=Leaderboard%20Ad%20Inquiry" target="_blank" style="background:#0F172A; border:1px solid #38BDF8; color:#38BDF8; padding:6px 14px; border-radius:6px; font-size:0.82rem; text-decoration:none; font-weight:600;">Reserve Spot</a>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
 
 # =============================================================
-# 7. TAB 3: ADVERTISING & CREDITS
+# TAB 3: 💼 ADVERTISING & CREDITS
 # =============================================================
 with tab_sponsors:
     with st.container(border=True):
@@ -727,7 +735,7 @@ with tab_sponsors:
         c_ad1, c_ad2, c_ad3 = st.columns(3)
         with c_ad1:
             st.markdown("""
-            <div style="background:rgba(15,23,42,0.8); border:1px solid #334155; border-radius:10px; padding:14px;">
+            <div style="background-color:#0F172A; border:1px solid #334155; border-radius:10px; padding:14px;">
                 <h5 style="color:#38BDF8; margin:0 0 6px 0;">1. Sidebar Sponsor Card</h5>
                 <p style="font-size:0.80rem; color:#CBD5E1; margin:0; line-height:1.4;">
                     Persistent placement in the left navigation sidebar visible across every search session.
@@ -737,7 +745,7 @@ with tab_sponsors:
 
         with c_ad2:
             st.markdown("""
-            <div style="background:rgba(15,23,42,0.8); border:1px solid #334155; border-radius:10px; padding:14px;">
+            <div style="background-color:#0F172A; border:1px solid #334155; border-radius:10px; padding:14px;">
                 <h5 style="color:#818CF8; margin:0 0 6px 0;">2. Leaderboard Banner</h5>
                 <p style="font-size:0.80rem; color:#CBD5E1; margin:0; line-height:1.4;">
                     Full-width responsive 728x90 style banner container under the Lead Engine and Results tabs.
@@ -747,7 +755,7 @@ with tab_sponsors:
 
         with c_ad3:
             st.markdown("""
-            <div style="background:rgba(15,23,42,0.8); border:1px solid #334155; border-radius:10px; padding:14px;">
+            <div style="background-color:#0F172A; border:1px solid #334155; border-radius:10px; padding:14px;">
                 <h5 style="color:#34D399; margin:0 0 6px 0;">3. Custom Integration</h5>
                 <p style="font-size:0.80rem; color:#CBD5E1; margin:0; line-height:1.4;">
                     Dedicated partner recommendations stamped inside white-labeled PDF audits and exports.
