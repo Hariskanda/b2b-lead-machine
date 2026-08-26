@@ -23,7 +23,7 @@ from b2b_leadgen.pipeline import LeadGenPipeline, detect_company_column
 logger = logging.getLogger(__name__)
 
 # =============================================================
-# 1. GLOBAL PAGE CONFIG & MODERN SAAS CSS
+# 1. GLOBAL PAGE CONFIG & VIBRANT MODERN SAAS CSS
 # =============================================================
 st.set_page_config(
     page_title="ApexLeads AI",
@@ -32,11 +32,12 @@ st.set_page_config(
 )
 
 APP_NAME = "ApexLeads AI"
+APP_TAGLINE = "B2B Outbound Intelligence & Automated Growth Audits"
 ADMIN_CONTACT_EMAIL = "hariskandapg@gmail.com"
 ADMIN_PASSCODE = "admin123"
 UNLOCK_PASSCODE = "4990"
 
-# Inject modern dark-mode SaaS CSS
+# Inject modern dark-mode SaaS CSS with vibrant tech styling
 st.markdown("""
 <style>
     /* Remove default Streamlit header/footer clutter */
@@ -46,7 +47,7 @@ st.markdown("""
     div[data-testid="stToolbar"] {visibility: hidden;}
     div[data-testid="stDecoration"] {visibility: hidden;}
 
-    /* Modern Dark Theme */
+    /* Vibrant Modern Dark Theme */
     .stApp {
         background-color: #0b0f17;
         color: #f8fafc;
@@ -58,46 +59,45 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 16px 24px;
+        padding: 18px 28px;
         background: linear-gradient(180deg, rgba(17, 24, 39, 0.95) 0%, rgba(15, 23, 42, 0.85) 100%);
         backdrop-filter: blur(16px);
         border: 1px solid #1e293b;
-        border-radius: 14px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+        border-radius: 16px;
+        margin-bottom: 22px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
     }
     .brand-title {
-        font-size: 1.35rem;
+        font-size: 1.45rem;
         font-weight: 850;
-        background: linear-gradient(135deg, #ffffff 0%, #38bdf8 60%, #818cf8 100%);
+        background: linear-gradient(135deg, #ffffff 0%, #38bdf8 45%, #a855f7 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         letter-spacing: -0.02em;
     }
-
-    /* Rounded Container Cards */
-    .saas-card {
-        border: 1px solid #334155;
-        border-radius: 12px;
-        padding: 22px;
-        background-color: #111827;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-        margin-bottom: 20px;
+    .brand-badge {
+        font-size: 0.72rem;
+        background: rgba(16, 185, 129, 0.15);
+        color: #34d399;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        padding: 2px 8px;
+        border-radius: 9999px;
+        font-weight: 600;
     }
 
     /* Hero Sign-In Card */
     .hero-sign-card {
-        border: 1px solid #3b82f6;
-        border-radius: 18px;
-        padding: 40px 32px;
+        border: 1px solid rgba(99, 102, 241, 0.4);
+        border-radius: 20px;
+        padding: 44px 32px;
         background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #0f172a 100%);
         text-align: center;
-        box-shadow: 0 12px 36px rgba(59, 130, 246, 0.25);
-        max-width: 680px;
-        margin: 40px auto 20px auto;
+        box-shadow: 0 16px 40px rgba(99, 102, 241, 0.25);
+        max-width: 720px;
+        margin: 30px auto 20px auto;
     }
     .hero-sign-card h1 {
-        font-size: 2.3rem;
+        font-size: 2.5rem;
         font-weight: 850;
         background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
         -webkit-background-clip: text;
@@ -106,9 +106,43 @@ st.markdown("""
     }
     .hero-sign-card p {
         color: #cbd5e1;
-        font-size: 1.05rem;
-        line-height: 1.5;
+        font-size: 1.08rem;
+        line-height: 1.6;
         margin-bottom: 24px;
+    }
+
+    /* Visual Feature Spotlight Cards */
+    .spotlight-card {
+        background: #111827;
+        border: 1px solid #1f2937;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        transition: transform 0.2s ease, border-color 0.2s ease;
+        height: 100%;
+    }
+    .spotlight-card:hover {
+        transform: translateY(-4px);
+        border-color: #38bdf8;
+    }
+    .spotlight-img {
+        width: 100%;
+        height: 140px;
+        object-fit: cover;
+        border-bottom: 1px solid #1f2937;
+    }
+    .spotlight-content {
+        padding: 18px;
+    }
+    .spotlight-tag {
+        display: inline-block;
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
     }
 
     /* Audit Display Card */
@@ -116,7 +150,7 @@ st.markdown("""
         border-left: 4px solid #10b981;
         background: #111827;
         padding: 16px;
-        border-radius: 8px;
+        border-radius: 10px;
         margin-bottom: 12px;
         border: 1px solid #1f2937;
         color: #e2e8f0;
@@ -137,46 +171,91 @@ st.markdown("""
         display: inline-block;
         background: linear-gradient(135deg, #059669 0%, #10b981 100%);
         color: #ffffff;
-        padding: 4px 12px;
+        padding: 5px 14px;
         border-radius: 9999px;
-        font-size: 0.8rem;
+        font-size: 0.82rem;
         font-weight: 700;
+        box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
+    }
+    .pill-pro {
+        display: inline-block;
+        background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+        color: #ffffff;
+        padding: 5px 14px;
+        border-radius: 9999px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
     }
 
     /* Large Mailto Upgrade Button */
     .mailto-upgrade-btn {
         display: inline-block;
-        background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+        background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
         color: #ffffff !important;
         text-decoration: none;
         padding: 14px 32px;
-        border-radius: 10px;
+        border-radius: 12px;
         font-weight: 700;
         font-size: 1.05rem;
-        box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
+        box-shadow: 0 4px 18px rgba(37, 99, 235, 0.45);
         border: 1px solid #60a5fa;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
         margin: 16px 0;
     }
     .mailto-upgrade-btn:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 22px rgba(56, 189, 248, 0.5);
+        box-shadow: 0 6px 24px rgba(56, 189, 248, 0.55);
+    }
+
+    /* Sidebar Sponsored Partner Box */
+    .sidebar-sponsor-box {
+        background: linear-gradient(180deg, #111827 0%, #1e1b4b 100%);
+        border: 1px solid rgba(99, 102, 241, 0.4);
+        border-radius: 14px;
+        padding: 16px;
+        text-align: center;
+        margin-top: 14px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+    .ad-badge {
+        font-size: 0.65rem;
+        background: rgba(234, 179, 8, 0.2);
+        color: #facc15;
+        border: 1px solid rgba(234, 179, 8, 0.4);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+    }
+
+    /* Leaderboard Ad Container (728x90 style) */
+    .leaderboard-ad-container {
+        background: linear-gradient(90deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+        border: 1px dashed #475569;
+        border-radius: 14px;
+        padding: 18px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 30px 0 10px 0;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
     }
 
     /* Styled Action Buttons */
     div.stButton > button:first-child {
-        border-radius: 8px;
+        border-radius: 10px;
         font-weight: 600;
         transition: all 0.2s ease-in-out;
     }
     div.stButton > button[kind="primary"]:first-child {
         background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
         border: 1px solid #6366f1;
-        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
     }
     div.stButton > button[kind="primary"]:first-child:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(56, 189, 248, 0.45);
+        box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5);
         border-color: #38bdf8;
     }
 </style>
@@ -281,13 +360,59 @@ effective_concurrency = int(getattr(settings, "max_concurrent_requests", 5))
 if "user_email" not in st.session_state or not st.session_state.user_email:
     st.markdown(f"""
     <div class="hero-sign-card">
-        <span class="pill-badge" style="margin-bottom:12px;">⚡ THE NEW STANDARD IN HIGH-TICKET OUTBOUND</span>
+        <span class="pill-pro" style="margin-bottom:12px;">⚡ THE 2026 STANDARD IN HIGH-TICKET OUTBOUND</span>
         <h1>⚡ ApexLeads AI</h1>
         <p>
             Find high-converting local leads, generate instant AI website audits, and scale client outreach.
         </p>
     </div>
     """, unsafe_allow_html=True)
+
+    # 3-Card Visual Spotlight Carousel
+    c_sp1, c_sp2, c_sp3 = st.columns(3)
+    with c_sp1:
+        st.markdown("""
+        <div class="spotlight-card">
+            <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80" class="spotlight-img"/>
+            <div class="spotlight-content">
+                <span class="spotlight-tag" style="background:#0369a1; color:#e0f2fe;">⚡ High-Speed Extraction</span>
+                <h4 style="color:#ffffff; margin:6px 0 4px 0;">10x Lead Discovery</h4>
+                <p style="color:#94a3b8; font-size:0.86rem; line-height:1.4; margin-bottom:0;">
+                    Target local metros and extract decision-maker emails with 5-worker parallel crawling.
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c_sp2:
+        st.markdown("""
+        <div class="spotlight-card">
+            <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80" class="spotlight-img"/>
+            <div class="spotlight-content">
+                <span class="spotlight-tag" style="background:#4338ca; color:#e0e7ff;">🤖 Gemini 2026 AI</span>
+                <h4 style="color:#ffffff; margin:6px 0 4px 0;">AI Website Audits</h4>
+                <p style="color:#94a3b8; font-size:0.86rem; line-height:1.4; margin-bottom:0;">
+                    Analyze company blind spots, conversion leaks, and generate 3-point value audits.
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c_sp3:
+        st.markdown("""
+        <div class="spotlight-card">
+            <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80" class="spotlight-img"/>
+            <div class="spotlight-content">
+                <span class="spotlight-tag" style="background:#047857; color:#d1fae5;">📄 Executive Deliverable</span>
+                <h4 style="color:#ffffff; margin:6px 0 4px 0;">1-Click PDF Bundles</h4>
+                <p style="color:#94a3b8; font-size:0.86rem; line-height:1.4; margin-bottom:0;">
+                    Download ready-to-present white-labeled PDF audits stamped with your agency branding.
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 24px;'></div>", unsafe_allow_html=True)
 
     col_l, col_m, col_r = st.columns([1, 2, 1])
     with col_m:
@@ -316,7 +441,7 @@ st.markdown(f"""
     <div style="display:flex; align-items:center; gap:12px;">
         <span style="font-size:1.4rem;">⚡</span>
         <span class="brand-title">{APP_NAME}</span>
-        <span class="pill-badge" style="color:#34d399; border-color:rgba(16, 185, 129, 0.3);">● Online</span>
+        <span class="brand-badge">● Online</span>
     </div>
     <div style="display:flex; align-items:center; gap:14px;">
         <span class="pill-credit">🔍 {st.session_state.credits} Search Credits Left</span>
@@ -347,6 +472,23 @@ with st.sidebar:
         agency_web = st.text_input("Agency Website URL", value=st.session_state.agency_website)
         st.session_state.agency_website = agency_web
         st.caption("Custom branding stamped onto all generated PDF audits.")
+
+    st.divider()
+
+    # 📢 Sidebar Monetized Ad / Sponsor Spotlight
+    st.markdown("""
+    <div class="sidebar-sponsor-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span class="ad-badge">📢 SPONSORED</span>
+            <span style="font-size:0.7rem; color:#94a3b8;">Partner Spotlight</span>
+        </div>
+        <div style="font-size:0.88rem; font-weight:700; color:#f8fafc;">Cold Outreach Infrastructure</div>
+        <p style="font-size:0.78rem; color:#cbd5e1; margin-top:6px; margin-bottom:10px; line-height:1.4;">
+            Scale deliverability with dedicated sending pools & automated inbox warm-up.
+        </p>
+        <span class="pill-badge" style="font-size:0.72rem; border-color:#6366f1;">Featured Sponsor</span>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.divider()
 
@@ -387,6 +529,52 @@ tab_dash, tab_leads, tab_upgrade = st.tabs([
 # 4. TAB 1: LEAD ENGINE & SEARCH LIMIT LOGIC
 # =============================================================
 with tab_dash:
+    # Feature Visual Spotlight Header
+    c_v1, c_v2, c_v3 = st.columns(3)
+    with c_v1:
+        st.markdown("""
+        <div class="spotlight-card">
+            <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80" class="spotlight-img"/>
+            <div class="spotlight-content">
+                <span class="spotlight-tag" style="background:#0369a1; color:#e0f2fe;">⚡ 10x Lead Discovery</span>
+                <h4 style="color:#ffffff; margin:4px 0 2px 0;">Target Local Metros</h4>
+                <p style="color:#94a3b8; font-size:0.84rem; line-height:1.4; margin-bottom:0;">
+                    Scrape company websites and verified emails in parallel.
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c_v2:
+        st.markdown("""
+        <div class="spotlight-card">
+            <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80" class="spotlight-img"/>
+            <div class="spotlight-content">
+                <span class="spotlight-tag" style="background:#4338ca; color:#e0e7ff;">🤖 Instant AI Audits</span>
+                <h4 style="color:#ffffff; margin:4px 0 2px 0;">Gemini 2026 Levers</h4>
+                <p style="color:#94a3b8; font-size:0.84rem; line-height:1.4; margin-bottom:0;">
+                    AI evaluates website blind spots and growth opportunities.
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c_v3:
+        st.markdown("""
+        <div class="spotlight-card">
+            <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80" class="spotlight-img"/>
+            <div class="spotlight-content">
+                <span class="spotlight-tag" style="background:#047857; color:#d1fae5;">📄 Executive PDF</span>
+                <h4 style="color:#ffffff; margin:4px 0 2px 0;">Client-Ready Reports</h4>
+                <p style="color:#94a3b8; font-size:0.84rem; line-height:1.4; margin-bottom:0;">
+                    Download complete multi-client audit bundles with cover page.
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+
     with st.container(border=True):
         st.markdown("### 🎯 Find Local Businesses & Generate AI Audits")
         st.markdown("Enter target keywords, industry, and city (e.g. *'Commercial roofing in Miami, FL'* or *'HVAC contractors in Dallas, TX'*):")
@@ -511,6 +699,29 @@ with tab_dash:
                                 st.session_state.running = False
             except Exception as ex:
                 st.error(f"Error reading CSV: {ex}")
+
+    # 📢 Responsive Leaderboard Ad Unit (728x90 Container)
+    st.markdown("""
+    <div class="leaderboard-ad-container">
+        <div style="display:flex; align-items:center; gap:14px;">
+            <div style="background:#1e1b4b; border:1px solid #6366f1; border-radius:8px; padding:6px 10px;">
+                <span style="font-size:1.1rem;">🚀</span>
+            </div>
+            <div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="ad-badge">SPONSORED</span>
+                    <strong style="color:#ffffff; font-size:0.95rem;">Scale Your High-Volume Cold Outbound</strong>
+                </div>
+                <div style="color:#94a3b8; font-size:0.82rem; margin-top:2px;">
+                    Get dedicated inbox infrastructure with 99.8% inbox placement. Built for high-growth B2B agencies.
+                </div>
+            </div>
+        </div>
+        <div style="text-align:right;">
+            <span class="pill-badge" style="border-color:#6366f1; font-size:0.74rem;">Ad Partner Slot</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # =============================================================
