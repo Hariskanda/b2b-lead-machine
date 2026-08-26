@@ -324,6 +324,20 @@ with st.sidebar:
 
     st.divider()
 
+    # 📢 SIDEBAR SPONSOR AD CONTAINER
+    st.markdown("""
+    <div style="background:rgba(30,41,59,0.85); border:1px solid #38BDF8; border-radius:12px; padding:16px; text-align:center; box-shadow:0 4px 16px rgba(56,189,248,0.15);">
+        <div style="font-size:0.75rem; font-weight:800; color:#38BDF8; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:6px;">📢 SPONSOR SPOTLIGHT</div>
+        <div style="font-size:0.88rem; font-weight:700; color:#F8FAFC; margin-bottom:6px;">Promote Your B2B Tool or Agency</div>
+        <p style="font-size:0.78rem; color:#CBD5E1; line-height:1.4; margin-bottom:12px;">
+            Promote your B2B software, service, or agency to active sales professionals here.
+        </p>
+        <a href="mailto:hariskandapg@gmail.com?subject=Sponsor%20Ad%20Placement%20Inquiry&body=Hi%20Haris,%20I%20am%20interested%20in%20placing%20an%20ad/banner%20on%20your%20ApexLeads%20platform.%20Let%20me%20know%20your%20rates%20and%20availability." target="_blank" style="display:inline-block; width:100%; text-align:center; background:#38BDF8; color:#0F172A; font-weight:bold; padding:8px; border-radius:6px; text-decoration:none; font-size:0.85rem;">Reserve This Ad Spot ($)</a>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.divider()
+
     # Quick Email Request link
     st.markdown("#### 💎 Need More Credits?")
     mailto_sidebar = generate_mailto_url(st.session_state.user_email)
@@ -531,6 +545,21 @@ with tab1:
             except Exception as ex:
                 st.error(f"Error reading CSV: {ex}")
 
+    # 🎯 LEADERBOARD AD CONTAINER
+    st.markdown("""
+    <div style="background:rgba(30, 41, 59, 0.5); border:1px dashed #64748B; border-radius:12px; padding:18px 24px; display:flex; justify-content:space-between; align-items:center; margin-top:28px;">
+        <div>
+            <div style="font-size:0.92rem; font-weight:700; color:#F8FAFC;">🎯 ADVERTISEMENT SPACE AVAILABLE — Reach hundreds of B2B marketers daily.</div>
+            <div style="font-size:0.80rem; color:#94A3B8; margin-top:4px;">
+                Interested in advertising? Contact: <a href="mailto:hariskandapg@gmail.com?subject=Leaderboard%20Ad%20Inquiry" style="color:#38BDF8; text-decoration:none; font-weight:600;">hariskandapg@gmail.com</a>
+            </div>
+        </div>
+        <div>
+            <a href="mailto:hariskandapg@gmail.com?subject=Leaderboard%20Ad%20Inquiry" target="_blank" style="background:#1E293B; border:1px solid #38BDF8; color:#38BDF8; padding:6px 14px; border-radius:6px; font-size:0.82rem; text-decoration:none; font-weight:600;">Reserve Spot</a>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 # =============================================================
 # TAB 2: 📊 SCRAPED RESULTS & PDF
@@ -639,6 +668,21 @@ with tab2:
                         st.caption(f"PDF gen error: {e}")
                 st.divider()
 
+    # 🎯 LEADERBOARD AD CONTAINER
+    st.markdown("""
+    <div style="background:rgba(30, 41, 59, 0.5); border:1px dashed #64748B; border-radius:12px; padding:18px 24px; display:flex; justify-content:space-between; align-items:center; margin-top:28px;">
+        <div>
+            <div style="font-size:0.92rem; font-weight:700; color:#F8FAFC;">🎯 ADVERTISEMENT SPACE AVAILABLE — Reach hundreds of B2B marketers daily.</div>
+            <div style="font-size:0.80rem; color:#94A3B8; margin-top:4px;">
+                Interested in advertising? Contact: <a href="mailto:hariskandapg@gmail.com?subject=Leaderboard%20Ad%20Inquiry" style="color:#38BDF8; text-decoration:none; font-weight:600;">hariskandapg@gmail.com</a>
+            </div>
+        </div>
+        <div>
+            <a href="mailto:hariskandapg@gmail.com?subject=Leaderboard%20Ad%20Inquiry" target="_blank" style="background:#1E293B; border:1px solid #38BDF8; color:#38BDF8; padding:6px 14px; border-radius:6px; font-size:0.82rem; text-decoration:none; font-weight:600;">Reserve Spot</a>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 # =============================================================
 # TAB 3: 💎 ACCOUNT & CREDITS
@@ -669,6 +713,60 @@ with tab3:
         """, unsafe_allow_html=True)
 
         st.caption(f"Direct Contact: `{ADMIN_CONTACT_EMAIL}`")
+
+    st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+
+    # 💼 PARTNER & ADVERTISING OPPORTUNITIES SECTION
+    with st.container(border=True):
+        st.markdown("### 💼 Partner & Advertising Opportunities")
+        st.markdown("""
+        Promote your product, agency, or B2B SaaS tool directly to founders, agency executives, and sales professionals using ApexLeads AI daily.
+        """)
+
+        c_ad1, c_ad2, c_ad3 = st.columns(3)
+        with c_ad1:
+            st.markdown("""
+            <div style="background:rgba(15,23,42,0.8); border:1px solid #334155; border-radius:10px; padding:14px;">
+                <h5 style="color:#38BDF8; margin:0 0 6px 0;">1. Sidebar Sponsor Card</h5>
+                <p style="font-size:0.80rem; color:#CBD5E1; margin:0; line-height:1.4;">
+                    Persistent placement in the left navigation sidebar visible across every search session.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with c_ad2:
+            st.markdown("""
+            <div style="background:rgba(15,23,42,0.8); border:1px solid #334155; border-radius:10px; padding:14px;">
+                <h5 style="color:#818CF8; margin:0 0 6px 0;">2. Leaderboard Banner</h5>
+                <p style="font-size:0.80rem; color:#CBD5E1; margin:0; line-height:1.4;">
+                    Full-width responsive 728x90 style banner container under the Lead Engine and Results tabs.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with c_ad3:
+            st.markdown("""
+            <div style="background:rgba(15,23,42,0.8); border:1px solid #334155; border-radius:10px; padding:14px;">
+                <h5 style="color:#34D399; margin:0 0 6px 0;">3. Custom Integration</h5>
+                <p style="font-size:0.80rem; color:#CBD5E1; margin:0; line-height:1.4;">
+                    Dedicated partner recommendations stamped inside white-labeled PDF audits and exports.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        
+        sponsor_mailto = (
+            f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Sponsorship%20&%20Partner%20Inquiry"
+            f"&body=Hi%20Haris,%20I%20would%20like%20to%20learn%20more%20about%20advertising%20and%20partnering%20with%20ApexLeads%20AI."
+        )
+        st.markdown(f"""
+        <div style="text-align:center; padding:10px 0;">
+            <a href="{sponsor_mailto}" target="_blank" style="display:inline-block; background:linear-gradient(90deg, #38BDF8, #818CF8); color:#0F172A; font-weight:bold; padding:12px 28px; border-radius:8px; text-decoration:none; font-size:0.95rem; box-shadow:0 4px 14px rgba(56,189,248,0.35);">
+                📢 Inquire About Sponsorship (hariskandapg@gmail.com)
+            </a>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
 
