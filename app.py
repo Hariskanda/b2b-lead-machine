@@ -24,7 +24,7 @@ from b2b_leadgen.scraper import filter_valid_emails, clean_html_to_text, EMAIL_R
 logger = logging.getLogger(__name__)
 
 # =============================================================
-# 1. CORE DEPENDENCIES & PAGE CONFIG
+# 1. PAGE CONFIG & MODERN HIGH-CONTRAST CSS
 # =============================================================
 st.set_page_config(
     page_title="ApexLeads AI | B2B Intelligence",
@@ -43,10 +43,7 @@ UNLOCK_PASSCODE = "4990"
 PHONE_REGEX = re.compile(r'(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})')
 ADDRESS_REGEX = re.compile(r'\d+\s+[A-Za-z0-9\.,\s]+(?:Suite|Ste|St|Street|Ave|Avenue|Rd|Road|Blvd|Boulevard|Dr|Drive|Way|Pkwy|Parkway)\b[A-Za-z0-9\.,\s]*', re.IGNORECASE)
 
-
-# =============================================================
-# 2. INLINE CSS (DARK THEME & 100% CONTRAST)
-# =============================================================
+# Dark theme with deep slate/indigo gradient background (#0f172a to #1e1b4b) & crisp white text (#F8FAFC)
 st.markdown("""
 <style>
     /* Remove default Streamlit header/footer clutter */
@@ -56,20 +53,21 @@ st.markdown("""
     div[data-testid="stToolbar"] {visibility: hidden;}
     div[data-testid="stDecoration"] {visibility: hidden;}
 
-    /* Global text contrast: Force #F8FAFC on all text elements */
+    /* Deep slate/indigo gradient background */
     [data-testid="stAppViewContainer"], .stApp {
-        background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #0f172a 50%, #020617 100%) !important;
+        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%) !important;
         color: #F8FAFC !important;
         font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
     }
 
+    /* Force all text elements to be crisp white */
     h1, h2, h3, h4, h5, h6, p, span, label, div, .stMarkdown {
         color: #F8FAFC !important;
     }
 
-    /* Container cards (.saas-card) */
+    /* Modern Container Cards */
     .saas-card {
-        background-color: #1E293B !important;
+        background: rgba(30, 41, 59, 0.7) !important;
         border: 1px solid #334155 !important;
         border-radius: 12px !important;
         padding: 1.5rem !important;
@@ -77,7 +75,7 @@ st.markdown("""
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3) !important;
     }
 
-    /* Ad container (.ad-card) */
+    /* Ad Container with Dashed Border */
     .ad-card {
         background: rgba(30, 41, 59, 0.4) !important;
         border: 2px dashed #64748B !important;
@@ -90,7 +88,7 @@ st.markdown("""
         align-items: center;
     }
 
-    /* Action Buttons: Blue-to-purple gradient backgrounds with bold pure white text */
+    /* Primary Action Buttons: Blue-to-purple gradient with bold pure white text */
     .stButton > button {
         background: linear-gradient(90deg, #3B82F6, #8B5CF6) !important;
         color: #FFFFFF !important;
@@ -106,7 +104,7 @@ st.markdown("""
         box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5) !important;
     }
 
-    /* Mail links (.mail-btn) */
+    /* Mail Links */
     .mail-btn {
         display: inline-block;
         background-color: #38BDF8 !important;
@@ -124,7 +122,7 @@ st.markdown("""
         box-shadow: 0 4px 16px rgba(56, 189, 248, 0.5) !important;
     }
 
-    /* Public Landing Hero Section */
+    /* Public Landing Hero Banner */
     .hero-banner {
         background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 27, 75, 0.9) 50%, rgba(15, 23, 42, 0.95) 100%);
         border: 1px solid rgba(99, 102, 241, 0.35);
@@ -186,7 +184,7 @@ st.markdown("""
 
 
 # =============================================================
-# 3. PERSISTENT STATE MANAGEMENT
+# 2. STATE INITIALIZATION
 # =============================================================
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -240,7 +238,7 @@ def get_secret(key: str, default: Any = None) -> Any:
 def generate_credit_extension_mailto(user_email: str) -> str:
     """Creates a clean mailto link for credit extension requests."""
     clean_email = user_email.strip() if user_email else "user@agency.com"
-    subject = urllib.parse.quote("Credit Extension Request")
+    subject = urllib.parse.quote("ApexLeads: Request to Extend Credits")
     body = urllib.parse.quote(
         f"Hi Haris,\n\nMy account ({clean_email}) has used all free credits on ApexLeads AI.\nPlease extend my limit.\n\nThank you!"
     )
@@ -361,7 +359,6 @@ def generate_fpdf_lead_audit_report(
         pdf.set_text_color(30, 41, 59)
         pitch_content = lead.personalized_pitch or lead.custom_audit or "Our digital audit identified growth upside in deploying an automated 60-second inbound response system."
         
-        # Clean latin-1 encoding
         safe_pitch = pitch_content.encode('latin-1', 'replace').decode('latin-1')
         pdf.multi_cell(190, 5.5, safe_pitch)
         pdf.ln(6)
@@ -562,10 +559,10 @@ def safe_execute_live_audit_sync(
 
 
 # =============================================================
-# 4. VIEW ROUTING LOGIC: PUBLIC LANDING PAGE (WHEN LOGGED OUT)
+# 3. VIEW 1: LANDING PAGE & LOGIN (WHEN authenticated == False)
 # =============================================================
 if not st.session_state.authenticated:
-    # Public Hero Section
+    # Public Hero Banner
     st.markdown(f"""
     <div class="hero-banner">
         <span style="font-size:0.78rem; background:rgba(56,189,248,0.2); color:#38bdf8; border:1px solid rgba(56,189,248,0.4); padding:4px 14px; border-radius:9999px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em;">
@@ -574,24 +571,24 @@ if not st.session_state.authenticated:
         <h1 style="margin-top:12px;">{APP_NAME}</h1>
         <h3>{APP_SUBTITLE}</h3>
         <p style="color:#cbd5e1; max-width:760px; margin:0 auto; font-size:1.05rem;">
-            Discover high-intent local clients, identify website bottlenecks automatically, and generate executive PDF pitch reports in seconds.
+            Discover high-intent local clients, identify website bottlenecks automatically, and generate executive PDF audits in seconds.
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    # Two-Column Landing Grid
+    # Two-Column Layout
     col_showcase, col_auth = st.columns([3, 2], gap="large")
 
-    # LEFT COLUMN: Interactive Feature Showcase
+    # LEFT: Interactive visual showcase using st.radio
     with col_showcase:
         st.markdown("### 📸 Interactive Platform Showcase")
         slide_choice = st.radio(
             "Preview Platform Capabilities:",
             [
                 "🔍 1. Lead Discovery Engine",
-                "🤖 2. Automated AI Website Audits",
-                "📄 3. Executive PDF Pitch Reports",
-                "⭐ 4. Verified Customer Results"
+                "🤖 2. Automated AI Audit",
+                "📄 3. Executive PDF Pitch Decks",
+                "⭐ 4. Customer Proof"
             ],
             horizontal=True
         )
@@ -612,7 +609,7 @@ if not st.session_state.authenticated:
             </div>
             """, unsafe_allow_html=True)
 
-        elif slide_choice == "🤖 2. Automated AI Website Audits":
+        elif slide_choice == "🤖 2. Automated AI Audit":
             st.markdown("""
             <div class="saas-card">
                 <div style="color:#818CF8; font-weight:800; font-size:0.8rem; margin-bottom:6px;">AUTOMATED STRUCTURAL SCANNER</div>
@@ -627,7 +624,7 @@ if not st.session_state.authenticated:
             </div>
             """, unsafe_allow_html=True)
 
-        elif slide_choice == "📄 3. Executive PDF Pitch Reports":
+        elif slide_choice == "📄 3. Executive PDF Pitch Decks":
             st.markdown("""
             <div class="saas-card">
                 <div style="color:#34D399; font-weight:800; font-size:0.8rem; margin-bottom:6px;">CLIENT DELIVERABLE • WHITE-LABEL FPDF</div>
@@ -638,7 +635,7 @@ if not st.session_state.authenticated:
                 <div style="background:#0F172A; border:1px solid #334155; border-radius:8px; padding:16px; text-align:center;">
                     <span style="font-size:1.8rem;">📑</span>
                     <div style="font-weight:700; color:#FFFFFF; margin-top:4px;">ApexLeads Digital Growth & Client Audit Dossier</div>
-                    <div style="color:#94A3B8; font-size:0.82rem;">Compiled Portfolio: 10 Verified Enterprises • White-Labeled Deliverable</div>
+                    <div style="color:#94A3B8; font-size:0.82rem;">Compiled Portfolio: 15 Verified Enterprises • White-Labeled Deliverable</div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -646,7 +643,7 @@ if not st.session_state.authenticated:
         else:
             st.markdown("""
             <div class="saas-card">
-                <div style="color:#FACC15; font-weight:800; font-size:0.8rem; margin-bottom:6px;">⭐ VERIFIED CUSTOMER REVIEWS</div>
+                <div style="color:#FACC15; font-weight:800; font-size:0.8rem; margin-bottom:6px;">⭐ VERIFIED CUSTOMER PROOF</div>
                 <h4 style="margin:0 0 8px 0; color:#FFFFFF;">Loved by B2B Agencies & Sales Consultants</h4>
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:8px;">
                     <div style="background:#0F172A; border:1px solid #334155; border-radius:8px; padding:12px;">
@@ -667,7 +664,7 @@ if not st.session_state.authenticated:
             </div>
             """, unsafe_allow_html=True)
 
-    # RIGHT COLUMN: Sign-in Container
+    # RIGHT: Sign-in card with text inputs for Name and Email
     with col_auth:
         st.markdown("### 🚀 Access Platform")
         with st.container(border=True):
@@ -680,7 +677,7 @@ if not st.session_state.authenticated:
             </div>
             """, unsafe_allow_html=True)
 
-            login_name = st.text_input("Full Name or Agency Name", placeholder="e.g. Alex Rivera or Apex Agency", key="landing_name_input")
+            login_name = st.text_input("Agency / User Name", placeholder="e.g. Alex Rivera or Apex Agency", key="landing_name_input")
             login_email = st.text_input("Business Email Address", placeholder="e.g. founder@agency.com", key="landing_email_input")
 
             if st.button("Claim 3 Free Credits & Launch Platform →", type="primary", width="stretch"):
@@ -700,7 +697,7 @@ if not st.session_state.authenticated:
 
 
 # =============================================================
-# 4. VIEW ROUTING LOGIC: AUTHENTICATED DASHBOARD
+# 4. VIEW 2: AUTHENTICATED DASHBOARD (WHEN authenticated == True)
 # =============================================================
 
 # TOP PLATFORM HEADER
@@ -770,7 +767,7 @@ with st.sidebar:
 
     st.divider()
 
-    # 📢 SPONSOR AD SPOTLIGHT CARD
+    # 📢 SPONSOR SPOTLIGHT CARD
     st.markdown("""
     <div style="background-color:#1E293B; border:1px solid #38BDF8; border-radius:12px; padding:16px; text-align:center; box-shadow:0 4px 16px rgba(56,189,248,0.15);">
         <div style="font-size:0.75rem; font-weight:800; color:#38BDF8; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:6px;">📢 SPONSOR SPOTLIGHT</div>
@@ -784,7 +781,7 @@ with st.sidebar:
 
     st.divider()
 
-    # Admin Key Expander (Passcode: "admin123")
+    # Collapsible Admin Expander (Passcode: "admin123")
     with st.expander("🔑 Admin Passcode Controls", expanded=False):
         passcode_in = st.text_input("Enter Passcode to reset to 10 credits", type="password")
         if st.button("Reset Credits to 10", width="stretch"):
@@ -797,12 +794,12 @@ with st.sidebar:
 
 
 # =============================================================
-# MAIN TABS (ALWAYS VISIBLE)
+# MAIN DASHBOARD: 3 TABS
 # =============================================================
 tab1, tab2, tab3 = st.tabs([
     "🚀 Lead & Audit Engine",
     "📋 Scraped Leads & PDF Export",
-    "💼 Advertising & Credits"
+    "💼 Sponsorships & Credits"
 ])
 
 
@@ -856,7 +853,7 @@ with tab1:
         with c2:
             location_query = st.text_input("City / Metro Location", placeholder="e.g. Miami, FL", key="location_input")
         with c3:
-            lead_count = st.slider("Lead Count", min_value=1, max_value=20, value=10, step=1)
+            lead_count = st.slider("Lead Count", min_value=1, max_value=15, value=10, step=1)
 
         c_btn, c_stat = st.columns([2, 1])
         with c_btn:
@@ -875,42 +872,38 @@ with tab1:
         else:
             st.session_state.is_scraping = True
             try:
-                with st.spinner(f"🔎 Discovering businesses and generating live website audits for '{combined_query}'..."):
-                    progress_box = st.container(border=True)
-                    with progress_box:
-                        status_text = st.empty()
-                        prog_bar = st.progress(0)
+                with st.status(f"🔎 Discovering businesses and generating live website audits for '{combined_query}'...", expanded=True) as status_box:
+                    prog_bar = st.progress(0)
+                    st.write(f"🔎 Querying DuckDuckGo for: `{combined_query}`...")
+                    discovered = discover_leads_by_keyword(combined_query, max_results=int(lead_count))
 
-                        status_text.info(f"🔎 Searching DuckDuckGo for '{combined_query}'...")
-                        discovered = discover_leads_by_keyword(combined_query, max_results=int(lead_count))
+                    if not discovered:
+                        st.error("No company websites found for this query. Try refining your keywords.")
+                    else:
+                        st.write(f"✅ Found {len(discovered)} businesses! Running live structural scans & audit extraction in parallel...")
 
-                        if not discovered:
-                            status_text.error("No company websites found for this query. Try refining your keywords.")
-                        else:
-                            status_text.success(f"✅ Found {len(discovered)} businesses! Running live structural scan & audit extraction in parallel...")
+                        def update_lead_progress(lead: EnrichedLead, idx: int, tot: int):
+                            pct = int((idx / tot) * 100) if tot > 0 else 0
+                            prog_bar.progress(min(100, max(0, pct)))
+                            contact_info = f" — 📞 Phone: `{lead.phone_number}`" if lead.phone_number else ""
+                            email_info = f" • 📧 Email: `{lead.primary_email}`" if lead.primary_email else ""
+                            st.write(f"⚡ **Auditing {idx} of {tot}:** `{lead.company_name}` (Score: {lead.audit_score}/100){contact_info}{email_info}")
 
-                            def update_lead_progress(lead: EnrichedLead, idx: int, tot: int):
-                                pct = int((idx / tot) * 100) if tot > 0 else 0
-                                prog_bar.progress(min(100, max(0, pct)))
-                                contact_info = f" — 📞 Phone: `{lead.phone_number}`" if lead.phone_number else ""
-                                email_info = f" • 📧 Email: `{lead.primary_email}`" if lead.primary_email else ""
-                                status_text.markdown(f"⚡ **Auditing {idx} of {tot}:** `{lead.company_name}` (Score: {lead.audit_score}/100){contact_info}{email_info}")
+                        results = safe_execute_live_audit_sync(
+                            inputs=discovered,
+                            location_hint=location_query.strip(),
+                            progress_callback=update_lead_progress
+                        )
 
-                            results = safe_execute_live_audit_sync(
-                                inputs=discovered,
-                                location_hint=location_query.strip(),
-                                progress_callback=update_lead_progress
-                            )
+                        # Deduct credit on successful run
+                        st.session_state.credits -= 1
+                        prog_bar.progress(100)
+                        status_box.update(label=f"🎉 Successfully generated {len(results)} verified leads with Live Website Audits! (1 credit deducted)", state="complete")
 
-                            # Deduct credit on successful run
-                            st.session_state.credits -= 1
-                            prog_bar.progress(100)
-                            status_text.success(f"🎉 Successfully generated {len(results)} verified leads with Live Website Audits! (1 credit deducted)")
-
-                            st.session_state.leads_data = results
-                            st.session_state.df = pd.DataFrame([r.model_dump() for r in results])
-                            st.toast("Leads generated! View them in '📋 Scraped Leads & PDF Export' tab.", icon="✅")
-                            st.rerun()
+                        st.session_state.leads_data = results
+                        st.session_state.df = pd.DataFrame([r.model_dump() for r in results])
+                        st.toast("Leads generated! View them in '📋 Scraped Leads & PDF Export' tab.", icon="✅")
+                        st.rerun()
 
             except Exception as e:
                 st.error(f"Error during lead generation: {e}")
@@ -1037,9 +1030,9 @@ with tab2:
                     agency_website=st.session_state.agency_website
                 )
                 st.download_button(
-                    label="📄 Download White-Labeled PDF Audit",
+                    label="📄 Download Executive Audit PDF",
                     data=fpdf_bytes,
-                    file_name=f"apexleads_fpdf_audit_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                    file_name=f"apexleads_executive_audit_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                     mime="application/pdf",
                     type="primary",
                     width="stretch"
@@ -1090,7 +1083,7 @@ with tab2:
 
 
 # =============================================================
-# TAB 3: 💼 ADVERTISING & CREDITS
+# TAB 3: 💼 SPONSORSHIPS & CREDITS
 # =============================================================
 with tab3:
     with st.container(border=True):
