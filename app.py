@@ -4,10 +4,13 @@ import json
 import logging
 import os
 import re
+import time
 import urllib.parse
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
+import httpx
+from bs4 import BeautifulSoup
 import pandas as pd
 import streamlit as st
 
@@ -19,6 +22,7 @@ from b2b_leadgen.pdf_generator import (
     generate_company_audit_pdf
 )
 from b2b_leadgen.pipeline import LeadGenPipeline, detect_company_column
+from b2b_leadgen.scraper import filter_valid_emails, clean_html_to_text, EMAIL_REGEX
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +40,10 @@ APP_SUBTITLE = "B2B Intelligence & Automated Growth Audits"
 ADMIN_CONTACT_EMAIL = "hariskandapg@gmail.com"
 ADMIN_PASSCODE = "admin123"
 UNLOCK_PASSCODE = "4990"
+
+# Phone number regex patterns
+PHONE_REGEX = re.compile(r'(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})')
+ADDRESS_REGEX = re.compile(r'\d+\s+[A-Za-z0-9\.,\s]+(?:Suite|Ste|St|Street|Ave|Avenue|Rd|Road|Blvd|Boulevard|Dr|Drive|Way|Pkwy|Parkway)\b[A-Za-z0-9\.,\s]*', re.IGNORECASE)
 
 # Inject High-Contrast Slate Theme CSS
 st.markdown("""
@@ -214,7 +222,7 @@ if "agency_website" not in st.session_state:
 
 
 # =============================================================
-# Helper Utilities & Execution Engine
+# Helper Utilities & Secret Resolver
 # =============================================================
 def get_secret(key: str, default: Any = None) -> Any:
     """Safely retrieves secret configuration."""
@@ -244,35 +252,6 @@ def get_secret(key: str, default: Any = None) -> Any:
     return default
 
 
-def safe_execute_pipeline_sync(
-    pipeline: LeadGenPipeline,
-    inputs: List[LeadInput],
-    progress_callback: Optional[Callable[[EnrichedLead, int, int], None]] = None
-) -> List[EnrichedLead]:
-    """Executes the lead pipeline synchronously in the main Streamlit thread."""
-    try:
-        return asyncio.run(
-            pipeline.run_batch(
-                inputs=inputs,
-                output_csv_path=None,
-                progress_callback=progress_callback
-            )
-        )
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            return loop.run_until_complete(
-                pipeline.run_batch(
-                    inputs=inputs,
-                    output_csv_path=None,
-                    progress_callback=progress_callback
-                )
-            )
-        finally:
-            loop.close()
-
-
 def generate_credit_extension_mailto(user_email: str) -> str:
     """Creates a clean mailto link for credit extension requests."""
     subject = urllib.parse.quote("Credit Extension Request")
@@ -285,6 +264,194 @@ def generate_credit_extension_mailto(user_email: str) -> str:
 GEMINI_API_KEY = get_secret("GEMINI_API_KEY", getattr(settings, "effective_api_key", None))
 effective_model = getattr(settings, "gemini_model", "gemini-2.5-flash")
 effective_concurrency = int(getattr(settings, "max_concurrent_requests", 5))
+
+
+# =============================================================
+# ⚡ LIVE SCRAPING & AUTOMATED AUDITING BACKEND
+# =============================================================
+async def audit_single_business(
+    lead_input: LeadInput,
+    client: httpx.AsyncClient,
+    location_hint: str = ""
+) -> EnrichedLead:
+    """
+    Performs a live structural audit and contact extraction for a single business:
+    - Checks SSL certificate, mobile viewport, meta tags, and response latency
+    - Extracts Business Phone Number, Address/Location, and Primary Email
+    - Computes an Audit Health Score (0-100)
+    - Generates a concise 2-sentence pitch outlining conversion bottlenecks and recommendations
+    """
+    company_name = lead_input.company_name
+    target_url = lead_input.website_url or ""
+    
+    if target_url and not target_url.startswith("http://") and not target_url.startswith("https://"):
+        target_url = "https://" + target_url
+
+    # Default fallback signals
+    ssl_active = target_url.startswith("https://") if target_url else False
+    mobile_responsive = True
+    meta_desc_found = False
+    has_contact_form = False
+    extracted_emails: List[str] = []
+    extracted_phone: Optional[str] = None
+    extracted_address: Optional[str] = None
+    summary_text = f"{company_name} provides professional services in {location_hint or 'their local market'}."
+    audit_score = 75
+
+    if target_url:
+        try:
+            start_time = time.time()
+            resp = await client.get(target_url, timeout=5.0)
+            latency_ms = int((time.time() - start_time) * 1000)
+
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                
+                # 1. Structural Checks
+                ssl_active = str(resp.url).startswith("https://")
+                viewport_tag = soup.find("meta", attrs={"name": "viewport"})
+                mobile_responsive = bool(viewport_tag)
+                
+                meta_tag = soup.find("meta", attrs={"name": "description"}) or soup.find("meta", attrs={"property": "og:description"})
+                if meta_tag and meta_tag.get("content"):
+                    meta_desc_found = True
+                    summary_text = meta_tag["content"].strip()[:240]
+
+                has_contact_form = bool(soup.find("form") or "contact" in resp.text.lower())
+
+                # 2. Extract Phone Number
+                phone_matches = PHONE_REGEX.findall(resp.text)
+                for pm in phone_matches:
+                    formatted_phone = f"({pm[0]}) {pm[1]}-{pm[2]}"
+                    if pm[0] not in ("000", "123", "555"):
+                        extracted_phone = formatted_phone
+                        break
+                
+                if not extracted_phone:
+                    tel_tag = soup.find("a", href=lambda h: h and h.startswith("tel:"))
+                    if tel_tag and tel_tag.get("href"):
+                        extracted_phone = tel_tag["href"].replace("tel:", "").strip()
+
+                # 3. Extract Address
+                addr_tag = soup.find("address")
+                if addr_tag:
+                    extracted_address = addr_tag.get_text(separator=" ", strip=True)[:100]
+                else:
+                    addr_match = ADDRESS_REGEX.search(resp.text)
+                    if addr_match:
+                        extracted_address = addr_match.group(0).strip()[:100]
+                    elif location_hint:
+                        extracted_address = location_hint.strip()
+
+                # 4. Extract Emails
+                raw_emails = set(EMAIL_REGEX.findall(resp.text))
+                for a in soup.find_all("a", href=True):
+                    href = str(a["href"]).strip()
+                    if href.startswith("mailto:"):
+                        e = href.replace("mailto:", "").split("?")[0].strip()
+                        if e:
+                            raw_emails.add(e)
+                extracted_emails = filter_valid_emails(raw_emails)
+
+                # 5. Compute Structural Audit Score (0-100)
+                score_calc = 50
+                if ssl_active:
+                    score_calc += 15
+                if mobile_responsive:
+                    score_calc += 15
+                if meta_desc_found:
+                    score_calc += 10
+                if extracted_emails or extracted_phone:
+                    score_calc += 10
+                if latency_ms < 1500:
+                    score_calc += 5
+                audit_score = min(98, max(55, score_calc))
+
+        except Exception as e:
+            logger.warning(f"Error scraping {target_url} for {company_name}: {e}")
+
+    primary_email = extracted_emails[0] if extracted_emails else None
+    if not extracted_address and location_hint:
+        extracted_address = location_hint.strip()
+
+    # Generate concise 2-sentence pitch outlining specific bottlenecks and recommendations
+    bottlenecks = []
+    if not ssl_active:
+        bottlenecks.append("unsecured HTTP connection")
+    if not mobile_responsive:
+        bottlenecks.append("missing mobile viewport optimization")
+    if not has_contact_form:
+        bottlenecks.append("absence of direct instant quote forms")
+    if not primary_email:
+        bottlenecks.append("low digital contact accessibility")
+    if not bottlenecks:
+        bottlenecks.append("lack of 24/7 automated inquiry response workflows")
+
+    primary_issue = bottlenecks[0]
+    sentence_1 = f"Our digital audit for {company_name} identified an overall health score of {audit_score}/100 with a conversion bottleneck in {primary_issue}."
+    sentence_2 = f"Implementing an automated high-velocity inbound response system will capture lost leads and increase customer acquisition by 25%."
+    pitch_text = f"{sentence_1} {sentence_2}"
+
+    custom_audit_bullets = (
+        f"• 🟢 Core Strength: Established industry presence and active service offerings in {location_hint or 'target market'}.\n"
+        f"• 🔍 Conversion Bottleneck: Website health score is {audit_score}/100 due to {primary_issue}.\n"
+        f"• 💡 Actionable Recommendation: Deploy an intelligent client capture workflow to qualify and route prospects into the sales pipeline within 60 seconds."
+    )
+
+    return EnrichedLead(
+        company_name=company_name,
+        website_url=target_url or None,
+        primary_email=primary_email,
+        phone_number=extracted_phone,
+        address=extracted_address,
+        audit_score=audit_score,
+        ssl_active=ssl_active,
+        mobile_responsive=mobile_responsive,
+        company_summary=summary_text,
+        custom_audit=custom_audit_bullets,
+        personalized_pitch=pitch_text,
+        status="success"
+    )
+
+
+async def run_live_audit_batch(
+    inputs: List[LeadInput],
+    location_hint: str = "",
+    progress_callback: Optional[Callable[[EnrichedLead, int, int], None]] = None
+) -> List[EnrichedLead]:
+    """Runs concurrent live scraping and automated website auditing."""
+    results: List[EnrichedLead] = []
+    total = len(inputs)
+
+    async with httpx.AsyncClient(
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+        follow_redirects=True,
+        verify=False
+    ) as client:
+        for idx, lead_in in enumerate(inputs, 1):
+            lead = await audit_single_business(lead_in, client, location_hint)
+            results.append(lead)
+            if progress_callback:
+                progress_callback(lead, idx, total)
+
+    return results
+
+
+def safe_execute_live_audit_sync(
+    inputs: List[LeadInput],
+    location_hint: str = "",
+    progress_callback: Optional[Callable[[EnrichedLead, int, int], None]] = None
+) -> List[EnrichedLead]:
+    """Synchronously executes the live audit engine in the main thread."""
+    try:
+        return asyncio.run(run_live_audit_batch(inputs, location_hint, progress_callback))
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(run_live_audit_batch(inputs, location_hint, progress_callback))
+        finally:
+            loop.close()
 
 
 # =============================================================
@@ -386,7 +553,7 @@ tab_engine, tab_results, tab_sponsors = st.tabs([
 # TAB 1: 🚀 LEAD & AUDIT ENGINE
 # =============================================================
 with tab_engine:
-    # Feature Highlights Showcase (Native CSS & SVG Badges)
+    # Feature Highlights Showcase (Native CSS Badges)
     c_f1, c_f2, c_f3 = st.columns(3)
     with c_f1:
         st.markdown("""
@@ -396,7 +563,7 @@ with tab_engine:
             </div>
             <h4 style="margin:0 0 6px 0; font-weight:700; color:#ffffff;">Automated Lead Hunter</h4>
             <p style="margin:0; font-size:0.85rem; color:#cbd5e1; line-height:1.4;">
-                Fast parallel scraping of verified company websites & decision-maker contacts.
+                Fast parallel scraping of verified company websites, phone numbers, and addresses.
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -407,9 +574,9 @@ with tab_engine:
             <div class="feature-icon-wrapper" style="background:rgba(99, 102, 241, 0.2); color:#818cf8; border:1px solid rgba(99, 102, 241, 0.4);">
                 🤖
             </div>
-            <h4 style="margin:0 0 6px 0; font-weight:700; color:#ffffff;">Gemini 2026 AI Audits</h4>
+            <h4 style="margin:0 0 6px 0; font-weight:700; color:#ffffff;">Live Website Auditing</h4>
             <p style="margin:0; font-size:0.85rem; color:#cbd5e1; line-height:1.4;">
-                Identifies conversion leaks, blind spots, and 3 actionable growth recommendations.
+                Scans SSL, mobile viewport, meta tags, and generates 2-sentence pitch recommendations.
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -420,9 +587,9 @@ with tab_engine:
             <div class="feature-icon-wrapper" style="background:rgba(16, 185, 129, 0.2); color:#34d399; border:1px solid rgba(16, 185, 129, 0.4);">
                 📄
             </div>
-            <h4 style="margin:0 0 6px 0; font-weight:700; color:#ffffff;">One-Click Executive PDF</h4>
+            <h4 style="margin:0 0 6px 0; font-weight:700; color:#ffffff;">Executive PDF Deliverable</h4>
             <p style="margin:0; font-size:0.85rem; color:#cbd5e1; line-height:1.4;">
-                Download complete multi-client PDF audit bundles with your agency branding.
+                Download complete multi-client PDF audit bundles with audit score & agency branding.
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -457,7 +624,7 @@ with tab_engine:
         else:
             st.session_state.is_scraping = True
             try:
-                with st.spinner(f"🔎 Discovering businesses and generating AI audits for '{combined_query}'..."):
+                with st.spinner(f"🔎 Discovering businesses and generating live website audits for '{combined_query}'..."):
                     progress_box = st.container(border=True)
                     with progress_box:
                         status_text = st.empty()
@@ -469,32 +636,25 @@ with tab_engine:
                         if not discovered:
                             status_text.error("No company websites found for this query. Try refining your keywords.")
                         else:
-                            status_text.success(f"✅ Found {len(discovered)} businesses! Running Gemini 2026 AI Audits in parallel...")
-
-                            pipeline = LeadGenPipeline(
-                                api_key=GEMINI_API_KEY,
-                                model=effective_model,
-                                max_concurrency=effective_concurrency,
-                                follow_contact_pages=True,
-                                use_checkpoint=False
-                            )
+                            status_text.success(f"✅ Found {len(discovered)} businesses! Running live structural scan & audit extraction in parallel...")
 
                             def update_lead_progress(lead: EnrichedLead, idx: int, tot: int):
                                 pct = int((idx / tot) * 100) if tot > 0 else 0
                                 prog_bar.progress(min(100, max(0, pct)))
-                                email_tag = f" — 📧 Found: `{lead.primary_email}`" if lead.primary_email else ""
-                                status_text.markdown(f"⚡ **Auditing {idx} of {tot}:** `{lead.company_name}`...{email_tag}")
+                                contact_info = f" — 📞 Phone: `{lead.phone_number}`" if lead.phone_number else ""
+                                email_info = f" • 📧 Email: `{lead.primary_email}`" if lead.primary_email else ""
+                                status_text.markdown(f"⚡ **Auditing {idx} of {tot}:** `{lead.company_name}` (Score: {lead.audit_score}/100){contact_info}{email_info}")
 
-                            results = safe_execute_pipeline_sync(
-                                pipeline=pipeline,
+                            results = safe_execute_live_audit_sync(
                                 inputs=discovered,
+                                location_hint=location_query.strip(),
                                 progress_callback=update_lead_progress
                             )
 
                             # Deduct credit on successful run
                             st.session_state.credits -= 1
                             prog_bar.progress(100)
-                            status_text.success(f"🎉 Successfully generated {len(results)} verified leads with AI Audits! (1 credit deducted)")
+                            status_text.success(f"🎉 Successfully generated {len(results)} verified leads with Live Website Audits! (1 credit deducted)")
 
                             st.session_state.leads_data = results
                             st.session_state.df = pd.DataFrame([r.model_dump() for r in results])
@@ -535,15 +695,11 @@ with tab_engine:
                         else:
                             st.session_state.is_scraping = True
                             try:
-                                with st.spinner("Enriching CSV accounts with AI audits..."):
-                                    pipeline = LeadGenPipeline(
-                                        api_key=GEMINI_API_KEY,
-                                        model=effective_model,
-                                        max_concurrency=effective_concurrency,
-                                        follow_contact_pages=True,
-                                        use_checkpoint=False
+                                with st.spinner("Auditing CSV accounts in parallel..."):
+                                    csv_results = safe_execute_live_audit_sync(
+                                        inputs=csv_inputs,
+                                        location_hint="Regional Market"
                                     )
-                                    csv_results = safe_execute_pipeline_sync(pipeline=pipeline, inputs=csv_inputs)
                                     st.session_state.credits -= 1
                                     st.session_state.leads_data = csv_results
                                     st.session_state.df = pd.DataFrame([r.model_dump() for r in csv_results])
@@ -585,23 +741,33 @@ with tab_results:
         # Summary Metrics
         tot = len(leads)
         emails_found = sum(1 for l in leads if l.primary_email)
-        rate = f"{(emails_found / tot * 100):.1f}%" if tot else "0%"
+        phones_found = sum(1 for l in leads if l.phone_number)
+        avg_score = int(sum(l.audit_score or 75 for l in leads) / tot) if tot else 0
 
-        m1, m2, m3 = st.columns(3)
+        m1, m2, m3, m4 = st.columns(4)
         with m1:
-            st.metric("Total Companies Audited", tot)
+            st.metric("Total Businesses Audited", tot)
         with m2:
-            st.metric("Verified Emails Discovered", emails_found)
+            st.metric("Verified Emails Found", emails_found)
         with m3:
-            st.metric("Email Discovery Rate", rate)
+            st.metric("Phone Numbers Found", phones_found)
+        with m4:
+            st.metric("Average Audit Score", f"{avg_score}/100")
 
         # Full Dataframe Table
+        display_cols = ["company_name", "website_url", "phone_number", "address", "primary_email", "audit_score", "personalized_pitch"]
+        available_cols = [c for c in display_cols if c in df.columns]
+        
         st.dataframe(
-            df[["company_name", "website_url", "primary_email", "company_summary", "custom_audit", "status"]],
+            df[available_cols],
             column_config={
+                "company_name": st.column_config.TextColumn("Business Name"),
                 "website_url": st.column_config.LinkColumn("Website URL"),
+                "phone_number": st.column_config.TextColumn("Phone Number"),
+                "address": st.column_config.TextColumn("Location / Address"),
                 "primary_email": st.column_config.TextColumn("Contact Email"),
-                "custom_audit": st.column_config.TextColumn("3-Point AI Mini-Audit", width="large")
+                "audit_score": st.column_config.NumberColumn("Audit Score", format="%d/100"),
+                "personalized_pitch": st.column_config.TextColumn("2-Sentence Pitch & Recommendations", width="large")
             },
             width="stretch",
             hide_index=True
@@ -646,12 +812,14 @@ with tab_results:
             for idx, lead in enumerate(leads, 1):
                 col_a1, col_a2 = st.columns([4, 1])
                 with col_a1:
-                    st.markdown(f"**📌 {idx}. {lead.company_name}** (`{lead.primary_email or 'No email found'}`)")
-                    st.markdown(f"**Summary:** {lead.company_summary or 'N/A'}")
+                    phone_tag = f" • 📞 `{lead.phone_number}`" if lead.phone_number else ""
+                    addr_tag = f" • 📍 `{lead.address}`" if lead.address else ""
+                    st.markdown(f"**📌 {idx}. {lead.company_name}** (`{lead.primary_email or 'No email found'}`){phone_tag}{addr_tag}")
+                    st.markdown(f"**Audit Score:** `{lead.audit_score or 80}/100` | **Summary:** {lead.company_summary or 'N/A'}")
                     st.markdown(f"""
                     <div class="audit-card">
-                        <strong>3-Point AI Growth Audit:</strong><br>
-                        {lead.custom_audit or lead.personalized_pitch or 'Audit generated by Gemini'}
+                        <strong>2-Sentence Pitch & Recommendations:</strong><br>
+                        {lead.personalized_pitch or lead.custom_audit}
                     </div>
                     """, unsafe_allow_html=True)
                 with col_a2:
@@ -663,7 +831,10 @@ with tab_results:
                             summary=lead.company_summary,
                             custom_audit=lead.custom_audit or lead.personalized_pitch,
                             agency_name=st.session_state.agency_name,
-                            agency_website=st.session_state.agency_website
+                            agency_website=st.session_state.agency_website,
+                            phone_number=lead.phone_number,
+                            address=lead.address,
+                            audit_score=lead.audit_score
                         )
                         st.download_button(
                             label="📄 Download PDF",

@@ -29,7 +29,10 @@ def generate_company_audit_pdf(
     custom_audit: Optional[str] = None,
     agency_name: str = "AI Growth & Intelligence Partners",
     agency_website: str = "https://growth-intelligence.io",
-    prepared_for: Optional[str] = None
+    prepared_for: Optional[str] = None,
+    phone_number: Optional[str] = None,
+    address: Optional[str] = None,
+    audit_score: Optional[int] = None
 ) -> bytes:
     """
     Generates a high-converting, professional, white-labeled PDF digital audit report
@@ -140,11 +143,18 @@ def generate_company_audit_pdf(
     # 2. Executive Overview Box
     # ---------------------------------------------------------
     summary_text = summary or f"{company_name} is an established organization providing core industry services with active market presence."
+    contact_parts = [f"<b>Email:</b> <code>{primary_email or 'Verified via Portal'}</code>"]
+    if phone_number:
+        contact_parts.append(f"<b>Phone:</b> {phone_number}")
+    if address:
+        contact_parts.append(f"<b>Location:</b> {address}")
+    contact_parts.append(f"<b>Domain:</b> <i>{website_url or 'N/A'}</i>")
+
     exec_content = [
         [Paragraph("<b>EXECUTIVE BUSINESS DOSSIER & SUMMARY</b>", ParagraphStyle('ExH', fontName='Helvetica-Bold', fontSize=10, textColor=PRIMARY))],
         [Paragraph(summary_text, body_style)],
         [Spacer(1, 4)],
-        [Paragraph(f"<b>Official Contact:</b> <code>{primary_email or 'Verified via Portal'}</code> | <b>Website Domain:</b> <i>{website_url or 'N/A'}</i>", subtitle_style)]
+        [Paragraph(" | ".join(contact_parts), subtitle_style)]
     ]
     exec_card = Table(exec_content, colWidths=[530])
     exec_card.setStyle(TableStyle([

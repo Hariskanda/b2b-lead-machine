@@ -6,6 +6,8 @@ class LeadInput(BaseModel):
     """Input record representing a target company."""
     company_name: str
     website_url: Optional[str] = None
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
 
 
 class CompanyExtractionResult(BaseModel):
@@ -55,6 +57,11 @@ class EnrichedLead(BaseModel):
     company_name: str
     website_url: Optional[str] = None
     primary_email: Optional[str] = None
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
+    audit_score: Optional[int] = 85
+    ssl_active: Optional[bool] = True
+    mobile_responsive: Optional[bool] = True
     company_summary: Optional[str] = None
     custom_audit: Optional[str] = None
     personalized_pitch: Optional[str] = None
