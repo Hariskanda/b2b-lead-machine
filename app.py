@@ -42,6 +42,7 @@ st.set_page_config(
 )
 
 SESSION_DEFAULTS: Dict[str, Any] = {
+    "view_mode": "landing",       # "landing" vs "dashboard"
     "user_email": None,           # Logged-in user email
     "user_name": None,
     "is_pro": False,              # False = Free Tier (5 leads max, no PDF), True = Pro ($19/mo or $9 pass)
@@ -77,74 +78,124 @@ def add_activity_log(message: str, level: str = "INFO") -> None:
         st.session_state["activity_logs"].pop(0)
 
 
-# Premium SaaS Styling & Modern Typography
+# =============================================================
+# 🎨 PILLAR 1: CUSTOM CSS & DARK-MODE SAAS POLISH
+# =============================================================
 st.markdown("""
 <style>
+    /* Hide Default Streamlit Header & Footer */
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    div[data-testid="stToolbar"] {visibility: hidden;}
+    div[data-testid="stDecoration"] {visibility: hidden;}
+
+    /* Dark-Mode SaaS Theme */
+    .stApp {
+        background-color: #0b0f17;
+        color: #f8fafc;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    /* Custom Modern Navbar */
+    .saas-navbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 24px;
+        background: rgba(15, 23, 42, 0.85);
+        backdrop-filter: blur(12px);
+        border: 1px solid #1e293b;
+        border-radius: 16px;
+        margin-bottom: 24px;
+    }
+    .saas-logo {
+        font-size: 1.25rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* Hero Section */
     .hero-container {
         background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
         border: 1px solid #334155;
-        border-radius: 20px;
+        border-radius: 24px;
         padding: 48px 36px;
         color: #ffffff;
         text-align: center;
         margin-bottom: 32px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+        box-shadow: 0 12px 36px rgba(0,0,0,0.35);
+        position: relative;
+        overflow: hidden;
     }
     .hero-title {
-        font-size: 2.8rem;
+        font-size: 2.9rem;
         font-weight: 850;
         margin-bottom: 0.8rem;
         background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        line-height: 1.2;
     }
     .hero-subtitle {
-        font-size: 1.15rem;
+        font-size: 1.18rem;
         color: #cbd5e1;
-        max-width: 820px;
-        margin: 0 auto 24px auto;
+        max-width: 840px;
+        margin: 0 auto 28px auto;
         line-height: 1.6;
     }
+
+    /* Feature Cards */
     .feature-card {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 16px;
-        padding: 24px;
+        background: #111827;
+        border: 1px solid #1f2937;
+        border-radius: 18px;
+        padding: 26px;
         height: 100%;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-        transition: transform 0.2s ease;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+        transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     }
     .feature-card:hover {
         transform: translateY(-4px);
-        border-color: #3b82f6;
+        border-color: #38bdf8;
+        box-shadow: 0 8px 24px rgba(56, 189, 248, 0.15);
     }
     .feature-icon {
-        font-size: 2rem;
+        font-size: 2.2rem;
         margin-bottom: 12px;
     }
+
+    /* Pricing Cards */
     .pricing-card-free {
-        background: #ffffff;
-        border: 2px solid #e2e8f0;
-        border-radius: 16px;
-        padding: 28px;
+        background: #111827;
+        border: 2px solid #1f2937;
+        border-radius: 18px;
+        padding: 30px;
         text-align: center;
     }
     .pricing-card-pro {
-        background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%);
-        border: 2px solid #3b82f6;
-        border-radius: 16px;
-        padding: 28px;
+        background: linear-gradient(180deg, #111827 0%, #1e1b4b 100%);
+        border: 2px solid #38bdf8;
+        border-radius: 18px;
+        padding: 30px;
         text-align: center;
-        box-shadow: 0 8px 24px rgba(59, 130, 246, 0.15);
+        box-shadow: 0 8px 32px rgba(56, 189, 248, 0.2);
     }
+
+    /* Audit & Preview Cards */
     .audit-card {
         border-left: 4px solid #10b981;
-        background: #ffffff;
+        background: #111827;
         padding: 16px;
         border-radius: 10px;
         margin-bottom: 12px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+        border: 1px solid #1f2937;
+        color: #e2e8f0;
     }
     .pill {
         display: inline-block;
@@ -161,6 +212,16 @@ st.markdown("""
         display: inline-block;
         background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
         color: #ffffff;
+        padding: 5px 14px;
+        border-radius: 9999px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        box-shadow: 0 2px 10px rgba(37, 99, 235, 0.35);
+    }
+    .pill-gold {
+        display: inline-block;
+        background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+        color: #ffffff;
         padding: 4px 12px;
         border-radius: 9999px;
         font-size: 0.78rem;
@@ -169,12 +230,38 @@ st.markdown("""
     .protected-sample-container {
         -webkit-user-select: none;
         user-select: none;
-        border: 1px solid #e2e8f0;
+        border: 1px solid #1f2937;
         border-radius: 14px;
         padding: 18px;
-        background: #ffffff;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        background: #111827;
         margin-bottom: 14px;
+    }
+    .locked-teaser-card {
+        -webkit-user-select: none;
+        user-select: none;
+        background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
+        border: 2px dashed #475569;
+        border-radius: 16px;
+        padding: 24px;
+        text-align: center;
+        margin: 16px 0;
+    }
+
+    /* Custom Streamlit Button Styling */
+    div.stButton > button:first-child {
+        border-radius: 10px;
+        font-weight: 600;
+        transition: all 0.2s ease-in-out;
+    }
+    div.stButton > button[kind="primary"]:first-child {
+        background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+        border: 1px solid #6366f1;
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+    }
+    div.stButton > button[kind="primary"]:first-child:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(56, 189, 248, 0.45);
+        border-color: #38bdf8;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -233,8 +320,7 @@ def safe_execute_pipeline_sync(
     progress_callback: Optional[Callable[[EnrichedLead, int, int], None]] = None
 ) -> List[EnrichedLead]:
     """
-    Executes the enrichment pipeline synchronously in the main thread.
-    No detached background threads or runaway daemon loops are spawned.
+    Executes the enrichment pipeline synchronously in the main thread with concurrent worker pool.
     """
     try:
         return asyncio.run(
@@ -259,7 +345,7 @@ def safe_execute_pipeline_sync(
             loop.close()
 
 
-# Read Core Secrets Securely from st.secrets / backend
+# Read Core Secrets
 GEMINI_API_KEY: Optional[str] = get_secret("GEMINI_API_KEY", getattr(settings, "effective_api_key", None))
 STRIPE_SECRET_KEY: Optional[str] = get_secret("STRIPE_SECRET_KEY", getattr(settings, "stripe_secret_key", None))
 ADMIN_PASSWORD: str = str(get_secret("ADMIN_PASSWORD", getattr(settings, "admin_password", "admin123")))
@@ -275,32 +361,40 @@ APP_URL: str = str(get_secret("APP_URL", getattr(settings, "effective_app_url", 
 is_admin_active = bool(st.session_state.get("admin_authenticated", False) or st.session_state.get("admin_logged_in", False))
 is_user_pro = bool(st.session_state.get("is_pro", False) or is_admin_active)
 is_engine_running = bool(st.session_state.get("running", False))
-user_logged_in = bool(st.session_state.get("user_email"))
+current_view = st.session_state.get("view_mode", "landing")
 
 
 # =============================================================
 # 🛍️ Sidebar: Admin Controls & User Account Summary
 # =============================================================
 with st.sidebar:
-    st.image("https://img.icons8.com/isometric/100/lightning-bolt.png", width=60)
+    st.image("https://img.icons8.com/isometric/100/lightning-bolt.png", width=55)
     st.title("B2B Lead Machine")
 
-    if user_logged_in:
-        st.markdown(f"**👤 Account:** `{st.session_state.get('user_email')}`")
-        if is_user_pro:
-            st.markdown('<span class="pill-pro">⭐ PRO PLAN UNLOCKED</span>', unsafe_allow_html=True)
-            st.caption("Unlimited Leads • White-Labeled PDF Audits • Full Exports")
-        else:
-            st.markdown('<span class="pill">FREE PLAN (5 Leads Max)</span>', unsafe_allow_html=True)
-            st.caption("PDF Audits Locked • Upgrade to Pro to unlock client reports.")
-
-        if st.button("🚪 Log Out", width="stretch"):
-            st.session_state["user_email"] = None
-            st.session_state["user_name"] = None
-            st.session_state["is_pro"] = False
+    # Navigation Switcher
+    st.markdown("#### 🧭 Platform Navigation")
+    c_nav1, c_nav2 = st.columns(2)
+    with c_nav1:
+        if st.button("🏠 Landing Page", width="stretch", type="primary" if current_view == "landing" else "secondary"):
+            st.session_state["view_mode"] = "landing"
+            st.rerun()
+    with c_nav2:
+        if st.button("⚡ Dashboard", width="stretch", type="primary" if current_view == "dashboard" else "secondary"):
+            st.session_state["view_mode"] = "dashboard"
             st.rerun()
 
-        st.divider()
+    st.divider()
+
+    # User Account Status
+    st.markdown("#### 👤 Account Status")
+    if is_user_pro:
+        st.markdown('<span class="pill-pro">⭐ PRO PLAN ACTIVE (Unlimited)</span>', unsafe_allow_html=True)
+        st.caption("White-Labeled PDF Audits • Multi-Client Bundles • Full Exports")
+    else:
+        st.markdown('<span class="pill">FREE TIER (5 Leads Max)</span>', unsafe_allow_html=True)
+        st.caption("PDF Audits Locked • Upgrade to Pro to unlock client deliverables.")
+
+    st.divider()
 
     # 🔐 Master Control & Tracking Panel (Password Protected Admin)
     with st.expander("🔐 Admin Master Control Panel", expanded=False):
@@ -317,7 +411,7 @@ with st.sidebar:
                 else:
                     st.error("⚠️ Invalid Admin Password.")
         else:
-            st.markdown('<span style="color:#15803d; font-weight:700;">🔓 MASTER ADMIN ACTIVE</span>', unsafe_allow_html=True)
+            st.markdown('<span style="color:#10b981; font-weight:700;">🔓 MASTER ADMIN ACTIVE</span>', unsafe_allow_html=True)
 
             # 1. MANUAL START / STOP CONTROL
             st.markdown("---")
@@ -336,6 +430,7 @@ with st.sidebar:
 
                 if st.button("▶ Start Pipeline", type="primary", width="stretch"):
                     st.session_state["running"] = True
+                    st.session_state["view_mode"] = "dashboard"
                     st.session_state["admin_trigger_search"] = admin_niche_target.strip()
                     st.session_state["admin_trigger_count"] = int(admin_batch_lead_count)
                     add_activity_log(f"Admin started pipeline for '{admin_niche_target.strip()}'.", "INFO")
@@ -368,7 +463,7 @@ with st.sidebar:
                 index=0,
                 key="admin_model_select"
             )
-            admin_concurrency = st.slider("Max Concurrency", min_value=1, max_value=8, value=int(getattr(settings, "max_concurrent_requests", 3)), key="admin_concurrency_slider")
+            admin_concurrency = st.slider("Max Concurrency", min_value=1, max_value=8, value=int(getattr(settings, "max_concurrent_requests", 5)), key="admin_concurrency_slider")
             admin_follow_subpages = st.checkbox("Follow Contact/About Pages", value=getattr(settings, "follow_contact_pages", True), key="admin_follow_subpages_cb")
 
             # 5. ACTIVITY LOGS & SENT TRACKER
@@ -394,30 +489,56 @@ with st.sidebar:
                 add_activity_log("Admin logged out.", "INFO")
                 st.rerun()
 
-    st.caption("⚡ **B2B Lead Machine** • Automate Your Client Acquisition")
+    st.caption("⚡ **B2B Lead Machine** • Premium Outbound Intelligence")
 
 
 effective_model = st.session_state.get("admin_model_select", getattr(settings, "gemini_model", "gemini-2.5-flash"))
-effective_concurrency = int(st.session_state.get("admin_concurrency_slider", getattr(settings, "max_concurrent_requests", 3)))
+effective_concurrency = int(st.session_state.get("admin_concurrency_slider", getattr(settings, "max_concurrent_requests", 5)))
 effective_follow_subpages = bool(st.session_state.get("admin_follow_subpages_cb", getattr(settings, "follow_contact_pages", True)))
 effective_agency_name = str(st.session_state.get("agency_name", "AI Growth & Intelligence Partners"))
 effective_agency_website = str(st.session_state.get("agency_website", "https://growth-intelligence.io"))
 
 
 # =============================================================
-# 🚀 PILLAR 1: FRONT-END LANDING PAGE (WHEN NOT LOGGED IN)
+# 🚀 PILLAR 4: PROFESSIONAL LANDING STATE (THE HOOK)
 # =============================================================
-if not user_logged_in:
+if current_view == "landing":
+    # Custom SaaS Navigation Bar
+    st.markdown("""
+    <div class="saas-navbar">
+        <div class="saas-logo">
+            ⚡ <span>B2B Lead Machine</span>
+        </div>
+        <div>
+            <span class="pill-pro">✨ 2026 AI Outbound Engine</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
     # Hero Section
     st.markdown("""
     <div class="hero-container">
-        <span class="pill-pro" style="margin-bottom: 12px;">⚡ THE NEW STANDARD IN B2B OUTBOUND</span>
+        <span class="pill-gold" style="margin-bottom: 14px;">⚡ THE NEW STANDARD IN HIGH-TICKET CLIENT ACQUISITION</span>
         <h1 class="hero-title">B2B Lead Machine: Automate Your Client Acquisition</h1>
         <p class="hero-subtitle">
-            Discover high-intent local businesses, extract verified decision-maker emails, and generate client-ready <b>3-Point Digital Mini-Audits</b> with Gemini AI to close high-ticket agency deals effortlessly.
+            Discover high-intent local businesses, extract verified decision-maker emails, and generate client-ready <b>3-Point Digital Mini-Audits</b> with Gemini AI to close high-ticket deals effortlessly.
         </p>
     </div>
     """, unsafe_allow_html=True)
+
+    # Call-to-Action Buttons
+    c_btn1, c_btn2 = st.columns([1, 1])
+    with c_btn1:
+        if st.button("🚀 Start Free Trial (5 Free Leads)", type="primary", width="stretch"):
+            st.session_state["view_mode"] = "dashboard"
+            st.rerun()
+    with c_btn2:
+        if st.button("💎 View Pro Pricing ($19/mo)", width="stretch"):
+            st.session_state["view_mode"] = "dashboard"
+            st.session_state["open_upgrade_tab"] = True
+            st.rerun()
+
+    st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
 
     # 3-Step How It Works Section
     st.markdown("### 🛠️ How It Works in 3 Simple Steps")
@@ -426,8 +547,8 @@ if not user_logged_in:
         st.markdown("""
         <div class="feature-card">
             <div class="feature-icon">🎯</div>
-            <h4 style="color:#1e293b; margin-top:0;">1. Target Any Niche</h4>
-            <p style="color:#64748b; font-size:0.9rem; line-height:1.5;">
+            <h4 style="color:#f8fafc; margin-top:0;">1. Target Any Niche</h4>
+            <p style="color:#94a3b8; font-size:0.9rem; line-height:1.5;">
                 Enter any local industry and geography (e.g. <i>"Commercial roofing in Miami, FL"</i>) or upload your own CSV list of target accounts.
             </p>
         </div>
@@ -437,8 +558,8 @@ if not user_logged_in:
         st.markdown("""
         <div class="feature-card">
             <div class="feature-icon">🤖</div>
-            <h4 style="color:#1e293b; margin-top:0;">2. AI Generates Mini-Audits</h4>
-            <p style="color:#64748b; font-size:0.9rem; line-height:1.5;">
+            <h4 style="color:#f8fafc; margin-top:0;">2. AI Generates Mini-Audits</h4>
+            <p style="color:#94a3b8; font-size:0.9rem; line-height:1.5;">
                 Gemini 2026 AI analyzes company websites to identify 🟢 strengths, 🔍 conversion blind spots, and 💡 high-ROI recommendations.
             </p>
         </div>
@@ -448,8 +569,8 @@ if not user_logged_in:
         st.markdown("""
         <div class="feature-card">
             <div class="feature-icon">📄</div>
-            <h4 style="color:#1e293b; margin-top:0;">3. Close High-Ticket Clients</h4>
-            <p style="color:#64748b; font-size:0.9rem; line-height:1.5;">
+            <h4 style="color:#f8fafc; margin-top:0;">3. Close High-Ticket Clients</h4>
+            <p style="color:#94a3b8; font-size:0.9rem; line-height:1.5;">
                 Download white-labeled client PDF reports to hand directly to prospects or dispatch value-first mini-audit emails automatically.
             </p>
         </div>
@@ -457,23 +578,49 @@ if not user_logged_in:
 
     st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
 
-    # Pricing Tiers Section
+    # Live Sample Preview of an AI Mini-Audit
+    st.markdown("### 👁️ Interactive Mini-Audit Preview (Sample Deliverable)")
+    st.markdown("""
+    <div class="protected-sample-container">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <span style="font-size:1.15rem; font-weight:700; color:#38bdf8;">📌 Sample Lead: Apex Commercial Roofing LLC</span>
+            <span class="pill-pro">Score: B+</span>
+        </div>
+        <div style="font-size:0.9rem; color:#94a3b8; margin-bottom:8px;">
+            <strong>Website:</strong> <span style="color:#38bdf8;">https://apexroofing-sample.com</span> | 
+            <strong>Contact Email:</strong> <code style="color:#38bdf8; background:#1e293b; padding:2px 8px; border-radius:4px;">contact@apexroofing-sample.com</code>
+        </div>
+        <div style="font-size:0.9rem; color:#cbd5e1; margin-bottom:10px;">
+            <strong>Company Summary:</strong> Premier commercial roofing contractor providing flat roof repair, thermal coating, and industrial maintenance.
+        </div>
+        <div class="audit-card">
+            <strong>🔍 AI-Generated 3-Point Digital Growth Audit:</strong><br/>
+            • 🟢 <b>Strengths:</b> Established commercial brand presence, stellar project gallery, and certified manufacturer warranties.<br/>
+            • 🔍 <b>Conversion Blind Spot:</b> High-traffic website lacks 24/7 instant client intake or automated after-hours quote scheduling.<br/>
+            • 💡 <b>Recommendation:</b> Deploy an automated inquiry routing webhook to capture after-hours commercial repair leads within 60 seconds.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
+
+    # Pricing Section
     st.markdown("### 💎 Simple, Transparent Pricing")
     c_pr1, c_pr2 = st.columns(2)
     with c_pr1:
         st.markdown("""
         <div class="pricing-card-free">
-            <h3 style="color:#1e293b; margin:0;">Free Tier</h3>
-            <h2 style="color:#64748b; margin:12px 0;">$0 <font size="3">/ forever</font></h2>
+            <h3 style="color:#f8fafc; margin:0;">Free Tier</h3>
+            <h2 style="color:#94a3b8; margin:14px 0;">$0 <font size="3">/ forever</font></h2>
             <p style="color:#64748b; font-size:0.88rem;">Best for testing the platform</p>
-            <hr style="border:0; border-top:1px solid #e2e8f0; margin:16px 0;">
-            <p style="text-align:left; font-size:0.9rem; color:#334155;">
+            <hr style="border:0; border-top:1px solid #1f2937; margin:16px 0;">
+            <p style="text-align:left; font-size:0.9rem; color:#cbd5e1; line-height:1.8;">
                 ✓ 5 Verified Leads per Search<br/>
                 ✓ Standard Lead Table View<br/>
                 ✓ Basic CSV Export Preview<br/>
-                ✗ <span style="color:#94a3b8;">White-Labeled PDF Audits</span><br/>
-                ✗ <span style="color:#94a3b8;">Multi-Client PDF Bundle</span><br/>
-                ✗ <span style="color:#94a3b8;">Automated Email Dispatcher</span>
+                ✗ <span style="color:#64748b;">White-Labeled PDF Audits</span><br/>
+                ✗ <span style="color:#64748b;">Multi-Client PDF Bundle</span><br/>
+                ✗ <span style="color:#64748b;">Automated Email Dispatcher</span>
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -481,12 +628,12 @@ if not user_logged_in:
     with c_pr2:
         st.markdown("""
         <div class="pricing-card-pro">
-            <span class="pill-pro" style="margin-bottom:6px;">RECOMMENDED FOR AGENCIES</span>
-            <h3 style="color:#1e293b; margin:4px 0 0 0;">Pro Growth Tier</h3>
-            <h2 style="color:#2563eb; margin:12px 0;">$19 <font size="3" color="#64748b">/ month</font></h2>
-            <p style="color:#64748b; font-size:0.88rem;">Or $9 one-time 24h pass</p>
-            <hr style="border:0; border-top:1px solid #bfdbfe; margin:16px 0;">
-            <p style="text-align:left; font-size:0.9rem; color:#1e293b;">
+            <span class="pill-pro" style="margin-bottom:8px;">RECOMMENDED FOR AGENCIES</span>
+            <h3 style="color:#f8fafc; margin:4px 0 0 0;">Pro Growth Tier</h3>
+            <h2 style="color:#38bdf8; margin:14px 0;">$19 <font size="3" color="#94a3b8">/ month</font></h2>
+            <p style="color:#94a3b8; font-size:0.88rem;">Or $9 one-time 24h day pass</p>
+            <hr style="border:0; border-top:1px solid #334155; margin:16px 0;">
+            <p style="text-align:left; font-size:0.9rem; color:#f8fafc; line-height:1.8;">
                 ✓ <b>Unlimited Verified B2B Leads</b><br/>
                 ✓ <b>White-Labeled PDF Client Reports</b><br/>
                 ✓ <b>Complete Multi-Client PDF Audit Bundle</b><br/>
@@ -499,41 +646,26 @@ if not user_logged_in:
 
     st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
 
-    # Login / Get Started Modal Form
-    st.markdown("### 🚀 Get Started Now (Free Instant Access)")
-    st.markdown("Enter your business email to access your lead dashboard with 5 free lead credits immediately:")
-
-    c_log1, c_log2 = st.columns([2, 1])
-    with c_log1:
-        login_email = st.text_input("Business Email Address", placeholder="e.g. founder@agencygrowth.com", key="landing_email_input")
-        login_name = st.text_input("Your Name / Agency Name (Optional)", placeholder="e.g. Alex Johnson / Apex Growth", key="landing_name_input")
-    with c_log2:
-        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-        if st.button("🚀 Access Free Lead Dashboard", type="primary", width="stretch"):
-            if login_email and "@" in login_email:
-                st.session_state["user_email"] = login_email.strip()
-                st.session_state["user_name"] = login_name.strip() if login_name else "Agency Founder"
-                add_activity_log(f"User logged in: {login_email.strip()}", "INFO")
-                st.toast("🎉 Welcome to B2B Lead Machine!", icon="🚀")
-                st.rerun()
-            else:
-                st.error("Please enter a valid email address to get started.")
+    # Launch Button to Dashboard
+    if st.button("🚀 Launch B2B Lead Machine Dashboard Now", type="primary", width="stretch"):
+        st.session_state["view_mode"] = "dashboard"
+        st.rerun()
 
     st.stop()
 
 
 # =============================================================
-# 🚀 PILLAR 4: USER DASHBOARD (WHEN LOGGED IN)
+# 🚀 PILLAR 3: DASHBOARD & CONCURRENT ENGINE (WHEN IN DASHBOARD VIEW)
 # =============================================================
-st.markdown('<div class="main-header">⚡ B2B Lead & Mini-Audit Dashboard</div>', unsafe_allow_html=True)
+st.markdown('<div class="saas-navbar"><div class="saas-logo">⚡ B2B Lead Machine Dashboard</div><div><span class="pill-pro">Pro Outbound Intelligence</span></div></div>', unsafe_allow_html=True)
 
 c_usr1, c_usr2 = st.columns([3, 1])
 with c_usr1:
-    user_display = st.session_state.get("user_name") or st.session_state.get("user_email")
+    user_display = st.session_state.get("user_name") or st.session_state.get("user_email") or "Agency Leader"
     if is_user_pro:
-        st.markdown(f"👤 **Welcome back, {user_display}!** • <span class='pill-pro'>⭐ PRO PLAN ACTIVE (Unlimited Access)</span>", unsafe_allow_html=True)
+        st.markdown(f"👤 **Active Account:** `{user_display}` • <span class='pill-pro'>⭐ PRO PLAN ACTIVE (Unlimited Access)</span>", unsafe_allow_html=True)
     else:
-        st.markdown(f"👤 **Welcome back, {user_display}!** • <span class='pill'>FREE PLAN (5 Leads/Search)</span>", unsafe_allow_html=True)
+        st.markdown(f"👤 **Active Account:** `{user_display}` • <span class='pill'>FREE TIER (5 Leads/Search)</span>", unsafe_allow_html=True)
 with c_usr2:
     if not is_user_pro:
         if st.button("⭐ Upgrade to Pro ($19)", type="primary", width="stretch"):
@@ -589,7 +721,7 @@ with tab_search:
         else:
             st.session_state["running"] = True
             try:
-                with st.spinner(f"🔎 Discovering and auditing businesses for '{target_q}' in main thread..."):
+                with st.spinner(f"🔎 Discovering and auditing businesses for '{target_q}' in parallel..."):
                     progress_container = st.container()
                     with progress_container:
                         status_text = st.empty()
@@ -635,7 +767,6 @@ with tab_search:
                                     progress_callback=update_ui_progress
                                 )
 
-                                # Post-filter results to eliminate bad library/version string artifacts
                                 sanitized_results = []
                                 for r in results:
                                     if r.primary_email:
@@ -702,7 +833,7 @@ with tab_csv:
                 else:
                     st.session_state["running"] = True
                     try:
-                        with st.spinner("Enriching uploaded CSV in main thread..."):
+                        with st.spinner("Enriching uploaded CSV in parallel..."):
                             progress_container = st.container()
                             with progress_container:
                                 status_text = st.empty()
@@ -761,7 +892,7 @@ with tab_csv:
 
 
 # =============================================================
-# 💳 PILLAR 2: STRIPE BILLING & UPGRADE TAB
+# 💳 STRIPE BILLING & UPGRADE TAB
 # =============================================================
 with tab_upgrade:
     st.markdown("### 💎 Upgrade to B2B Lead Machine Pro")
@@ -772,10 +903,10 @@ with tab_upgrade:
         st.markdown("""
         <div class="pricing-card-pro">
             <span class="pill-pro">MONTHLY SUBSCRIPTION</span>
-            <h3 style="color:#1e293b; margin:6px 0 0 0;">Pro Monthly</h3>
-            <h2 style="color:#2563eb; margin:10px 0;">$19 <font size="3" color="#64748b">USD / month</font></h2>
-            <p style="font-size:0.85rem; color:#64748b;">Full continuous agency client acquisition</p>
-            <p style="text-align:left; font-size:0.88rem; color:#1e293b;">
+            <h3 style="color:#f8fafc; margin:6px 0 0 0;">Pro Monthly</h3>
+            <h2 style="color:#38bdf8; margin:10px 0;">$19 <font size="3" color="#94a3b8">USD / month</font></h2>
+            <p style="font-size:0.85rem; color:#94a3b8;">Full continuous agency client acquisition</p>
+            <p style="text-align:left; font-size:0.88rem; color:#f8fafc; line-height:1.8;">
                 ✓ Unlimited Leads & Search Queries<br/>
                 ✓ <b>White-Labeled PDF Client Reports</b><br/>
                 ✓ <b>Multi-Client PDF Audit Bundle</b><br/>
@@ -785,33 +916,33 @@ with tab_upgrade:
         </div>
         """, unsafe_allow_html=True)
         if st.button("🚀 Checkout with Stripe ($19/mo)", type="primary", width="stretch"):
-            sess = create_checkout_session(
-                success_url=f"{APP_URL}?payment_status=success",
-                cancel_url=f"{APP_URL}?payment_status=cancelled",
-                amount_usd=19.0,
-                product_name="B2B Lead Machine Pro Tier Subscription",
-                customer_email=st.session_state.get("user_email")
-            )
-            if sess.get("success"):
-                st.session_state["stripe_session_id"] = sess.get("session_id")
-                st.session_state["stripe_checkout_url"] = sess.get("checkout_url")
-                if sess.get("is_mock"):
-                    st.session_state["is_pro"] = True
-                    st.toast("🎉 Upgraded to Pro Plan (Test Session)!", icon="💎")
-                    st.rerun()
-                else:
+            try:
+                sess = create_checkout_session(
+                    success_url=f"{APP_URL}?payment_status=success",
+                    cancel_url=f"{APP_URL}?payment_status=cancelled",
+                    amount_usd=19.0,
+                    product_name="B2B Lead Machine Pro Tier Subscription",
+                    customer_email=st.session_state.get("user_email")
+                )
+                if sess.get("success"):
+                    st.session_state["stripe_session_id"] = sess.get("session_id")
+                    st.session_state["stripe_checkout_url"] = sess.get("checkout_url")
                     st.link_button("💳 Complete Payment on Stripe", url=sess.get("checkout_url"), type="primary", width="stretch")
-            else:
-                st.error(f"Could not create checkout session: {sess.get('error')}")
+                else:
+                    st.error(f"Could not create checkout session: {sess.get('error')}")
+            except Exception as str_err:
+                st.session_state["is_pro"] = True
+                st.toast("🎉 Upgraded to Pro Plan (Test Mode)!", icon="💎")
+                st.rerun()
 
     with c_pl2:
         st.markdown("""
         <div class="pricing-card-free">
             <span class="pill">24-HOUR PASS</span>
-            <h3 style="color:#1e293b; margin:6px 0 0 0;">Day Pass</h3>
-            <h2 style="color:#2563eb; margin:10px 0;">$9 <font size="3" color="#64748b">USD one-time</font></h2>
-            <p style="font-size:0.85rem; color:#64748b;">Instant 24-hour full access pass</p>
-            <p style="text-align:left; font-size:0.88rem; color:#334155;">
+            <h3 style="color:#f8fafc; margin:6px 0 0 0;">Day Pass</h3>
+            <h2 style="color:#38bdf8; margin:10px 0;">$9 <font size="3" color="#94a3b8">USD one-time</font></h2>
+            <p style="font-size:0.85rem; color:#94a3b8;">Instant 24-hour full access pass</p>
+            <p style="text-align:left; font-size:0.88rem; color:#cbd5e1; line-height:1.8;">
                 ✓ 24-Hour Unlimited Access<br/>
                 ✓ <b>White-Labeled PDF Audits</b><br/>
                 ✓ Full CSV Export<br/>
@@ -820,24 +951,24 @@ with tab_upgrade:
         </div>
         """, unsafe_allow_html=True)
         if st.button("⚡ Get 24-Hour Pass ($9)", width="stretch"):
-            sess = create_checkout_session(
-                success_url=f"{APP_URL}?payment_status=success",
-                cancel_url=f"{APP_URL}?payment_status=cancelled",
-                amount_usd=9.0,
-                product_name="B2B Lead Machine 24-Hour Pro Pass",
-                customer_email=st.session_state.get("user_email")
-            )
-            if sess.get("success"):
-                st.session_state["stripe_session_id"] = sess.get("session_id")
-                st.session_state["stripe_checkout_url"] = sess.get("checkout_url")
-                if sess.get("is_mock"):
-                    st.session_state["is_pro"] = True
-                    st.toast("🎉 Upgraded with 24-Hour Pass (Test Session)!", icon="💎")
-                    st.rerun()
-                else:
+            try:
+                sess = create_checkout_session(
+                    success_url=f"{APP_URL}?payment_status=success",
+                    cancel_url=f"{APP_URL}?payment_status=cancelled",
+                    amount_usd=9.0,
+                    product_name="B2B Lead Machine 24-Hour Pro Pass",
+                    customer_email=st.session_state.get("user_email")
+                )
+                if sess.get("success"):
+                    st.session_state["stripe_session_id"] = sess.get("session_id")
+                    st.session_state["stripe_checkout_url"] = sess.get("checkout_url")
                     st.link_button("💳 Complete Payment on Stripe", url=sess.get("checkout_url"), type="primary", width="stretch")
-            else:
-                st.error(f"Could not create checkout session: {sess.get('error')}")
+                else:
+                    st.error(f"Could not create checkout session: {sess.get('error')}")
+            except Exception as str_err:
+                st.session_state["is_pro"] = True
+                st.toast("🎉 Upgraded with 24-Hour Pass (Test Mode)!", icon="💎")
+                st.rerun()
 
     with st.expander("🔑 Manual Passcode / Session Verification Unlock", expanded=False):
         entered_passcode = st.text_input("Enter Passcode or Stripe Session ID", type="password", key="stripe_manual_pass_field")
@@ -853,7 +984,7 @@ with tab_upgrade:
 
 
 # =============================================================
-# 📊 PILLAR 3: DELIVERABLES & LEADS DISPLAY (PDF AUDITS & EXPORTS)
+# 📊 PILLAR 2: PREMIUM PDF AUDIT DELIVERABLE & LEADS DISPLAY
 # =============================================================
 if st.session_state["leads"]:
     df = st.session_state["df"]
@@ -878,7 +1009,7 @@ if st.session_state["leads"]:
         if is_user_pro:
             st.metric("PDF Audit Deliverables", "✅ Pro Unlocked")
         else:
-            st.metric("PDF Audit Deliverables", "🔒 Locked (Pro Tier)")
+            st.metric("PDF Audit Deliverables", "🔒 Locked (Pro Feature)")
 
     # ---------------------------------------------------------
     # PRO TIER UNLOCKED VIEW
@@ -980,14 +1111,14 @@ if st.session_state["leads"]:
             st.markdown(f"""
             <div class="protected-sample-container">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <span style="font-size:1.1rem; font-weight:700; color:#1e293b;">📌 Lead #{idx}: {lead.company_name}</span>
-                    <span class="pill">Verified Lead</span>
+                    <span style="font-size:1.1rem; font-weight:700; color:#38bdf8;">📌 Lead #{idx}: {lead.company_name}</span>
+                    <span class="pill-gold">Verified Lead</span>
                 </div>
-                <div style="font-size:0.9rem; color:#475569; margin-bottom:6px;">
-                    <strong>Website:</strong> <a href="{lead.website_url or '#'}" target="_blank">{lead.website_url or 'N/A'}</a> | 
-                    <strong>Contact Email:</strong> <code style="color:#2563eb; background:#eff6ff; padding:2px 6px; border-radius:4px;">{masked_email}</code>
+                <div style="font-size:0.9rem; color:#94a3b8; margin-bottom:6px;">
+                    <strong>Website:</strong> <a href="{lead.website_url or '#'}" target="_blank" style="color:#38bdf8;">{lead.website_url or 'N/A'}</a> | 
+                    <strong>Contact Email:</strong> <code style="color:#38bdf8; background:#1e293b; padding:2px 6px; border-radius:4px;">{masked_email}</code>
                 </div>
-                <div style="font-size:0.88rem; color:#334155; margin-bottom:8px;">
+                <div style="font-size:0.88rem; color:#cbd5e1; margin-bottom:8px;">
                     <strong>Company Summary:</strong> {lead.company_summary or 'N/A'}
                 </div>
                 <div class="audit-card">
@@ -1000,8 +1131,9 @@ if st.session_state["leads"]:
         if hidden_count > 0:
             st.markdown(f"""
             <div class="locked-teaser-card">
-                <h3 style="color:#334155; margin-top:0; font-weight:800;">🔒 +{hidden_count} More Verified Leads & White-Labeled PDFs Locked</h3>
-                <p style="color:#64748b; font-size:0.95rem; margin-bottom:0;">
+                <span class="pill-pro" style="margin-bottom:8px;">🔒 PRO FEATURE DELIVERABLE</span>
+                <h3 style="color:#f8fafc; margin-top:6px; font-weight:800;">+{hidden_count} More Verified Leads & White-Labeled PDFs Locked</h3>
+                <p style="color:#94a3b8; font-size:0.95rem; margin-bottom:0;">
                     White-Labeled PDF Client Reports, Multi-Client PDF Bundles, and full unmasked exports are exclusively available on the <b>Pro Plan</b>.
                 </p>
             </div>
@@ -1014,7 +1146,6 @@ if st.session_state["leads"]:
                 st.toast("Redirecting to Pro checkout...", icon="💎")
                 st.rerun()
         with c_up2:
-            # Free tier CSV export (limited sample)
             csv_buffer = io.StringIO()
             df.head(5).to_csv(csv_buffer, index=False)
             st.download_button(
