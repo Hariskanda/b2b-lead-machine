@@ -34,8 +34,13 @@ st.set_page_config(
 
 MAX_FREE_SEARCHES = 3
 ADMIN_CONTACT_EMAIL = "hariskandapg@gmail.com"
+CLERK_SIGN_IN_URL = "https://internal-chamois-9541.clerk.accounts.dev/sign-in"
+CLERK_SIGN_UP_URL = "https://internal-chamois-9541.clerk.accounts.dev/sign-up"
+CLERK_USER_PROFILE_URL = "https://internal-chamois-9541.clerk.accounts.dev/user"
 
 SESSION_DEFAULTS: Dict[str, Any] = {
+    "user_email": None,           # Clerk authenticated user email
+    "user_name": None,
     "search_count": 0,            # Usage limit counter (Max 3 free searches)
     "is_unlimited": False,        # Admin unlocked unlimited access
     "admin_authenticated": False, # Admin login state
@@ -162,6 +167,30 @@ st.markdown("""
     .mailto-btn:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 22px rgba(56, 189, 248, 0.5);
+    }
+
+    .clerk-btn {
+        display: inline-block;
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: #ffffff !important;
+        text-decoration: none;
+        padding: 8px 18px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.88rem;
+        box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+        border: 1px solid #818cf8;
+    }
+    .clerk-btn-outline {
+        display: inline-block;
+        background: transparent;
+        color: #cbd5e1 !important;
+        text-decoration: none;
+        padding: 8px 18px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.88rem;
+        border: 1px solid #334155;
     }
 
     /* Feature Badges & Pills */
@@ -329,14 +358,49 @@ is_unlimited = bool(st.session_state.get("is_unlimited", False) or is_admin_acti
 search_count = int(st.session_state.get("search_count", 0))
 has_limit_reached = (search_count >= MAX_FREE_SEARCHES) and not is_unlimited
 is_engine_running = bool(st.session_state.get("running", False))
+user_authenticated_email = st.session_state.get("user_email")
 
 
 # =============================================================
-# 🛍️ Sidebar: Usage Tracker, White-Label & Admin Controls
+# 🛍️ Sidebar: Clerk Auth, Usage Tracker, White-Label & Admin
 # =============================================================
 with st.sidebar:
     st.image("https://img.icons8.com/isometric/100/lightning-bolt.png", width=55)
     st.title("B2B Lead Machine")
+
+    # Clerk Authentication Section
+    st.markdown("#### 👤 Authentication")
+    if user_authenticated_email:
+        st.markdown(f"""
+        <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:12px; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                <span style="font-size:1.1rem;">👤</span>
+                <strong style="color:#f8fafc; font-size:0.88rem;">{user_authenticated_email}</strong>
+            </div>
+            <a href="{CLERK_USER_PROFILE_URL}" target="_blank" style="color:#38bdf8; font-size:0.8rem; text-decoration:none;">⚙️ Manage Clerk Profile</a>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Log Out of Session", width="stretch"):
+            st.session_state["user_email"] = None
+            st.session_state["user_name"] = None
+            st.rerun()
+    else:
+        st.markdown(f"""
+        <div style="display:flex; gap:8px; margin-bottom:14px;">
+            <a href="{CLERK_SIGN_IN_URL}" target="_blank" class="clerk-btn" style="flex:1; text-align:center;">🔑 Sign In</a>
+            <a href="{CLERK_SIGN_UP_URL}" target="_blank" class="clerk-btn-outline" style="flex:1; text-align:center;">✨ Sign Up</a>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.expander("⚡ Quick Account Sign-In", expanded=False):
+            in_email = st.text_input("Enter Email to Sync", placeholder="e.g. founder@agency.com", key="quick_email_in")
+            if st.button("Sync Account", width="stretch"):
+                if in_email and "@" in in_email:
+                    st.session_state["user_email"] = in_email.strip()
+                    st.toast(f"Welcome, {in_email.strip()}!", icon="👤")
+                    st.rerun()
+
+    st.divider()
 
     # Usage Status Card
     if is_unlimited:
@@ -415,15 +479,28 @@ effective_agency_website = str(st.session_state.get("agency_website", "https://g
 
 
 # =============================================================
-# 🚀 MAIN SAAS DASHBOARD (WITH LIMIT TRACKING)
+# 🚀 MAIN SAAS DASHBOARD (WITH CLERK AUTH & LIMIT TRACKING)
 # =============================================================
+auth_nav_html = (
+    f"""<div style="display:flex; align-items:center; gap:12px;">
+        <span style="color:#94a3b8; font-size:0.88rem;">👤 {user_authenticated_email}</span>
+        <a href="{CLERK_USER_PROFILE_URL}" target="_blank" class="clerk-btn" style="padding:6px 14px; font-size:0.8rem;">Profile</a>
+    </div>"""
+    if user_authenticated_email
+    else f"""<div style="display:flex; align-items:center; gap:8px;">
+        <a href="{CLERK_SIGN_IN_URL}" target="_blank" class="clerk-btn" style="padding:6px 14px; font-size:0.82rem;">Sign In</a>
+        <a href="{CLERK_SIGN_UP_URL}" target="_blank" class="clerk-btn-outline" style="padding:6px 14px; font-size:0.82rem;">Sign Up</a>
+    </div>"""
+)
+
 st.markdown(f"""
 <div class="saas-navbar">
     <div class="saas-logo">
         ⚡ <span>B2B Lead Machine</span>
     </div>
-    <div>
-        {'<span class="pill-pro">⭐ Unlimited Searches</span>' if is_unlimited else f'<span class="pill">🔍 {search_count} / {MAX_FREE_SEARCHES} Free Searches Used</span>'}
+    <div style="display:flex; align-items:center; gap:16px;">
+        {'<span class="pill-pro">⭐ Unlimited Searches</span>' if is_unlimited else f'<span class="pill">🔍 {search_count} / {MAX_FREE_SEARCHES} Free Searches</span>'}
+        {auth_nav_html}
     </div>
 </div>
 """, unsafe_allow_html=True)

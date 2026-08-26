@@ -77,14 +77,14 @@ class Settings(BaseSettings):
         validation_alias="SENDER_NAME"
     )
 
-    # Stripe Payment Configuration
-    stripe_secret_key: Optional[str] = Field(
+    # Clerk Authentication Configuration
+    clerk_publishable_key: Optional[str] = Field(
         default=None,
-        validation_alias="STRIPE_SECRET_KEY"
+        validation_alias="CLERK_PUBLISHABLE_KEY"
     )
-    lead_package_price_usd: int = Field(
-        default=300,
-        validation_alias="LEAD_PACKAGE_PRICE_USD"
+    clerk_secret_key: Optional[str] = Field(
+        default=None,
+        validation_alias="CLERK_SECRET_KEY"
     )
 
     # UPI Payment Configuration (₹499)
