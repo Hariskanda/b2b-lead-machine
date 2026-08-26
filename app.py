@@ -122,7 +122,11 @@ for state_key, state_default in SESSION_DEFAULTS.items():
         st.session_state[state_key] = state_default
 
 
-# Auto-detect email from query parameters (e.g. redirected from Clerk Auth)
+# 1. Detect Native Streamlit Authentication (st.user)
+if hasattr(st, "user") and getattr(st.user, "is_logged_in", False) and getattr(st.user, "email", None):
+    st.session_state["user_email"] = str(st.user.email).strip().lower()
+
+# 2. Detect query parameters (e.g. redirected from Clerk Auth / SSO)
 query_params = st.query_params
 if "email" in query_params and query_params["email"] and not st.session_state["user_email"]:
     st.session_state["user_email"] = query_params["email"].strip().lower()
@@ -404,23 +408,23 @@ def safe_execute_pipeline_sync(
 
 
 def render_user_limit_reached_card(user_email: str) -> None:
-    """Renders the professional limit-reached message and personalized mailto link."""
+    """Renders the professional limit-reached message and one-click mailto upgrade button."""
     clean_email = user_email.strip() if user_email else "user@agency.com"
-    subject_encoded = urllib.parse.quote("Unlock More Searches")
-    body_text = f"Hi Haris, my account ({clean_email}) has exhausted its free searches. Please extend my limit!"
+    subject_encoded = urllib.parse.quote("Request to Extend App Limit")
+    body_text = f"Hi Haris, my account ({clean_email}) has reached its search limit. Please extend my access!"
     body_encoded = urllib.parse.quote(body_text)
     mailto_url = f"mailto:{ADMIN_CONTACT_EMAIL}?subject={subject_encoded}&body={body_encoded}"
 
     st.markdown(f"""
     <div class="limit-warning-box">
         <span class="pill" style="background:#312e81; color:#c7d2fe; border-color:#6366f1;">⚠️ USAGE LIMIT REACHED</span>
-        <h2 style="color:#ffffff; margin: 12px 0 8px 0; font-weight: 800;">You have used all your free searches.</h2>
+        <h2 style="color:#ffffff; margin: 12px 0 8px 0; font-weight: 800;">You have exhausted your free searches.</h2>
         <p style="color:#cbd5e1; font-size: 1.02rem; max-width: 680px; margin: 0 auto 18px auto; line-height: 1.5;">
-            Your account (<b>{clean_email}</b>) has used all <b>{MAX_FREE_SEARCHES} of {MAX_FREE_SEARCHES}</b> complimentary lead generation searches. Click below to request more limit from Haris.
+            Your account (<b>{clean_email}</b>) has used all <b>{MAX_FREE_SEARCHES} of {MAX_FREE_SEARCHES}</b> free lead searches. Click below to request more limit from Haris via email.
         </p>
         <div style="margin: 20px 0;">
             <a href="{mailto_url}" target="_blank" class="mailto-btn">
-                📧 Request More Searches via Email
+                📧 Request More Limit via Email
             </a>
         </div>
         <p style="color:#94a3b8; font-size: 0.88rem; margin-top: 14px; margin-bottom: 0;">
@@ -437,7 +441,10 @@ UNLOCK_CODE: str = str(get_secret("UNLOCK_CODE", getattr(settings, "unlock_code"
 
 # Authentication & State
 current_user_email: Optional[str] = st.session_state.get("user_email")
-is_admin_active = bool(st.session_state.get("admin_authenticated", False) or (current_user_email and current_user_email.lower() == ADMIN_CONTACT_EMAIL.lower()))
+is_admin_active = bool(
+    st.session_state.get("admin_authenticated", False) or 
+    (current_user_email and current_user_email.lower() == ADMIN_CONTACT_EMAIL.lower())
+)
 
 # Per-User Usage Statistics
 user_stats = get_user_usage(current_user_email or "")
@@ -456,22 +463,23 @@ with st.sidebar:
     st.title("B2B Lead Machine")
 
     if current_user_email:
-        st.markdown("#### 👤 Active Account")
-        st.markdown(f"""
-        <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:12px; margin-bottom:12px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-                <span style="font-size:1.1rem;">👤</span>
-                <strong style="color:#f8fafc; font-size:0.88rem; word-break:break-all;">{current_user_email}</strong>
-            </div>
-            <a href="{CLERK_USER_PROFILE_URL}" target="_blank" style="color:#38bdf8; font-size:0.8rem; text-decoration:none;">⚙️ Manage Clerk Profile</a>
-        </div>
-        """, unsafe_allow_html=True)
-
-        if st.button("Log Out", width="stretch"):
-            st.session_state["user_email"] = None
-            st.session_state["user_name"] = None
-            st.session_state["admin_authenticated"] = False
-            st.rerun()
+        st.markdown("#### 👤 User Authentication")
+        st.success(f"👋 Welcome, **{current_user_email}**!")
+        
+        c_p1, c_p2 = st.columns([1, 1])
+        with c_p1:
+            st.markdown(f'<a href="{CLERK_USER_PROFILE_URL}" target="_blank" style="color:#38bdf8; font-size:0.82rem; text-decoration:none;">⚙️ Profile</a>', unsafe_allow_html=True)
+        with c_p2:
+            if st.button("Log Out", width="stretch"):
+                try:
+                    if hasattr(st, "logout") and hasattr(st, "user") and getattr(st.user, "is_logged_in", False):
+                        st.logout()
+                except Exception:
+                    pass
+                st.session_state["user_email"] = None
+                st.session_state["user_name"] = None
+                st.session_state["admin_authenticated"] = False
+                st.rerun()
 
         st.divider()
 
@@ -516,30 +524,20 @@ with st.sidebar:
 
         st.divider()
 
-    # 🔑 Admin Override Panel
-    with st.expander("🔐 Admin Override Panel", expanded=False):
-        if not is_admin_active:
-            admin_pwd = st.text_input("Admin Password", type="password", key="admin_pwd_field")
-            if st.button("Authenticate Admin", width="stretch"):
-                if admin_pwd and (admin_pwd == ADMIN_PASSWORD or admin_pwd == UNLOCK_CODE):
-                    st.session_state["admin_authenticated"] = True
-                    add_activity_log("Admin authenticated successfully.", "INFO")
-                    st.toast("🔓 Admin mode unlocked!", icon="👑")
-                    st.rerun()
-                else:
-                    st.error("Invalid admin password.")
-        else:
-            st.success("👑 Admin Mode Active")
+    # 🔑 Admin Override Panel (Visible when hariskandapg@gmail.com is logged in or via admin auth)
+    if is_admin_active:
+        with st.expander("👑 Admin Control Panel (Haris)", expanded=True):
+            st.success("👑 Admin Mode Active (`hariskandapg@gmail.com`)")
             all_users = list(load_all_user_usage().keys())
             
             target_override_email = st.text_input("Target User Email to Replenish", value=current_user_email or "", key="admin_target_email_in")
             col_ad1, col_ad2 = st.columns(2)
             with col_ad1:
-                if st.button("🔄 Reset to 3 Searches", width="stretch"):
+                if st.button("🔄 Reset Limit / Grant Access", width="stretch"):
                     if target_override_email:
                         admin_reset_user_limit(target_override_email, grant_unlimited=False)
                         add_activity_log(f"Admin reset limit for {target_override_email} to 3 searches.", "INFO")
-                        st.toast(f"Limit reset to 3 for {target_override_email}!", icon="🔄")
+                        st.toast(f"Limit replenished for {target_override_email}!", icon="🔄")
                         st.rerun()
             with col_ad2:
                 if st.button("⭐ Grant Unlimited", width="stretch"):
@@ -554,10 +552,17 @@ with st.sidebar:
                 for u in all_users[:8]:
                     u_stat = get_user_usage(u)
                     st.text(f"• {u}: {u_stat.get('search_count', 0)} used {'(Unlimited)' if u_stat.get('is_unlimited') else ''}")
-
-            if st.button("Exit Admin Mode", width="stretch"):
-                st.session_state["admin_authenticated"] = False
-                st.rerun()
+    else:
+        with st.expander("🔐 Admin Access", expanded=False):
+            admin_pwd = st.text_input("Admin Password", type="password", key="admin_pwd_field")
+            if st.button("Authenticate Admin", width="stretch"):
+                if admin_pwd and (admin_pwd == ADMIN_PASSWORD or admin_pwd == UNLOCK_CODE):
+                    st.session_state["admin_authenticated"] = True
+                    add_activity_log("Admin authenticated via password.", "INFO")
+                    st.toast("🔓 Admin mode unlocked!", icon="👑")
+                    st.rerun()
+                else:
+                    st.error("Invalid admin password.")
 
     st.caption(f"⚡ **B2B Lead Machine** • Support: `{ADMIN_CONTACT_EMAIL}`")
 
@@ -570,7 +575,7 @@ effective_agency_website = str(st.session_state.get("agency_website", "https://g
 
 
 # =============================================================
-# 🔒 PILLAR 1: MANDATORY SIGN-IN WALL (WHEN LOGGED OUT)
+# 🔒 PILLAR 1: STREAMLIT AUTHENTICATION WALL (WHEN LOGGED OUT)
 # =============================================================
 if not current_user_email:
     # SaaS Navbar (Logged Out State)
@@ -608,9 +613,17 @@ if not current_user_email:
     </div>
     """, unsafe_allow_html=True)
 
-    # Direct Sign-in Form
+    # Authentication Options Form
     col_c1, col_c2, col_c3 = st.columns([1, 2, 1])
     with col_c2:
+        # Try Streamlit Native Login if supported
+        if hasattr(st, "login"):
+            try:
+                if st.button("🔑 Sign in with Streamlit Auth", type="primary", width="stretch", key="st_native_login_btn"):
+                    st.login()
+            except Exception:
+                pass
+
         st.markdown("#### ⚡ Quick Email Sign-In / Register")
         sign_in_email = st.text_input("Work / Agency Email Address", placeholder="e.g. founder@growthagency.com", key="auth_wall_email")
         sign_in_name = st.text_input("Your Name / Company Name (Optional)", placeholder="e.g. Alex Rivera", key="auth_wall_name")
@@ -706,7 +719,7 @@ with tab_search:
 
     if btn_discover:
         if has_user_hit_limit:
-            st.warning("⚠️ You have used all your free searches.")
+            st.warning("⚠️ You have exhausted your free searches.")
         else:
             target_q = search_query.strip()
             target_n = int(num_leads)
@@ -811,7 +824,7 @@ with tab_csv:
 
             if btn_enrich_csv:
                 if has_user_hit_limit:
-                    st.warning("⚠️ You have used all your free searches.")
+                    st.warning("⚠️ You have exhausted your free searches.")
                 else:
                     input_leads = []
                     for _, row in uploaded_df.iterrows():
