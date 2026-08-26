@@ -23,7 +23,7 @@ from b2b_leadgen.pipeline import LeadGenPipeline, detect_company_column
 logger = logging.getLogger(__name__)
 
 # =============================================================
-# 1. GLOBAL PAGE CONFIG & VIBRANT MODERN SAAS CSS
+# 1. GLOBAL PAGE CONFIG & HIGH-CONTRAST CSS INJECTION
 # =============================================================
 st.set_page_config(
     page_title="ApexLeads AI",
@@ -37,7 +37,7 @@ ADMIN_CONTACT_EMAIL = "hariskandapg@gmail.com"
 ADMIN_PASSCODE = "admin123"
 UNLOCK_PASSCODE = "4990"
 
-# Inject modern dark-mode SaaS CSS with vibrant tech styling
+# Inject High-Contrast CSS and visibility hotfix
 st.markdown("""
 <style>
     /* Remove default Streamlit header/footer clutter */
@@ -47,102 +47,82 @@ st.markdown("""
     div[data-testid="stToolbar"] {visibility: hidden;}
     div[data-testid="stDecoration"] {visibility: hidden;}
 
-    /* Vibrant Modern Dark Theme */
-    .stApp {
-        background-color: #0b0f17;
-        color: #f8fafc;
-        font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    /* Global text visibility */
+    html, body, [class*="css"], .stMarkdown, p, h1, h2, h3, h4, span, label {
+        color: #FFFFFF !important;
+    }
+    /* Input box visibility */
+    .stTextInput > div > div > input {
+        background-color: #1E293B !important;
+        color: #FFFFFF !important;
+        border: 1px solid #475569 !important;
+        border-radius: 8px !important;
+    }
+    /* Primary Buttons */
+    .stButton > button {
+        background: linear-gradient(90deg, #3B82F6, #8B5CF6) !important;
+        color: #FFFFFF !important;
+        font-weight: bold !important;
+        border: none !important;
+        padding: 10px 24px !important;
+        border-radius: 8px !important;
+        box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35) !important;
+    }
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5) !important;
+    }
+    /* Tab navigation high visibility */
+    button[data-baseweb="tab"] {
+        color: #94A3B8 !important;
+        font-size: 16px !important;
+        font-weight: 600 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #38BDF8 !important;
+        border-bottom-color: #38BDF8 !important;
     }
 
-    /* Top Platform Header */
+    /* Top Header Bar */
     .apex-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 18px 28px;
+        padding: 16px 24px;
         background: linear-gradient(180deg, rgba(17, 24, 39, 0.95) 0%, rgba(15, 23, 42, 0.85) 100%);
         backdrop-filter: blur(16px);
-        border: 1px solid #1e293b;
-        border-radius: 16px;
-        margin-bottom: 22px;
-        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+        border: 1px solid #334155;
+        border-radius: 14px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
     }
     .brand-title {
-        font-size: 1.45rem;
+        font-size: 1.4rem;
         font-weight: 850;
-        background: linear-gradient(135deg, #ffffff 0%, #38bdf8 45%, #a855f7 100%);
+        background: linear-gradient(135deg, #ffffff 0%, #38bdf8 50%, #a855f7 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         letter-spacing: -0.02em;
     }
-    .brand-badge {
-        font-size: 0.72rem;
-        background: rgba(16, 185, 129, 0.15);
-        color: #34d399;
-        border: 1px solid rgba(16, 185, 129, 0.3);
-        padding: 2px 8px;
-        border-radius: 9999px;
-        font-weight: 600;
-    }
-
-    /* Hero Sign-In Card */
-    .hero-sign-card {
-        border: 1px solid rgba(99, 102, 241, 0.4);
-        border-radius: 20px;
-        padding: 44px 32px;
-        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #0f172a 100%);
-        text-align: center;
-        box-shadow: 0 16px 40px rgba(99, 102, 241, 0.25);
-        max-width: 720px;
-        margin: 30px auto 20px auto;
-    }
-    .hero-sign-card h1 {
-        font-size: 2.5rem;
-        font-weight: 850;
-        background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 12px;
-    }
-    .hero-sign-card p {
-        color: #cbd5e1;
-        font-size: 1.08rem;
-        line-height: 1.6;
-        margin-bottom: 24px;
-    }
-
-    /* Visual Feature Spotlight Cards */
-    .spotlight-card {
-        background: #111827;
-        border: 1px solid #1f2937;
-        border-radius: 16px;
-        overflow: hidden;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-        transition: transform 0.2s ease, border-color 0.2s ease;
-        height: 100%;
-    }
-    .spotlight-card:hover {
-        transform: translateY(-4px);
-        border-color: #38bdf8;
-    }
-    .spotlight-img {
-        width: 100%;
-        height: 140px;
-        object-fit: cover;
-        border-bottom: 1px solid #1f2937;
-    }
-    .spotlight-content {
-        padding: 18px;
-    }
-    .spotlight-tag {
+    .pill-credit-badge {
         display: inline-block;
-        font-size: 0.72rem;
-        font-weight: 700;
-        padding: 2px 8px;
+        background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+        color: #ffffff !important;
+        padding: 6px 14px;
         border-radius: 9999px;
-        margin-bottom: 8px;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
+        font-size: 0.84rem;
+        font-weight: 700;
+        box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
+    }
+
+    /* Card Containers */
+    .saas-card {
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 20px;
+        background-color: #111827;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+        margin-bottom: 20px;
     }
 
     /* Audit Display Card */
@@ -150,52 +130,20 @@ st.markdown("""
         border-left: 4px solid #10b981;
         background: #111827;
         padding: 16px;
-        border-radius: 10px;
+        border-radius: 8px;
         margin-bottom: 12px;
         border: 1px solid #1f2937;
-        color: #e2e8f0;
+        color: #f8fafc !important;
     }
 
-    /* Badges & Pills */
-    .pill-badge {
-        display: inline-block;
-        background: #1e293b;
-        color: #93c5fd;
-        border: 1px solid #334155;
-        padding: 4px 12px;
-        border-radius: 9999px;
-        font-size: 0.78rem;
-        font-weight: 600;
-    }
-    .pill-credit {
-        display: inline-block;
-        background: linear-gradient(135deg, #059669 0%, #10b981 100%);
-        color: #ffffff;
-        padding: 5px 14px;
-        border-radius: 9999px;
-        font-size: 0.82rem;
-        font-weight: 700;
-        box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
-    }
-    .pill-pro {
-        display: inline-block;
-        background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-        color: #ffffff;
-        padding: 5px 14px;
-        border-radius: 9999px;
-        font-size: 0.82rem;
-        font-weight: 700;
-        box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
-    }
-
-    /* Large Mailto Upgrade Button */
+    /* Large Mailto Button */
     .mailto-upgrade-btn {
         display: inline-block;
-        background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
         color: #ffffff !important;
         text-decoration: none;
         padding: 14px 32px;
-        border-radius: 12px;
+        border-radius: 10px;
         font-weight: 700;
         font-size: 1.05rem;
         box-shadow: 0 4px 18px rgba(37, 99, 235, 0.45);
@@ -207,63 +155,12 @@ st.markdown("""
         transform: translateY(-2px);
         box-shadow: 0 6px 24px rgba(56, 189, 248, 0.55);
     }
-
-    /* Sidebar Sponsored Partner Box */
-    .sidebar-sponsor-box {
-        background: linear-gradient(180deg, #111827 0%, #1e1b4b 100%);
-        border: 1px solid rgba(99, 102, 241, 0.4);
-        border-radius: 14px;
-        padding: 16px;
-        text-align: center;
-        margin-top: 14px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-    }
-    .ad-badge {
-        font-size: 0.65rem;
-        background: rgba(234, 179, 8, 0.2);
-        color: #facc15;
-        border: 1px solid rgba(234, 179, 8, 0.4);
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-weight: 700;
-        letter-spacing: 0.05em;
-    }
-
-    /* Leaderboard Ad Container (728x90 style) */
-    .leaderboard-ad-container {
-        background: linear-gradient(90deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
-        border: 1px dashed #475569;
-        border-radius: 14px;
-        padding: 18px 24px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin: 30px 0 10px 0;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-    }
-
-    /* Styled Action Buttons */
-    div.stButton > button:first-child {
-        border-radius: 10px;
-        font-weight: 600;
-        transition: all 0.2s ease-in-out;
-    }
-    div.stButton > button[kind="primary"]:first-child {
-        background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
-        border: 1px solid #6366f1;
-        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
-    }
-    div.stButton > button[kind="primary"]:first-child:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5);
-        border-color: #38bdf8;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 
 # =============================================================
-# Helper Utilities & Pipeline Execution
+# Helper Utilities & Execution Engine
 # =============================================================
 def get_secret(key: str, default: Any = None) -> Any:
     """Safely retrieves secret configuration."""
@@ -332,11 +229,13 @@ def generate_mailto_url(user_email: str) -> str:
     return f"mailto:{ADMIN_CONTACT_EMAIL}?subject={subject}&body={body}"
 
 
-# Initialize Core Session State
-if "user_email" not in st.session_state:
-    st.session_state.user_email = None
+# =============================================================
+# 3. PREVENT SCREEN BLANKING: INITIALIZE STATE IMMEDIATELY
+# =============================================================
 if "credits" not in st.session_state:
     st.session_state.credits = 3
+if "user_email" not in st.session_state or not st.session_state.user_email:
+    st.session_state.user_email = "guest@agency.com"
 if "leads_data" not in st.session_state:
     st.session_state.leads_data = []
 if "df" not in st.session_state:
@@ -355,97 +254,20 @@ effective_concurrency = int(getattr(settings, "max_concurrent_requests", 5))
 
 
 # =============================================================
-# 2. SIMPLE, WORKING SIGN-IN GATE (NO OAUTH BUGS)
-# =============================================================
-if "user_email" not in st.session_state or not st.session_state.user_email:
-    st.markdown(f"""
-    <div class="hero-sign-card">
-        <span class="pill-pro" style="margin-bottom:12px;">⚡ THE 2026 STANDARD IN HIGH-TICKET OUTBOUND</span>
-        <h1>⚡ ApexLeads AI</h1>
-        <p>
-            Find high-converting local leads, generate instant AI website audits, and scale client outreach.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # 3-Card Visual Spotlight Carousel
-    c_sp1, c_sp2, c_sp3 = st.columns(3)
-    with c_sp1:
-        st.markdown("""
-        <div class="spotlight-card">
-            <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80" class="spotlight-img"/>
-            <div class="spotlight-content">
-                <span class="spotlight-tag" style="background:#0369a1; color:#e0f2fe;">⚡ High-Speed Extraction</span>
-                <h4 style="color:#ffffff; margin:6px 0 4px 0;">10x Lead Discovery</h4>
-                <p style="color:#94a3b8; font-size:0.86rem; line-height:1.4; margin-bottom:0;">
-                    Target local metros and extract decision-maker emails with 5-worker parallel crawling.
-                </p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with c_sp2:
-        st.markdown("""
-        <div class="spotlight-card">
-            <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80" class="spotlight-img"/>
-            <div class="spotlight-content">
-                <span class="spotlight-tag" style="background:#4338ca; color:#e0e7ff;">🤖 Gemini 2026 AI</span>
-                <h4 style="color:#ffffff; margin:6px 0 4px 0;">AI Website Audits</h4>
-                <p style="color:#94a3b8; font-size:0.86rem; line-height:1.4; margin-bottom:0;">
-                    Analyze company blind spots, conversion leaks, and generate 3-point value audits.
-                </p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with c_sp3:
-        st.markdown("""
-        <div class="spotlight-card">
-            <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80" class="spotlight-img"/>
-            <div class="spotlight-content">
-                <span class="spotlight-tag" style="background:#047857; color:#d1fae5;">📄 Executive Deliverable</span>
-                <h4 style="color:#ffffff; margin:6px 0 4px 0;">1-Click PDF Bundles</h4>
-                <p style="color:#94a3b8; font-size:0.86rem; line-height:1.4; margin-bottom:0;">
-                    Download ready-to-present white-labeled PDF audits stamped with your agency branding.
-                </p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<div style='height: 24px;'></div>", unsafe_allow_html=True)
-
-    col_l, col_m, col_r = st.columns([1, 2, 1])
-    with col_m:
-        with st.container(border=True):
-            st.markdown("### 🚀 Get Started with 3 Free Credits")
-            email_in = st.text_input("Enter your business email to get 3 free search credits:", placeholder="e.g. founder@growthagency.com")
-            
-            if st.button("Launch Platform →", type="primary", width="stretch"):
-                clean_email = email_in.strip().lower()
-                if not clean_email or "@" not in clean_email or "." not in clean_email:
-                    st.error("Please enter a valid email address.")
-                else:
-                    st.session_state.user_email = clean_email
-                    st.session_state.credits = 3
-                    st.toast(f"Welcome, {clean_email}!", icon="👋")
-                    st.rerun()
-
-    st.stop()
-
-
-# =============================================================
-# TOP NAVIGATION HEADER & SIDEBAR
+# TOP HEADER BAR & SIDEBAR
 # =============================================================
 st.markdown(f"""
 <div class="apex-header">
     <div style="display:flex; align-items:center; gap:12px;">
-        <span style="font-size:1.4rem;">⚡</span>
-        <span class="brand-title">{APP_NAME}</span>
-        <span class="brand-badge">● Online</span>
+        <span style="font-size:1.5rem;">⚡</span>
+        <div>
+            <span class="brand-title">{APP_NAME}</span>
+            <div style="font-size:0.75rem; color:#94a3b8;">{APP_TAGLINE}</div>
+        </div>
     </div>
-    <div style="display:flex; align-items:center; gap:14px;">
-        <span class="pill-credit">🔍 {st.session_state.credits} Search Credits Left</span>
-        <span style="color:#94a3b8; font-size:0.88rem;">👤 {st.session_state.user_email}</span>
+    <div style="display:flex; align-items:center; gap:16px;">
+        <span class="pill-credit-badge">🔍 {st.session_state.credits} Free Search Credits</span>
+        <span style="color:#94a3b8; font-size:0.86rem;">👤 {st.session_state.user_email}</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -453,15 +275,7 @@ st.markdown(f"""
 with st.sidebar:
     st.markdown(f"### ⚡ **{APP_NAME}**")
     st.markdown(f"👤 **Account:** `{st.session_state.user_email}`")
-    
-    st.metric("Remaining Credits", st.session_state.credits)
-
-    if st.button("Sign Out", width="stretch"):
-        st.session_state.user_email = None
-        st.session_state.credits = 3
-        st.session_state.leads_data = []
-        st.session_state.df = pd.DataFrame()
-        st.rerun()
+    st.metric("Remaining Search Credits", st.session_state.credits)
 
     st.divider()
 
@@ -475,29 +289,12 @@ with st.sidebar:
 
     st.divider()
 
-    # 📢 Sidebar Monetized Ad / Sponsor Spotlight
-    st.markdown("""
-    <div class="sidebar-sponsor-box">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <span class="ad-badge">📢 SPONSORED</span>
-            <span style="font-size:0.7rem; color:#94a3b8;">Partner Spotlight</span>
-        </div>
-        <div style="font-size:0.88rem; font-weight:700; color:#f8fafc;">Cold Outreach Infrastructure</div>
-        <p style="font-size:0.78rem; color:#cbd5e1; margin-top:6px; margin-bottom:10px; line-height:1.4;">
-            Scale deliverability with dedicated sending pools & automated inbox warm-up.
-        </p>
-        <span class="pill-badge" style="font-size:0.72rem; border-color:#6366f1;">Featured Sponsor</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.divider()
-
-    # Quick mailto extension
+    # Quick Email Request link
     st.markdown("#### 💎 Need More Credits?")
-    mailto_quick = generate_mailto_url(st.session_state.user_email)
+    mailto_sidebar = generate_mailto_url(st.session_state.user_email)
     st.markdown(f"""
-    <a href="{mailto_quick}" target="_blank" style="display:block; text-align:center; background:#1e293b; color:#38bdf8; border:1px solid #334155; padding:8px 12px; border-radius:8px; text-decoration:none; font-weight:600; font-size:0.84rem;">
-        📧 Email Haris for More
+    <a href="{mailto_sidebar}" target="_blank" style="display:block; text-align:center; background:#1e293b; color:#38bdf8; border:1px solid #334155; padding:10px; border-radius:8px; text-decoration:none; font-weight:700; font-size:0.86rem;">
+        📧 Email Haris for More Credits
     </a>
     """, unsafe_allow_html=True)
 
@@ -516,65 +313,19 @@ with st.sidebar:
 
 
 # =============================================================
-# 3. TAB-BASED VISIBLE NAVIGATION
+# 2. ALWAYS-ACCESSIBLE STREAMLIT NATIVE TABS
 # =============================================================
-tab_dash, tab_leads, tab_upgrade = st.tabs([
-    "📊 Lead Engine & Audit",
-    "📁 Saved Results & PDF",
-    "💎 Search Credits & Support"
+tab1, tab2, tab3 = st.tabs([
+    "🚀 Lead & Audit Engine (Dashboard)",
+    "📄 Saved Leads & PDF",
+    "💎 Search Credits & Admin"
 ])
 
 
 # =============================================================
-# 4. TAB 1: LEAD ENGINE & SEARCH LIMIT LOGIC
+# TAB 1: LEAD & AUDIT ENGINE (DASHBOARD)
 # =============================================================
-with tab_dash:
-    # Feature Visual Spotlight Header
-    c_v1, c_v2, c_v3 = st.columns(3)
-    with c_v1:
-        st.markdown("""
-        <div class="spotlight-card">
-            <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80" class="spotlight-img"/>
-            <div class="spotlight-content">
-                <span class="spotlight-tag" style="background:#0369a1; color:#e0f2fe;">⚡ 10x Lead Discovery</span>
-                <h4 style="color:#ffffff; margin:4px 0 2px 0;">Target Local Metros</h4>
-                <p style="color:#94a3b8; font-size:0.84rem; line-height:1.4; margin-bottom:0;">
-                    Scrape company websites and verified emails in parallel.
-                </p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with c_v2:
-        st.markdown("""
-        <div class="spotlight-card">
-            <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80" class="spotlight-img"/>
-            <div class="spotlight-content">
-                <span class="spotlight-tag" style="background:#4338ca; color:#e0e7ff;">🤖 Instant AI Audits</span>
-                <h4 style="color:#ffffff; margin:4px 0 2px 0;">Gemini 2026 Levers</h4>
-                <p style="color:#94a3b8; font-size:0.84rem; line-height:1.4; margin-bottom:0;">
-                    AI evaluates website blind spots and growth opportunities.
-                </p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with c_v3:
-        st.markdown("""
-        <div class="spotlight-card">
-            <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80" class="spotlight-img"/>
-            <div class="spotlight-content">
-                <span class="spotlight-tag" style="background:#047857; color:#d1fae5;">📄 Executive PDF</span>
-                <h4 style="color:#ffffff; margin:4px 0 2px 0;">Client-Ready Reports</h4>
-                <p style="color:#94a3b8; font-size:0.84rem; line-height:1.4; margin-bottom:0;">
-                    Download complete multi-client audit bundles with cover page.
-                </p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
-
+with tab1:
     with st.container(border=True):
         st.markdown("### 🎯 Find Local Businesses & Generate AI Audits")
         st.markdown("Enter target keywords, industry, and city (e.g. *'Commercial roofing in Miami, FL'* or *'HVAC contractors in Dallas, TX'*):")
@@ -600,7 +351,7 @@ with tab_dash:
         if not combined_query:
             st.error("Please enter a target niche or location.")
         elif st.session_state.credits <= 0:
-            st.error("⚠️ You have exhausted your free search credits. Please visit the **💎 Search Credits & Support** tab to request more credits from Haris.")
+            st.error("⚠️ You have exhausted your free search credits. Please visit the **💎 Search Credits & Admin** tab to request more credits from Haris.")
         else:
             st.session_state.running = True
             try:
@@ -645,6 +396,7 @@ with tab_dash:
 
                             st.session_state.leads_data = results
                             st.session_state.df = pd.DataFrame([r.model_dump() for r in results])
+                            st.toast("Leads generated! View them in '📄 Saved Leads & PDF' tab.", icon="✅")
                             st.rerun()
 
             except Exception as e:
@@ -652,7 +404,7 @@ with tab_dash:
             finally:
                 st.session_state.running = False
 
-    # Optional CSV Upload section
+    # Optional CSV Upload Section
     with st.expander("📁 Or Enrich an Existing CSV File", expanded=False):
         uploaded_file = st.file_uploader("Upload CSV with company names", type=["csv"])
         if uploaded_file is not None:
@@ -668,7 +420,7 @@ with tab_dash:
 
                 if st.button("⚡ Enrich Uploaded CSV", type="primary", disabled=st.session_state.running):
                     if st.session_state.credits <= 0:
-                        st.error("⚠️ You have exhausted your free search credits. Please request more in the Upgrade tab.")
+                        st.error("⚠️ You have exhausted your free search credits. Please request more in the Credits tab.")
                     else:
                         csv_inputs = []
                         for _, row in uploaded_df.iterrows():
@@ -700,36 +452,13 @@ with tab_dash:
             except Exception as ex:
                 st.error(f"Error reading CSV: {ex}")
 
-    # 📢 Responsive Leaderboard Ad Unit (728x90 Container)
-    st.markdown("""
-    <div class="leaderboard-ad-container">
-        <div style="display:flex; align-items:center; gap:14px;">
-            <div style="background:#1e1b4b; border:1px solid #6366f1; border-radius:8px; padding:6px 10px;">
-                <span style="font-size:1.1rem;">🚀</span>
-            </div>
-            <div>
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span class="ad-badge">SPONSORED</span>
-                    <strong style="color:#ffffff; font-size:0.95rem;">Scale Your High-Volume Cold Outbound</strong>
-                </div>
-                <div style="color:#94a3b8; font-size:0.82rem; margin-top:2px;">
-                    Get dedicated inbox infrastructure with 99.8% inbox placement. Built for high-growth B2B agencies.
-                </div>
-            </div>
-        </div>
-        <div style="text-align:right;">
-            <span class="pill-badge" style="border-color:#6366f1; font-size:0.74rem;">Ad Partner Slot</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
 
 # =============================================================
-# 5. TAB 2: AUDIT RESULTS & EXPORT
+# TAB 2: SAVED LEADS & PDF
 # =============================================================
-with tab_leads:
+with tab2:
     if not st.session_state.leads_data:
-        st.info("No leads generated yet. Run a search in the **📊 Lead Engine & Audit** tab to see results and download PDFs.")
+        st.info("No leads generated yet. Enter your search query in **🚀 Lead & Audit Engine (Dashboard)** and click 'Generate Leads'.")
     else:
         leads: List[EnrichedLead] = st.session_state.leads_data
         df = st.session_state.df
@@ -833,34 +562,40 @@ with tab_leads:
 
 
 # =============================================================
-# 6. TAB 3: UPGRADE & CONTACT (HARISKANDAPG@GMAIL.COM)
+# TAB 3: SEARCH CREDITS & ADMIN
 # =============================================================
-with tab_upgrade:
+with tab3:
     with st.container(border=True):
-        st.markdown("### 💎 Need More Search Credits?")
-        st.markdown(f"Your logged-in email: **`{st.session_state.user_email}`**")
-        st.markdown(f"Current Credit Balance: **`{st.session_state.credits} Searches Remaining`**")
+        st.markdown("### 💎 Search Credit Status & Account")
+        
+        c_em1, c_em2 = st.columns([2, 1])
+        with c_em1:
+            user_email_input = st.text_input("Your Account Email", value=st.session_state.user_email)
+            if user_email_input != st.session_state.user_email:
+                st.session_state.user_email = user_email_input.strip().lower()
+        with c_em2:
+            st.metric("Current Search Credits", st.session_state.credits)
 
-        st.markdown("""
-        To extend your search credits, request unlimited agency access, or ask for custom industry scraping pools, click the button below to send a direct message to Haris.
-        """)
+        st.markdown("---")
+        st.markdown("#### 📧 Request Credit Extension from Haris")
+        st.markdown("Click below to open a pre-formatted email request to `hariskandapg@gmail.com`:")
 
         mailto_full = generate_mailto_url(st.session_state.user_email)
         st.markdown(f"""
-        <div style="text-align:center; padding:16px 0;">
+        <div style="text-align:center; padding:12px 0;">
             <a href="{mailto_full}" target="_blank" class="mailto-upgrade-btn">
                 📧 Request More Credits via Email (hariskandapg@gmail.com)
             </a>
         </div>
         """, unsafe_allow_html=True)
 
-        st.caption(f"Creator & Admin Email: `{ADMIN_CONTACT_EMAIL}`")
+        st.caption(f"Direct Contact: `{ADMIN_CONTACT_EMAIL}`")
 
     st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
 
     with st.container(border=True):
         st.markdown("### 🔑 Admin Passcode Manual Override")
-        st.caption("Enter the testing passcode to instantly replenish 10 search credits.")
+        st.caption("Enter the testing passcode (`admin123` or `4990`) to instantly replenish 10 search credits.")
         passcode_input_tab = st.text_input("Enter Passcode", type="password", key="passcode_tab_in")
         if st.button("Reset to 10 Credits", type="primary"):
             if passcode_input_tab.strip() in [ADMIN_PASSCODE, UNLOCK_PASSCODE]:
