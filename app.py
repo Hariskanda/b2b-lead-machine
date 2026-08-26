@@ -23,10 +23,10 @@ from b2b_leadgen.pipeline import LeadGenPipeline, detect_company_column
 logger = logging.getLogger(__name__)
 
 # =============================================================
-# 1. GLOBAL PAGE CONFIG & PURE CSS RADIAL GRADIENT THEME
+# 1. PAGE CONFIG & BULLETPROOF CSS
 # =============================================================
 st.set_page_config(
-    page_title="ApexLeads AI | B2B Lead Intelligence",
+    page_title="ApexLeads AI",
     page_icon="⚡",
     layout="wide"
 )
@@ -37,7 +37,7 @@ ADMIN_CONTACT_EMAIL = "hariskandapg@gmail.com"
 ADMIN_PASSCODE = "admin123"
 UNLOCK_PASSCODE = "4990"
 
-# Inject High-Performance Pure CSS (Zero External Image Dependencies)
+# Inject High-Contrast Pure CSS (Zero External Dependencies)
 st.markdown("""
 <style>
     /* Remove default Streamlit header/footer clutter */
@@ -47,53 +47,31 @@ st.markdown("""
     div[data-testid="stToolbar"] {visibility: hidden;}
     div[data-testid="stDecoration"] {visibility: hidden;}
 
-    /* Radial gradient background */
+    /* Dark radial gradient theme */
     .stApp {
         background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #0f172a 50%, #020617 100%) !important;
-        color: #F8FAFC !important;
+        color: #FFFFFF !important;
         font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
     }
 
-    /* Force all text pure white & readable */
-    h1, h2, h3, h4, p, span, label, .stMarkdown {
-        color: #F8FAFC !important;
+    /* Force all text pure high-contrast white */
+    h1, h2, h3, h4, h5, p, span, label, div, .stMarkdown {
+        color: #FFFFFF !important;
     }
 
-    /* Card Containers */
-    .saas-card {
+    /* Glassmorphic card containers */
+    .glass-card {
         background: rgba(30, 41, 59, 0.7) !important;
-        border: 1px solid rgba(148, 163, 184, 0.2) !important;
-        border-radius: 12px !important;
+        backdrop-filter: blur(12px) !important;
+        -webkit-backdrop-filter: blur(12px) !important;
+        border: 1px solid rgba(148, 163, 184, 0.25) !important;
+        border-radius: 14px !important;
         padding: 20px !important;
-        margin-bottom: 16px !important;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+        margin-bottom: 18px !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
     }
 
-    /* Native CSS Feature Showcase Cards */
-    .feature-box {
-        background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
-        border: 1px solid rgba(99, 102, 241, 0.25);
-        border-radius: 14px;
-        padding: 20px;
-        margin-bottom: 16px;
-        transition: transform 0.2s ease, border-color 0.2s ease;
-    }
-    .feature-box:hover {
-        transform: translateY(-3px);
-        border-color: #38bdf8;
-    }
-    .feature-icon-wrapper {
-        width: 44px;
-        height: 44px;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.4rem;
-        margin-bottom: 12px;
-    }
-
-    /* Top Header Bar */
+    /* Top Platform Header */
     .apex-header {
         display: flex;
         justify-content: space-between;
@@ -124,6 +102,30 @@ st.markdown("""
         box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
     }
 
+    /* Native CSS Feature Highlight Cards */
+    .feature-box {
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        border-radius: 14px;
+        padding: 18px;
+        margin-bottom: 16px;
+        transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    .feature-box:hover {
+        transform: translateY(-3px);
+        border-color: #38bdf8;
+    }
+    .feature-icon-wrapper {
+        width: 42px;
+        height: 42px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.35rem;
+        margin-bottom: 10px;
+    }
+
     /* Input box visibility */
     .stTextInput > div > div > input, .stNumberInput input {
         background-color: #1E293B !important;
@@ -132,7 +134,7 @@ st.markdown("""
         border-radius: 8px !important;
     }
 
-    /* Primary Action Buttons */
+    /* Styled High-Contrast Action Buttons */
     .stButton > button {
         background: linear-gradient(90deg, #3B82F6, #8B5CF6) !important;
         color: #FFFFFF !important;
@@ -168,10 +170,10 @@ st.markdown("""
         border-radius: 8px;
         margin-bottom: 12px;
         border: 1px solid #1f2937;
-        color: #f8fafc !important;
+        color: #ffffff !important;
     }
 
-    /* Large Mailto Button */
+    /* Large Mailto Upgrade Button */
     .mailto-upgrade-btn {
         display: inline-block;
         background: linear-gradient(90deg, #3b82f6, #8b5cf6);
@@ -184,7 +186,7 @@ st.markdown("""
         box-shadow: 0 4px 18px rgba(37, 99, 235, 0.45);
         border: 1px solid #60a5fa;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
-        margin: 16px 0;
+        margin: 14px 0;
     }
     .mailto-upgrade-btn:hover {
         transform: translateY(-2px);
@@ -195,7 +197,7 @@ st.markdown("""
 
 
 # =============================================================
-# 2. SAFE SESSION STATE INITIALIZATION (NO LOCKOUTS)
+# 2. GLOBAL STATE INITIALIZATION
 # =============================================================
 if "user_email" not in st.session_state or not st.session_state.user_email:
     st.session_state.user_email = "guest@apexleads.ai"
@@ -203,14 +205,14 @@ if "credits" not in st.session_state:
     st.session_state.credits = 3
 if "leads_data" not in st.session_state:
     st.session_state.leads_data = []
+if "is_scraping" not in st.session_state:
+    st.session_state.is_scraping = False
 if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame()
 if "agency_name" not in st.session_state:
     st.session_state.agency_name = "ApexLeads Agency Partners"
 if "agency_website" not in st.session_state:
     st.session_state.agency_website = "https://apexleads.ai"
-if "running" not in st.session_state:
-    st.session_state.running = False
 
 
 # =============================================================
@@ -273,7 +275,7 @@ def safe_execute_pipeline_sync(
             loop.close()
 
 
-def generate_mailto_url(user_email: str) -> str:
+def generate_credit_extension_mailto(user_email: str) -> str:
     """Creates a clean mailto link for credit extension requests."""
     clean_email = user_email.strip() if user_email else "user@agency.com"
     subject = urllib.parse.quote("Credit Extension Request")
@@ -289,7 +291,7 @@ effective_concurrency = int(getattr(settings, "max_concurrent_requests", 5))
 
 
 # =============================================================
-# TOP HEADER BAR & SIDEBAR
+# TOP HEADER BAR
 # =============================================================
 st.markdown(f"""
 <div class="apex-header">
@@ -307,10 +309,22 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+
+# =============================================================
+# 3. SIDEBAR (ALWAYS VISIBLE)
+# =============================================================
 with st.sidebar:
     st.markdown(f"### ⚡ **{APP_NAME}**")
     st.markdown(f"👤 **Account:** `{st.session_state.user_email}`")
     st.metric("Remaining Search Credits", st.session_state.credits)
+
+    # Credit Extension Mailto Button
+    mailto_sidebar_credits = generate_credit_extension_mailto(st.session_state.user_email)
+    st.markdown(f"""
+    <a href="{mailto_sidebar_credits}" target="_blank" style="display:block; text-align:center; background:#1e293b; color:#38bdf8; border:1px solid #334155; padding:10px; border-radius:8px; text-decoration:none; font-weight:700; font-size:0.86rem; margin-top:8px;">
+        📧 Email Haris to Extend Credits
+    </a>
+    """, unsafe_allow_html=True)
 
     st.divider()
 
@@ -324,7 +338,7 @@ with st.sidebar:
 
     st.divider()
 
-    # 📢 SIDEBAR SPONSOR AD CONTAINER
+    # 📢 SPONSOR / AD SPOT CONTAINER
     st.markdown("""
     <div style="background:rgba(30,41,59,0.85); border:1px solid #38BDF8; border-radius:12px; padding:16px; text-align:center; box-shadow:0 4px 16px rgba(56,189,248,0.15);">
         <div style="font-size:0.75rem; font-weight:800; color:#38BDF8; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:6px;">📢 SPONSOR SPOTLIGHT</div>
@@ -338,21 +352,10 @@ with st.sidebar:
 
     st.divider()
 
-    # Quick Email Request link
-    st.markdown("#### 💎 Need More Credits?")
-    mailto_sidebar = generate_mailto_url(st.session_state.user_email)
-    st.markdown(f"""
-    <a href="{mailto_sidebar}" target="_blank" style="display:block; text-align:center; background:#1e293b; color:#38bdf8; border:1px solid #334155; padding:10px; border-radius:8px; text-decoration:none; font-weight:700; font-size:0.86rem;">
-        📧 Email Haris for More Credits
-    </a>
-    """, unsafe_allow_html=True)
-
-    st.divider()
-
-    # Admin Passcode Field
-    with st.expander("🔑 Admin Passcode Unlock", expanded=False):
+    # Hidden / Collapsible Admin Panel
+    with st.expander("🔑 Admin Controls", expanded=False):
         passcode_in = st.text_input("Enter Passcode to reset to 10 credits", type="password")
-        if st.button("Apply Passcode", width="stretch"):
+        if st.button("Reset Credits to 10", width="stretch"):
             if passcode_in.strip() in [ADMIN_PASSCODE, UNLOCK_PASSCODE]:
                 st.session_state.credits = 10
                 st.toast("Credits reset to 10!", icon="🎉")
@@ -362,65 +365,63 @@ with st.sidebar:
 
 
 # =============================================================
-# NATIVE CSS FEATURE SHOWCASE (100% RELIABLE, ZERO EXTERNAL IMAGES)
+# 4. PERMANENT 3-TAB MAIN LAYOUT (NEVER HIDE TABS)
 # =============================================================
-c_f1, c_f2, c_f3 = st.columns(3)
-with c_f1:
-    st.markdown("""
-    <div class="feature-box">
-        <div class="feature-icon-wrapper" style="background:rgba(14, 165, 233, 0.2); color:#38bdf8; border:1px solid rgba(14, 165, 233, 0.4);">
-            🌐
-        </div>
-        <h4 style="margin:0 0 6px 0; font-weight:700; color:#ffffff;">10x Lead Discovery</h4>
-        <p style="margin:0; font-size:0.85rem; color:#94a3b8; line-height:1.4;">
-            Extract verified company contacts & decision-maker emails across any metro.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with c_f2:
-    st.markdown("""
-    <div class="feature-box">
-        <div class="feature-icon-wrapper" style="background:rgba(99, 102, 241, 0.2); color:#818cf8; border:1px solid rgba(99, 102, 241, 0.4);">
-            🤖
-        </div>
-        <h4 style="margin:0 0 6px 0; font-weight:700; color:#ffffff;">Gemini 2026 AI Audits</h4>
-        <p style="margin:0; font-size:0.85rem; color:#94a3b8; line-height:1.4;">
-            Identifies conversion leaks, website blind spots, and 3 actionable growth levers.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with c_f3:
-    st.markdown("""
-    <div class="feature-box">
-        <div class="feature-icon-wrapper" style="background:rgba(16, 185, 129, 0.2); color:#34d399; border:1px solid rgba(16, 185, 129, 0.4);">
-            📄
-        </div>
-        <h4 style="margin:0 0 6px 0; font-weight:700; color:#ffffff;">Executive PDF Deliverable</h4>
-        <p style="margin:0; font-size:0.85rem; color:#94a3b8; line-height:1.4;">
-            1-Click downloadable PDF audit reports stamped with your agency branding.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# =============================================================
-# 3. PERSISTENT PRIMARY TABS & DASHBOARD
-# =============================================================
-tab1, tab2, tab3 = st.tabs([
-    "🚀 Lead Engine",
-    "📊 Scraped Results & PDF",
-    "💎 Account & Credits"
+tab_engine, tab_results, tab_sponsors = st.tabs([
+    "🚀 Lead & Audit Engine",
+    "📊 Scraped Leads & PDF Export",
+    "💼 Advertising & Credits"
 ])
 
 
 # =============================================================
-# TAB 1: 🚀 LEAD ENGINE
+# 5. TAB 1: LEAD & AUDIT ENGINE
 # =============================================================
-with tab1:
+with tab_engine:
+    # Feature Highlights Showcase (Native CSS & SVG Badges)
+    c_f1, c_f2, c_f3 = st.columns(3)
+    with c_f1:
+        st.markdown("""
+        <div class="feature-box">
+            <div class="feature-icon-wrapper" style="background:rgba(14, 165, 233, 0.2); color:#38bdf8; border:1px solid rgba(14, 165, 233, 0.4);">
+                🌐
+            </div>
+            <h4 style="margin:0 0 6px 0; font-weight:700; color:#ffffff;">Automated Lead Hunter</h4>
+            <p style="margin:0; font-size:0.85rem; color:#cbd5e1; line-height:1.4;">
+                Fast parallel scraping of verified company websites & decision-maker contacts.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c_f2:
+        st.markdown("""
+        <div class="feature-box">
+            <div class="feature-icon-wrapper" style="background:rgba(99, 102, 241, 0.2); color:#818cf8; border:1px solid rgba(99, 102, 241, 0.4);">
+                🤖
+            </div>
+            <h4 style="margin:0 0 6px 0; font-weight:700; color:#ffffff;">Gemini 2026 AI Audits</h4>
+            <p style="margin:0; font-size:0.85rem; color:#cbd5e1; line-height:1.4;">
+                Identifies conversion leaks, blind spots, and 3 actionable growth recommendations.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c_f3:
+        st.markdown("""
+        <div class="feature-box">
+            <div class="feature-icon-wrapper" style="background:rgba(16, 185, 129, 0.2); color:#34d399; border:1px solid rgba(16, 185, 129, 0.4);">
+                📄
+            </div>
+            <h4 style="margin:0 0 6px 0; font-weight:700; color:#ffffff;">One-Click Executive PDF</h4>
+            <p style="margin:0; font-size:0.85rem; color:#cbd5e1; line-height:1.4;">
+                Download complete multi-client PDF audit bundles with your agency branding.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Input Form Container
     with st.container(border=True):
-        st.markdown("### 🎯 Discover Real Companies & Generate AI Mini-Audits")
+        st.markdown("### 🎯 Find Local Businesses & Generate AI Audits")
         st.markdown("Enter target keywords, industry, and city (e.g. *'Commercial roofing in Miami, FL'* or *'HVAC contractors in Dallas, TX'*):")
 
         c1, c2, c3 = st.columns([3, 2, 1])
@@ -429,11 +430,11 @@ with tab1:
         with c2:
             location_query = st.text_input("City / Metro Location", placeholder="e.g. Miami, FL", key="location_input")
         with c3:
-            lead_count = st.number_input("Lead Count", min_value=3, max_value=30, value=10, step=1)
+            lead_count = st.slider("Lead Count", min_value=1, max_value=20, value=10, step=1)
 
         c_btn, c_stat = st.columns([2, 1])
         with c_btn:
-            btn_generate = st.button("🚀 Start Discovery", type="primary", width="stretch", disabled=st.session_state.running)
+            btn_generate = st.button("🚀 Start Lead Discovery", type="primary", width="stretch", disabled=st.session_state.is_scraping)
         with c_stat:
             st.metric("Remaining Search Credits", st.session_state.credits)
 
@@ -444,9 +445,9 @@ with tab1:
         if not combined_query:
             st.error("Please enter a target niche or location.")
         elif st.session_state.credits <= 0:
-            st.error("⚠️ You have exhausted your free search credits. Please visit the **💎 Account & Credits** tab to request more credits from Haris.")
+            st.warning("⚠️ Credits exhausted. Contact hariskandapg@gmail.com to extend.")
         else:
-            st.session_state.running = True
+            st.session_state.is_scraping = True
             try:
                 with st.spinner(f"🔎 Discovering businesses and generating AI audits for '{combined_query}'..."):
                     progress_box = st.container(border=True)
@@ -489,13 +490,13 @@ with tab1:
 
                             st.session_state.leads_data = results
                             st.session_state.df = pd.DataFrame([r.model_dump() for r in results])
-                            st.toast("Leads generated! View them in '📊 Scraped Results & PDF' tab.", icon="✅")
+                            st.toast("Leads generated! View them in '📊 Scraped Leads & PDF Export' tab.", icon="✅")
                             st.rerun()
 
             except Exception as e:
                 st.error(f"Error during lead generation: {e}")
             finally:
-                st.session_state.running = False
+                st.session_state.is_scraping = False
 
     # Optional CSV Upload Section
     with st.expander("📁 Or Enrich an Existing CSV File", expanded=False):
@@ -511,9 +512,9 @@ with tab1:
                     index=list(uploaded_df.columns).index(col_name_detect) if col_name_detect in uploaded_df.columns else 0
                 )
 
-                if st.button("⚡ Enrich Uploaded CSV", type="primary", disabled=st.session_state.running):
+                if st.button("⚡ Enrich Uploaded CSV", type="primary", disabled=st.session_state.is_scraping):
                     if st.session_state.credits <= 0:
-                        st.error("⚠️ You have exhausted your free search credits. Please request more in the Credits tab.")
+                        st.warning("⚠️ Credits exhausted. Contact hariskandapg@gmail.com to extend.")
                     else:
                         csv_inputs = []
                         for _, row in uploaded_df.iterrows():
@@ -524,7 +525,7 @@ with tab1:
                         if not csv_inputs:
                             st.error("No valid company names found.")
                         else:
-                            st.session_state.running = True
+                            st.session_state.is_scraping = True
                             try:
                                 with st.spinner("Enriching CSV accounts with AI audits..."):
                                     pipeline = LeadGenPipeline(
@@ -541,11 +542,11 @@ with tab1:
                                     st.success(f"Enriched {len(csv_results)} companies from CSV! (1 credit deducted)")
                                     st.rerun()
                             finally:
-                                st.session_state.running = False
+                                st.session_state.is_scraping = False
             except Exception as ex:
                 st.error(f"Error reading CSV: {ex}")
 
-    # 🎯 LEADERBOARD AD CONTAINER
+    # 🎯 Bottom Leaderboard Ad Container (728x90 style)
     st.markdown("""
     <div style="background:rgba(30, 41, 59, 0.5); border:1px dashed #64748B; border-radius:12px; padding:18px 24px; display:flex; justify-content:space-between; align-items:center; margin-top:28px;">
         <div>
@@ -562,11 +563,11 @@ with tab1:
 
 
 # =============================================================
-# TAB 2: 📊 SCRAPED RESULTS & PDF
+# 6. TAB 2: SCRAPED LEADS & PDF EXPORT
 # =============================================================
-with tab2:
+with tab_results:
     if not st.session_state.leads_data:
-        st.info("No leads generated yet. Enter your search query in **🚀 Lead Engine** and click 'Start Discovery'.")
+        st.info("No leads generated yet. Run a search in Tab 1.")
     else:
         leads: List[EnrichedLead] = st.session_state.leads_data
         df = st.session_state.df
@@ -611,7 +612,7 @@ with tab2:
                     agency_website=st.session_state.agency_website
                 )
                 st.download_button(
-                    label="📑 Download Complete Multi-Client PDF Audit Bundle",
+                    label="📄 Download White-Labeled PDF Audit",
                     data=bundle_bytes,
                     file_name=f"apexleads_audit_bundle_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                     mime="application/pdf",
@@ -625,7 +626,7 @@ with tab2:
             csv_buf = io.StringIO()
             df.to_csv(csv_buf, index=False)
             st.download_button(
-                label="📥 Download Full Leads CSV",
+                label="📥 Download CSV",
                 data=csv_buf.getvalue(),
                 file_name=f"apexleads_export_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                 mime="text/csv",
@@ -668,7 +669,7 @@ with tab2:
                         st.caption(f"PDF gen error: {e}")
                 st.divider()
 
-    # 🎯 LEADERBOARD AD CONTAINER
+    # 🎯 Bottom Leaderboard Ad Container (728x90 style)
     st.markdown("""
     <div style="background:rgba(30, 41, 59, 0.5); border:1px dashed #64748B; border-radius:12px; padding:18px 24px; display:flex; justify-content:space-between; align-items:center; margin-top:28px;">
         <div>
@@ -685,9 +686,9 @@ with tab2:
 
 
 # =============================================================
-# TAB 3: 💎 ACCOUNT & CREDITS
+# 7. TAB 3: ADVERTISING & CREDITS
 # =============================================================
-with tab3:
+with tab_sponsors:
     with st.container(border=True):
         st.markdown("### 💎 Search Credit Status & Account")
         
@@ -703,7 +704,7 @@ with tab3:
         st.markdown("#### 📧 Request Credit Extension from Haris")
         st.markdown("Click below to open a pre-formatted email request to `hariskandapg@gmail.com`:")
 
-        mailto_full = generate_mailto_url(st.session_state.user_email)
+        mailto_full = generate_credit_extension_mailto(st.session_state.user_email)
         st.markdown(f"""
         <div style="text-align:center; padding:12px 0;">
             <a href="{mailto_full}" target="_blank" class="mailto-upgrade-btn">
@@ -716,9 +717,9 @@ with tab3:
 
     st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
 
-    # 💼 PARTNER & ADVERTISING OPPORTUNITIES SECTION
+    # 💼 Sponsorship Packages Overview
     with st.container(border=True):
-        st.markdown("### 💼 Partner & Advertising Opportunities")
+        st.markdown("### 💼 Partner & Advertising Packages")
         st.markdown("""
         Promote your product, agency, or B2B SaaS tool directly to founders, agency executives, and sales professionals using ApexLeads AI daily.
         """)
