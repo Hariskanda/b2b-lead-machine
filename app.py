@@ -26,14 +26,14 @@ logger = logging.getLogger(__name__)
 # 📱 Page Configuration & Brand Constants
 # =============================================================
 st.set_page_config(
-    page_title="LeadPulse AI | B2B Lead Machine & Growth Audits",
+    page_title="ApexLeads AI | B2B Intelligence & Growth Audits",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-APP_NAME = "LeadPulse AI"
-APP_TAGLINE = "B2B Outbound Intelligence & Automated Growth Audits"
+APP_NAME = "ApexLeads AI"
+APP_SUBTITLE = "B2B Intelligence & Automated Growth Audits"
 MAX_FREE_SEARCHES = 3
 ADMIN_CONTACT_EMAIL = "hariskandapg@gmail.com"
 USER_USAGE_FILE = "user_usage.json"
@@ -109,15 +109,14 @@ def admin_reset_user_limit(email: str, grant_unlimited: bool = False) -> None:
 SESSION_DEFAULTS: Dict[str, Any] = {
     "user_email": None,           # Logged-in user email
     "user_name": None,
-    "active_nav": "dashboard",    # "overview", "dashboard", "usage"
     "admin_authenticated": False, # Admin login state
     "leads": [],
     "df": pd.DataFrame(),
     "last_query": "",
     "running": False,
     "activity_logs": [],
-    "agency_name": "LeadPulse Agency Partners",
-    "agency_website": "https://leadpulse.ai"
+    "agency_name": "ApexLeads Agency Partners",
+    "agency_website": "https://apexleads.ai"
 }
 
 for state_key, state_default in SESSION_DEFAULTS.items():
@@ -166,7 +165,7 @@ st.markdown("""
     }
 
     /* Top Platform Header */
-    .leadpulse-navbar {
+    .apex-navbar {
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -184,19 +183,19 @@ st.markdown("""
         gap: 12px;
     }
     .brand-icon-box {
-        width: 38px;
-        height: 38px;
+        width: 40px;
+        height: 40px;
         background: linear-gradient(135deg, #38bdf8 0%, #6366f1 100%);
         border-radius: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.25rem;
+        font-size: 1.3rem;
         box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
     }
     .brand-title {
         font-size: 1.35rem;
-        font-weight: 800;
+        font-weight: 850;
         background: linear-gradient(135deg, #ffffff 0%, #38bdf8 60%, #818cf8 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
@@ -220,30 +219,30 @@ st.markdown("""
         background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #0f172a 100%);
         border: 1px solid #334155;
         border-radius: 20px;
-        padding: 38px 28px;
+        padding: 36px 28px;
         color: #ffffff;
         text-align: center;
         margin-bottom: 24px;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
     }
     .hero-banner h1 {
-        font-size: 2.5rem;
+        font-size: 2.45rem;
         font-weight: 850;
-        margin-bottom: 0.6rem;
+        margin-bottom: 0.5rem;
         background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         letter-spacing: -0.02em;
     }
     .hero-banner p {
-        font-size: 1.08rem;
+        font-size: 1.05rem;
         color: #cbd5e1;
         max-width: 780px;
         margin: 0 auto 16px auto;
         line-height: 1.5;
     }
 
-    /* Card Containers */
+    /* Containers & Cards */
     .metric-card {
         background: #111827;
         border: 1px solid #1f2937;
@@ -266,7 +265,7 @@ st.markdown("""
         border-radius: 14px;
         padding: 16px;
         text-align: center;
-        margin-top: 18px;
+        margin-top: 14px;
     }
 
     /* Limit Warning Box */
@@ -297,7 +296,22 @@ st.markdown("""
         box-shadow: 0 6px 22px rgba(56, 189, 248, 0.5);
     }
 
-    /* Badges & Buttons */
+    .mailto-sidebar-btn {
+        display: block;
+        background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+        color: #ffffff !important;
+        text-decoration: none;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 0.85rem;
+        text-align: center;
+        box-shadow: 0 2px 10px rgba(37, 99, 235, 0.35);
+        border: 1px solid #60a5fa;
+        margin-top: 10px;
+    }
+
+    /* Badges & Pills */
     .pill {
         display: inline-block;
         background: #1e293b;
@@ -412,20 +426,26 @@ def safe_execute_pipeline_sync(
             loop.close()
 
 
-def render_user_limit_reached_card(user_email: str) -> None:
-    """Renders the professional limit-reached message and one-click mailto upgrade button."""
+def generate_mailto_url(user_email: Optional[str]) -> str:
+    """Generates the dynamic one-click mailto URL addressed to Haris."""
     clean_email = user_email.strip() if user_email else "user@agency.com"
     subject_encoded = urllib.parse.quote("Request to Extend App Limit")
     body_text = f"Hi Haris, my account ({clean_email}) has reached its search limit. Please extend my access!"
     body_encoded = urllib.parse.quote(body_text)
-    mailto_url = f"mailto:{ADMIN_CONTACT_EMAIL}?subject={subject_encoded}&body={body_encoded}"
+    return f"mailto:{ADMIN_CONTACT_EMAIL}?subject={subject_encoded}&body={body_encoded}"
+
+
+def render_user_limit_reached_card(user_email: str) -> None:
+    """Renders the professional limit-reached message and one-click mailto upgrade button."""
+    clean_email = user_email.strip() if user_email else "user@agency.com"
+    mailto_url = generate_mailto_url(user_email)
 
     st.markdown(f"""
     <div class="limit-warning-box">
         <span class="pill" style="background:#312e81; color:#c7d2fe; border-color:#6366f1;">⚠️ USAGE LIMIT REACHED</span>
         <h2 style="color:#ffffff; margin: 12px 0 8px 0; font-weight: 800;">You have exhausted your free searches.</h2>
         <p style="color:#cbd5e1; font-size: 1.02rem; max-width: 680px; margin: 0 auto 18px auto; line-height: 1.5;">
-            Your account (<b>{clean_email}</b>) has used all <b>{MAX_FREE_SEARCHES} of {MAX_FREE_SEARCHES}</b> complimentary lead searches. Click below to request more limit from Haris via email.
+            Your account (<b>{clean_email}</b>) has used all <b>{MAX_FREE_SEARCHES} of {MAX_FREE_SEARCHES}</b> free lead searches. Click below to request more limit from Haris via email.
         </p>
         <div style="margin: 20px 0;">
             <a href="{mailto_url}" target="_blank" class="mailto-btn">
@@ -461,7 +481,7 @@ is_engine_running = bool(st.session_state.get("running", False))
 
 
 # =============================================================
-# 🛍️ Sidebar: Navigation, Account, Ads & Admin Panel
+# 🛍️ PILLAR 1: EXPLICIT SIDEBAR NAVIGATION & CONTROLS
 # =============================================================
 with st.sidebar:
     # Sleek Logo & Brand Identity
@@ -469,23 +489,20 @@ with st.sidebar:
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
         <div class="brand-icon-box">⚡</div>
         <div>
-            <div style="font-size:1.2rem; font-weight:800; color:#ffffff; line-height:1.1;">{APP_NAME}</div>
-            <div style="font-size:0.75rem; color:#94a3b8;">Outbound Intelligence</div>
+            <div style="font-size:1.25rem; font-weight:850; color:#ffffff; line-height:1.1;">{APP_NAME}</div>
+            <div style="font-size:0.75rem; color:#94a3b8;">B2B Intelligence Platform</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Clean Platform Navigation
-    st.markdown("#### 🧭 Platform Views")
-    c_n1, c_n2 = st.columns(2)
-    with c_n1:
-        if st.button("🚀 Dashboard", width="stretch", type="primary" if st.session_state.get("active_nav") == "dashboard" else "secondary"):
-            st.session_state["active_nav"] = "dashboard"
-            st.rerun()
-    with c_n2:
-        if st.button("🏠 Overview", width="stretch", type="primary" if st.session_state.get("active_nav") == "overview" else "secondary"):
-            st.session_state["active_nav"] = "overview"
-            st.rerun()
+    # Clean Radio Button Navigation at the top
+    st.markdown("#### 🧭 Navigation")
+    selected_page = st.radio(
+        "Navigation",
+        options=["📊 Dashboard & Tool", "🏠 Home / Landing", "💎 Extend Limit"],
+        index=0,
+        label_visibility="collapsed"
+    )
 
     st.divider()
 
@@ -494,15 +511,13 @@ with st.sidebar:
         st.markdown("#### 👤 Account Profile")
         st.markdown(f"""
         <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:12px; margin-bottom:12px;">
-            <div style="font-size:0.8rem; color:#94a3b8;">Active User:</div>
+            <div style="font-size:0.8rem; color:#94a3b8;">Signed in as:</div>
             <div style="font-size:0.88rem; font-weight:700; color:#f8fafc; word-break:break-all; margin-bottom:6px;">{current_user_email}</div>
-            <div style="display:flex; gap:8px; align-items:center;">
-                <a href="{CLERK_USER_PROFILE_URL}" target="_blank" style="color:#38bdf8; font-size:0.78rem; text-decoration:none;">⚙️ Manage Clerk Profile</a>
-            </div>
+            <a href="{CLERK_USER_PROFILE_URL}" target="_blank" style="color:#38bdf8; font-size:0.78rem; text-decoration:none;">⚙️ Manage Profile</a>
         </div>
         """, unsafe_allow_html=True)
 
-        if st.button("Sign Out of Session", width="stretch"):
+        if st.button("Log Out", width="stretch"):
             try:
                 if hasattr(st, "logout") and hasattr(st, "user") and getattr(st.user, "is_logged_in", False):
                     st.logout()
@@ -515,7 +530,7 @@ with st.sidebar:
 
         st.divider()
 
-        # Per-User Search Limit Tracker
+        # Permanent Search Limit Tracker & Mailto Upgrade
         st.markdown("#### 📊 Search Balance")
         if user_is_unlimited:
             st.markdown("""
@@ -528,7 +543,7 @@ with st.sidebar:
             """, unsafe_allow_html=True)
         else:
             st.markdown(f"""
-            <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:14px; margin-bottom:14px;">
+            <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:14px; margin-bottom:8px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                     <span style="font-size:0.82rem; font-weight:700; color:#f8fafc;">Searches Remaining:</span>
                     <span class="pill" style="color:{'#ef4444' if user_searches_remaining == 0 else '#38bdf8'}; font-weight:700;">
@@ -544,13 +559,21 @@ with st.sidebar:
             </div>
             """, unsafe_allow_html=True)
 
+            # Permanent pinned mailto button in sidebar
+            sidebar_mailto = generate_mailto_url(current_user_email)
+            st.markdown(f"""
+            <a href="{sidebar_mailto}" target="_blank" class="mailto-sidebar-btn">
+                📧 Request More Limit via Email
+            </a>
+            """, unsafe_allow_html=True)
+
         st.divider()
 
         # White-Label Customization for PDF Export
         with st.expander("🏢 White-Label Report Branding", expanded=False):
-            agency_name_in = st.text_input("Agency / Company Name", value=st.session_state.get("agency_name", "LeadPulse Agency Partners"))
+            agency_name_in = st.text_input("Agency / Company Name", value=st.session_state.get("agency_name", "ApexLeads Agency Partners"))
             st.session_state["agency_name"] = agency_name_in
-            agency_web_in = st.text_input("Agency Website URL", value=st.session_state.get("agency_website", "https://leadpulse.ai"))
+            agency_web_in = st.text_input("Agency Website URL", value=st.session_state.get("agency_website", "https://apexleads.ai"))
             st.session_state["agency_website"] = agency_web_in
             st.caption("Stamped onto all generated White-Labeled PDF Audit Reports.")
 
@@ -616,8 +639,8 @@ with st.sidebar:
 effective_model = getattr(settings, "gemini_model", "gemini-2.5-flash")
 effective_concurrency = int(getattr(settings, "max_concurrent_requests", 5))
 effective_follow_subpages = bool(getattr(settings, "follow_contact_pages", True))
-effective_agency_name = str(st.session_state.get("agency_name", "LeadPulse Agency Partners"))
-effective_agency_website = str(st.session_state.get("agency_website", "https://leadpulse.ai"))
+effective_agency_name = str(st.session_state.get("agency_name", "ApexLeads Agency Partners"))
+effective_agency_website = str(st.session_state.get("agency_website", "https://apexleads.ai"))
 
 
 # =============================================================
@@ -626,7 +649,7 @@ effective_agency_website = str(st.session_state.get("agency_website", "https://l
 if not current_user_email:
     # Modern Top Header
     st.markdown(f"""
-    <div class="leadpulse-navbar">
+    <div class="apex-navbar">
         <div class="brand-container">
             <div class="brand-icon-box">⚡</div>
             <div>
@@ -645,9 +668,9 @@ if not current_user_email:
     st.markdown(f"""
     <div class="hero-banner">
         <span class="pill-free" style="margin-bottom: 12px;">⚡ THE NEW STANDARD IN HIGH-TICKET CLIENT ACQUISITION</span>
-        <h1>{APP_TAGLINE}</h1>
+        <h1>{APP_NAME} - B2B Intelligence</h1>
         <p>
-            Discover high-intent local businesses, extract verified decision-maker emails, and generate client-ready <b>3-Point Digital Growth Audits</b> with Gemini AI.
+            Instant AI-Powered Prospect Intelligence, Verified Contact Extraction & 3-Point Digital Growth Audits with Gemini AI.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -655,54 +678,51 @@ if not current_user_email:
     # Auth Sign-in Card
     col_c1, col_c2, col_c3 = st.columns([1, 2, 1])
     with col_c2:
-        st.markdown(f"""
-        <div class="metric-card" style="text-align:center; padding:28px;">
-            <span class="pill" style="background:#312e81; color:#c7d2fe; border-color:#6366f1; margin-bottom:10px;">🔒 SIGN-IN REQUIRED</span>
-            <h3 style="color:#ffffff; margin:8px 0;">Access {APP_NAME} Engine</h3>
-            <p style="color:#94a3b8; font-size:0.9rem; margin-bottom:18px;">
-                Sign in with your email to claim your <b>3 free lead generation searches</b> and client audit deliverables.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown(f"""
+            <div style="text-align:center; padding:10px 0 16px 0;">
+                <span class="pill" style="background:#312e81; color:#c7d2fe; border-color:#6366f1; margin-bottom:8px;">🔒 SIGN-IN REQUIRED</span>
+                <h3 style="color:#ffffff; margin:8px 0 4px 0;">Access {APP_NAME} Platform</h3>
+                <p style="color:#94a3b8; font-size:0.88rem; margin-bottom:0;">
+                    Sign in to claim your <b>3 free lead generation searches</b> and client audit deliverables.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+            if hasattr(st, "login"):
+                try:
+                    if st.button("🔑 Sign in with Streamlit SSO", type="primary", width="stretch", key="st_sso_login_btn"):
+                        st.login()
+                except Exception:
+                    pass
 
-        if hasattr(st, "login"):
-            try:
-                if st.button("🔑 Sign in with Streamlit SSO", type="primary", width="stretch", key="st_sso_login_btn"):
-                    st.login()
-            except Exception:
-                pass
+            sign_in_email = st.text_input("Work / Agency Email Address", placeholder="e.g. founder@growthagency.com", key="auth_wall_email")
+            sign_in_name = st.text_input("Your Name / Company Name (Optional)", placeholder="e.g. Alex Rivera", key="auth_wall_name")
 
-        sign_in_email = st.text_input("Work / Agency Email Address", placeholder="e.g. founder@growthagency.com", key="auth_wall_email")
-        sign_in_name = st.text_input("Your Name / Company Name (Optional)", placeholder="e.g. Alex Rivera", key="auth_wall_name")
-
-        c_auth1, c_auth2 = st.columns(2)
-        with c_auth1:
-            if st.button("🚀 Access Platform", type="primary", width="stretch"):
-                clean_e = sign_in_email.strip().lower()
-                if not clean_e or "@" not in clean_e or "." not in clean_e:
-                    st.error("Please enter a valid email address.")
-                else:
-                    st.session_state["user_email"] = clean_e
-                    st.session_state["user_name"] = sign_in_name.strip() if sign_in_name else clean_e.split("@")[0]
-                    get_user_usage(clean_e)
-                    add_activity_log(f"User signed in: {clean_e}", "INFO")
-                    st.toast(f"Welcome to {APP_NAME}, {clean_e}!", icon="👋")
-                    st.rerun()
-        with c_auth2:
-            st.link_button("🔐 Sign in via Clerk Portal", url=CLERK_SIGN_IN_URL, width="stretch")
+            c_auth1, c_auth2 = st.columns(2)
+            with c_auth1:
+                if st.button("🚀 Access Platform", type="primary", width="stretch"):
+                    clean_e = sign_in_email.strip().lower()
+                    if not clean_e or "@" not in clean_e or "." not in clean_e:
+                        st.error("Please enter a valid email address.")
+                    else:
+                        st.session_state["user_email"] = clean_e
+                        st.session_state["user_name"] = sign_in_name.strip() if sign_in_name else clean_e.split("@")[0]
+                        get_user_usage(clean_e)
+                        add_activity_log(f"User signed in: {clean_e}", "INFO")
+                        st.toast(f"Welcome to {APP_NAME}, {clean_e}!", icon="👋")
+                        st.rerun()
+            with c_auth2:
+                st.link_button("🔐 Sign in via Clerk Portal", url=CLERK_SIGN_IN_URL, width="stretch")
 
     st.stop()
 
 
 # =============================================================
-# 🚀 MAIN SAAS PLATFORM (LOGGED IN STATE)
+# 🚀 PILLAR 2: PROFESSIONAL HEADER & BRANDING
 # =============================================================
-
-# Professional Top Header
 st.markdown(f"""
-<div class="leadpulse-navbar">
+<div class="apex-navbar">
     <div class="brand-container">
         <div class="brand-icon-box">⚡</div>
         <div>
@@ -721,59 +741,99 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
-# VIEW 1: PLATFORM OVERVIEW & WORKFLOW (OPTIONAL TAB)
-if st.session_state.get("active_nav") == "overview":
+# =============================================================
+# 📱 PAGE ROUTING: HOME vs DASHBOARD vs EXTEND LIMIT
+# =============================================================
+
+# VIEW 1: HOME / LANDING VIEW
+if selected_page == "🏠 Home / Landing":
     st.markdown(f"""
     <div class="hero-banner">
         <span class="pill-free" style="margin-bottom: 12px;">⚡ THE NEW STANDARD IN HIGH-TICKET CLIENT ACQUISITION</span>
-        <h1>How {APP_NAME} Powers Outbound Growth</h1>
+        <h1>{APP_NAME} - B2B Intelligence</h1>
         <p>
-            Discover high-intent local businesses, extract verified decision-maker emails, and generate client-ready <b>3-Point Digital Growth Audits</b> with Gemini AI.
+            Instant AI-Powered Prospect Intelligence, Verified Contact Extraction & 3-Point Digital Growth Audits with Gemini AI.
         </p>
     </div>
     """, unsafe_allow_html=True)
 
     c_s1, c_s2, c_s3 = st.columns(3)
     with c_s1:
-        st.markdown("""
-        <div class="metric-card">
+        with st.container(border=True):
+            st.markdown("""
             <div style="font-size:2rem; margin-bottom:8px;">🎯</div>
             <h4 style="color:#ffffff; margin-top:0;">1. Target Any Metro & Niche</h4>
             <p style="color:#94a3b8; font-size:0.88rem; line-height:1.5;">
                 Enter local keywords (e.g. <i>"Commercial HVAC in Dallas, TX"</i>) or upload an existing account list.
             </p>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
     with c_s2:
-        st.markdown("""
-        <div class="metric-card">
+        with st.container(border=True):
+            st.markdown("""
             <div style="font-size:2rem; margin-bottom:8px;">🤖</div>
             <h4 style="color:#ffffff; margin-top:0;">2. Gemini 2026 AI Audits</h4>
             <p style="color:#94a3b8; font-size:0.88rem; line-height:1.5;">
                 Extract verified emails and identify strengths, conversion blind spots, and high-impact growth levers.
             </p>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
     with c_s3:
-        st.markdown("""
-        <div class="metric-card">
+        with st.container(border=True):
+            st.markdown("""
             <div style="font-size:2rem; margin-bottom:8px;">📄</div>
             <h4 style="color:#ffffff; margin-top:0;">3. Deliver White-Labeled PDFs</h4>
             <p style="color:#94a3b8; font-size:0.88rem; line-height:1.5;">
                 Download ready-to-present PDF audit reports branded with your agency name to close high-ticket clients.
             </p>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
-    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
-    if st.button("🚀 Launch Lead Dashboard", type="primary", width="stretch"):
-        st.session_state["active_nav"] = "dashboard"
-        st.rerun()
+    st.markdown("<div style='height: 24px;'></div>", unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown("### 🚀 Ready to Generate Leads?")
+        st.markdown("Switch directly to the **📊 Dashboard & Tool** in the sidebar to start finding clients and downloading white-labeled PDF audits.")
 
 
-# VIEW 2: CORE LEAD DASHBOARD (DEFAULT VIEW)
+# VIEW 2: EXTEND LIMIT VIEW
+elif selected_page == "💎 Extend Limit":
+    st.markdown("""
+    <div class="hero-banner">
+        <span class="pill-pro" style="margin-bottom: 12px;">💎 EXTEND YOUR SEARCH LIMIT</span>
+        <h1>Account Balance & Search Allowance</h1>
+        <p>
+            Request extended lead searches, custom enterprise enrichment pools, or unlimited platform access directly from Haris.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_ex1, col_ex2 = st.columns([2, 1])
+    with col_ex1:
+        with st.container(border=True):
+            st.markdown("### 📊 Your Current Account Balance")
+            st.markdown(f"**Account Email:** `{current_user_email}`")
+            st.markdown(f"**Searches Used:** `{user_searches_used} of {MAX_FREE_SEARCHES}`")
+            st.markdown(f"**Searches Remaining:** `{user_searches_remaining} Left`")
+            st.markdown(f"**Access Tier:** `{'⭐ Unlimited Pro' if user_is_unlimited else 'Free Allowance (3 Searches)'}`")
+            
+            st.divider()
+            mailto_url = generate_mailto_url(current_user_email)
+            st.markdown(f"""
+            <div style="text-align:center; padding: 12px 0;">
+                <p style="color:#cbd5e1; font-size:0.95rem;">Click the button below to send a pre-formatted request directly to Haris:</p>
+                <a href="{mailto_url}" target="_blank" class="mailto-btn">
+                    📧 Request Limit Extension via Email
+                </a>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with col_ex2:
+        with st.container(border=True):
+            st.markdown("### 📩 Direct Admin Contact")
+            st.markdown(f"**Creator Email:** `{ADMIN_CONTACT_EMAIL}`")
+            st.caption("Emails are typically reviewed and limits extended within a few hours.")
+
+
+# VIEW 3: CORE DASHBOARD & TOOL (DEFAULT VIEW)
 else:
     # Show Limit Reached Warning if user hit limit
     if has_user_hit_limit:
@@ -785,28 +845,29 @@ else:
     # TAB 1: Autonomous Keyword Discovery & Audit Generator
     # -------------------------------------------------------------
     with tab_search:
-        st.markdown("### 🎯 Discover Real Companies & Generate Mini-Audits")
-        st.markdown("Enter a target search phrase (e.g. *'Commercial roofing in Miami, FL'* or *'Plumbing contractors in Austin, TX'*):")
+        with st.container(border=True):
+            st.markdown("### 🎯 Discover Real Companies & Generate Mini-Audits")
+            st.markdown("Enter a target search phrase (e.g. *'Commercial roofing in Miami, FL'* or *'Plumbing contractors in Austin, TX'*):")
 
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            search_query = st.text_input(
-                "Search Query / Niche + Location",
-                placeholder="e.g. Commercial HVAC contractors in Dallas, TX",
-                key="keyword_search_input",
-                disabled=has_user_hit_limit
-            )
-        with col2:
-            num_leads = st.number_input(
-                "Target Lead Count",
-                min_value=3,
-                max_value=30,
-                value=10,
-                step=1,
-                disabled=has_user_hit_limit
-            )
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                search_query = st.text_input(
+                    "Search Query / Niche + Location",
+                    placeholder="e.g. Commercial HVAC contractors in Dallas, TX",
+                    key="keyword_search_input",
+                    disabled=has_user_hit_limit
+                )
+            with col2:
+                num_leads = st.number_input(
+                    "Target Lead Count",
+                    min_value=3,
+                    max_value=30,
+                    value=10,
+                    step=1,
+                    disabled=has_user_hit_limit
+                )
 
-        btn_discover = st.button("🚀 Generate Leads & Mini-Audits", type="primary", width="stretch", disabled=is_engine_running or has_user_hit_limit)
+            btn_discover = st.button("🚀 Generate Leads & Mini-Audits", type="primary", width="stretch", disabled=is_engine_running or has_user_hit_limit)
 
         if btn_discover:
             if has_user_hit_limit:
@@ -821,7 +882,7 @@ else:
                     st.session_state["running"] = True
                     try:
                         with st.spinner(f"🔎 Discovering and auditing businesses for '{target_q}' in parallel..."):
-                            progress_container = st.container()
+                            progress_container = st.container(border=True)
                             with progress_container:
                                 status_text = st.empty()
                                 prog_bar = st.progress(0)
@@ -892,93 +953,94 @@ else:
     # TAB 2: CSV Lead Enrichment & Mini-Audit Generator
     # -------------------------------------------------------------
     with tab_csv:
-        st.markdown("### 📁 Upload Existing CSV for Mini-Audits")
-        st.markdown("Upload a CSV containing company names to enrich them with verified contact emails and AI digital audits.")
+        with st.container(border=True):
+            st.markdown("### 📁 Upload Existing CSV for Mini-Audits")
+            st.markdown("Upload a CSV containing company names to enrich them with verified contact emails and AI digital audits.")
 
-        uploaded_file = st.file_uploader("Upload CSV file", type=["csv"], disabled=has_user_hit_limit)
+            uploaded_file = st.file_uploader("Upload CSV file", type=["csv"], disabled=has_user_hit_limit)
 
-        if uploaded_file is not None:
-            try:
-                uploaded_df = pd.read_csv(uploaded_file)
-                st.dataframe(uploaded_df.head(5), width="stretch")
+            if uploaded_file is not None:
+                try:
+                    uploaded_df = pd.read_csv(uploaded_file)
+                    st.dataframe(uploaded_df.head(5), width="stretch", hide_index=True)
 
-                company_col_detected = detect_company_column(list(uploaded_df.columns))
-                selected_col = st.selectbox(
-                    "Select Company Name Column",
-                    options=list(uploaded_df.columns),
-                    index=list(uploaded_df.columns).index(company_col_detected) if company_col_detected in uploaded_df.columns else 0,
-                    disabled=has_user_hit_limit
-                )
+                    company_col_detected = detect_company_column(list(uploaded_df.columns))
+                    selected_col = st.selectbox(
+                        "Select Company Name Column",
+                        options=list(uploaded_df.columns),
+                        index=list(uploaded_df.columns).index(company_col_detected) if company_col_detected in uploaded_df.columns else 0,
+                        disabled=has_user_hit_limit
+                    )
 
-                btn_enrich_csv = st.button("⚡ Generate Mini-Audits from Uploaded CSV", type="primary", disabled=is_engine_running or has_user_hit_limit)
+                    btn_enrich_csv = st.button("⚡ Generate Mini-Audits from Uploaded CSV", type="primary", disabled=is_engine_running or has_user_hit_limit)
 
-                if btn_enrich_csv:
-                    if has_user_hit_limit:
-                        st.warning("⚠️ You have exhausted your free searches.")
-                    else:
-                        input_leads = []
-                        for _, row in uploaded_df.iterrows():
-                            c_name = str(row.get(selected_col, "")).strip()
-                            if c_name and c_name.lower() != "nan":
-                                input_leads.append(LeadInput(company_name=c_name))
-
-                        if not input_leads:
-                            st.error("No valid company names found in selected column.")
+                    if btn_enrich_csv:
+                        if has_user_hit_limit:
+                            st.warning("⚠️ You have exhausted your free searches.")
                         else:
-                            st.session_state["running"] = True
-                            try:
-                                with st.spinner("Enriching uploaded CSV in parallel..."):
-                                    progress_container = st.container()
-                                    with progress_container:
-                                        status_text = st.empty()
-                                        prog_bar = st.progress(0)
+                            input_leads = []
+                            for _, row in uploaded_df.iterrows():
+                                c_name = str(row.get(selected_col, "")).strip()
+                                if c_name and c_name.lower() != "nan":
+                                    input_leads.append(LeadInput(company_name=c_name))
 
-                                        try:
-                                            pipeline = LeadGenPipeline(
-                                                api_key=GEMINI_API_KEY,
-                                                model=effective_model,
-                                                max_concurrency=effective_concurrency,
-                                                follow_contact_pages=effective_follow_subpages,
-                                                use_checkpoint=False
-                                            )
+                            if not input_leads:
+                                st.error("No valid company names found in selected column.")
+                            else:
+                                st.session_state["running"] = True
+                                try:
+                                    with st.spinner("Enriching uploaded CSV in parallel..."):
+                                        progress_container = st.container(border=True)
+                                        with progress_container:
+                                            status_text = st.empty()
+                                            prog_bar = st.progress(0)
 
-                                            def update_csv_progress(lead: EnrichedLead, idx: int, tot: int):
-                                                pct = int((idx / tot) * 100) if tot > 0 else 0
-                                                prog_bar.progress(min(100, max(0, pct)))
-                                                email_tag = f" — 📧 Found: `{lead.primary_email}`" if lead.primary_email else ""
-                                                status_text.markdown(
-                                                    f"⚡ **Auditing CSV {idx} of {tot} leads:** `{lead.company_name}` • *Skipping directories & slow sites (5s timeout)*...{email_tag}"
+                                            try:
+                                                pipeline = LeadGenPipeline(
+                                                    api_key=GEMINI_API_KEY,
+                                                    model=effective_model,
+                                                    max_concurrency=effective_concurrency,
+                                                    follow_contact_pages=effective_follow_subpages,
+                                                    use_checkpoint=False
                                                 )
 
-                                            results = safe_execute_pipeline_sync(
-                                                pipeline=pipeline,
-                                                inputs=input_leads,
-                                                progress_callback=update_csv_progress
-                                            )
+                                                def update_csv_progress(lead: EnrichedLead, idx: int, tot: int):
+                                                    pct = int((idx / tot) * 100) if tot > 0 else 0
+                                                    prog_bar.progress(min(100, max(0, pct)))
+                                                    email_tag = f" — 📧 Found: `{lead.primary_email}`" if lead.primary_email else ""
+                                                    status_text.markdown(
+                                                        f"⚡ **Auditing CSV {idx} of {tot} leads:** `{lead.company_name}` • *Skipping directories & slow sites (5s timeout)*...{email_tag}"
+                                                    )
 
-                                            prog_bar.progress(100)
-                                            add_activity_log(f"Enriched {len(results)} leads from CSV.", "INFO")
-                                            status_text.success(f"🎉 Successfully enriched {len(results)} leads from CSV with Custom Mini-Audits!")
+                                                results = safe_execute_pipeline_sync(
+                                                    pipeline=pipeline,
+                                                    inputs=input_leads,
+                                                    progress_callback=update_csv_progress
+                                                )
 
-                                            st.session_state["leads"] = results
-                                            st.session_state["df"] = pd.DataFrame([r.model_dump() for r in results])
-                                            st.session_state["last_query"] = f"CSV: {uploaded_file.name}"
+                                                prog_bar.progress(100)
+                                                add_activity_log(f"Enriched {len(results)} leads from CSV.", "INFO")
+                                                status_text.success(f"🎉 Successfully enriched {len(results)} leads from CSV with Custom Mini-Audits!")
 
-                                            # Record per-user search count in persistent storage
-                                            if not user_is_unlimited and current_user_email:
-                                                record_user_search(current_user_email)
-                                                st.rerun()
+                                                st.session_state["leads"] = results
+                                                st.session_state["df"] = pd.DataFrame([r.model_dump() for r in results])
+                                                st.session_state["last_query"] = f"CSV: {uploaded_file.name}"
 
-                                        except Exception as csv_pipe_err:
-                                            logger.error(f"CSV enrichment error: {csv_pipe_err}")
-                                            add_activity_log(f"CSV enrichment error: {csv_pipe_err}", "ERROR")
-                                            status_text.error(f"⚠️ CSV enrichment error: {csv_pipe_err}")
+                                                # Record per-user search count in persistent storage
+                                                if not user_is_unlimited and current_user_email:
+                                                    record_user_search(current_user_email)
+                                                    st.rerun()
 
-                            finally:
-                                st.session_state["running"] = False
+                                            except Exception as csv_pipe_err:
+                                                logger.error(f"CSV enrichment error: {csv_pipe_err}")
+                                                add_activity_log(f"CSV enrichment error: {csv_pipe_err}", "ERROR")
+                                                status_text.error(f"⚠️ CSV enrichment error: {csv_pipe_err}")
 
-            except Exception as e:
-                st.error(f"Error reading CSV file: {e}")
+                                finally:
+                                    st.session_state["running"] = False
+
+                except Exception as e:
+                    st.error(f"Error reading CSV file: {e}")
 
     # =============================================================
     # 📊 LEADS DISPLAY & UNRESTRICTED 1-CLICK EXPORTS
