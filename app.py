@@ -11,15 +11,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import pandas as pd
 import streamlit as st
 
-from b2b_leadgen.autopilot import autopilot_engine
 from b2b_leadgen.config import settings
-from b2b_leadgen.email_dispatcher import (
-    build_outreach_email,
-    dispatch_campaign,
-    is_valid_business_email
-)
 from b2b_leadgen.finder import discover_leads_by_keyword
-from b2b_leadgen.history import sent_history
 from b2b_leadgen.models import EnrichedLead, LeadInput
 from b2b_leadgen.payments import create_checkout_session, verify_checkout_session
 from b2b_leadgen.pdf_generator import (
@@ -27,15 +20,14 @@ from b2b_leadgen.pdf_generator import (
     generate_company_audit_pdf
 )
 from b2b_leadgen.pipeline import LeadGenPipeline, detect_company_column
-from b2b_leadgen.sheets_exporter import export_leads_to_google_sheet
 
 logger = logging.getLogger(__name__)
 
 # =============================================================
-# 📱 Page Configuration & State Defaults
+# 📱 Page Configuration & Session State Initialization
 # =============================================================
 st.set_page_config(
-    page_title="B2B Lead Machine: Automate Your Client Acquisition",
+    page_title="B2B Lead Machine: Automate Your Lead Generation & Auditing",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -43,20 +35,18 @@ st.set_page_config(
 
 SESSION_DEFAULTS: Dict[str, Any] = {
     "view_mode": "landing",       # "landing" vs "dashboard"
-    "user_email": None,           # Logged-in user email
+    "user_email": None,
     "user_name": None,
-    "is_pro": False,              # False = Free Tier (5 leads max, no PDF), True = Pro ($19/mo or $9 pass)
-    "credits": 5,                 # Free tier credits
+    "is_paid": False,             # True = Pro Tier ($19/mo or $9 pass), False = Free Tier
+    "is_pro": False,
     "leads": [],
     "df": pd.DataFrame(),
     "last_query": "",
-    "selected_tier": "Pro ($19/mo)",
+    "selected_tier": "Pro Access ($19/mo)",
     "admin_authenticated": False,
-    "admin_logged_in": False,
     "stripe_session_id": None,
     "stripe_checkout_url": None,
-    "campaign_results": None,
-    "running": False,             # Synchronous manual engine run-lock
+    "running": False,
     "activity_logs": [],
     "agency_name": "AI Growth & Intelligence Partners",
     "agency_website": "https://growth-intelligence.io"
@@ -74,12 +64,12 @@ def add_activity_log(message: str, level: str = "INFO") -> None:
     if "activity_logs" not in st.session_state:
         st.session_state["activity_logs"] = []
     st.session_state["activity_logs"].append(entry)
-    if len(st.session_state["activity_logs"]) > 150:
+    if len(st.session_state["activity_logs"]) > 100:
         st.session_state["activity_logs"].pop(0)
 
 
 # =============================================================
-# 🎨 PILLAR 1: CUSTOM CSS & DARK-MODE SAAS POLISH
+# 🎨 Modern Dark-Mode SaaS CSS & Polished Aesthetics
 # =============================================================
 st.markdown("""
 <style>
@@ -102,7 +92,7 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 14px 24px;
+        padding: 16px 24px;
         background: rgba(15, 23, 42, 0.85);
         backdrop-filter: blur(12px);
         border: 1px solid #1e293b;
@@ -125,7 +115,7 @@ st.markdown("""
         background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
         border: 1px solid #334155;
         border-radius: 24px;
-        padding: 48px 36px;
+        padding: 50px 36px;
         color: #ffffff;
         text-align: center;
         margin-bottom: 32px;
@@ -134,7 +124,7 @@ st.markdown("""
         overflow: hidden;
     }
     .hero-title {
-        font-size: 2.9rem;
+        font-size: 2.85rem;
         font-weight: 850;
         margin-bottom: 0.8rem;
         background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
@@ -143,7 +133,7 @@ st.markdown("""
         line-height: 1.2;
     }
     .hero-subtitle {
-        font-size: 1.18rem;
+        font-size: 1.16rem;
         color: #cbd5e1;
         max-width: 840px;
         margin: 0 auto 28px auto;
@@ -158,12 +148,11 @@ st.markdown("""
         padding: 26px;
         height: 100%;
         box-shadow: 0 4px 16px rgba(0,0,0,0.25);
-        transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        transition: transform 0.2s ease, border-color 0.2s ease;
     }
     .feature-card:hover {
         transform: translateY(-4px);
         border-color: #38bdf8;
-        box-shadow: 0 8px 24px rgba(56, 189, 248, 0.15);
     }
     .feature-icon {
         font-size: 2.2rem;
@@ -228,8 +217,6 @@ st.markdown("""
         font-weight: 700;
     }
     .protected-sample-container {
-        -webkit-user-select: none;
-        user-select: none;
         border: 1px solid #1f2937;
         border-radius: 14px;
         padding: 18px;
@@ -237,8 +224,6 @@ st.markdown("""
         margin-bottom: 14px;
     }
     .locked-teaser-card {
-        -webkit-user-select: none;
-        user-select: none;
         background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
         border: 2px dashed #475569;
         border-radius: 16px;
@@ -247,7 +232,7 @@ st.markdown("""
         margin: 16px 0;
     }
 
-    /* Custom Streamlit Button Styling */
+    /* Button Styling */
     div.stButton > button:first-child {
         border-radius: 10px;
         font-weight: 600;
@@ -302,7 +287,7 @@ def get_secret(key: str, default: Any = None) -> Any:
 
 
 def mask_email_address(email: Optional[str]) -> str:
-    """Masks middle characters of email address to deter scrape/copy before payment."""
+    """Masks middle characters of email address to protect dataset before Pro access."""
     if not email or "@" not in email:
         return "No email found"
     parts = email.strip().split("@")
@@ -350,28 +335,22 @@ GEMINI_API_KEY: Optional[str] = get_secret("GEMINI_API_KEY", getattr(settings, "
 STRIPE_SECRET_KEY: Optional[str] = get_secret("STRIPE_SECRET_KEY", getattr(settings, "stripe_secret_key", None))
 ADMIN_PASSWORD: str = str(get_secret("ADMIN_PASSWORD", getattr(settings, "admin_password", "admin123")))
 UNLOCK_CODE: str = str(get_secret("UNLOCK_CODE", getattr(settings, "unlock_code", "4990")))
-SMTP_USER: str = str(get_secret("SMTP_USER", getattr(settings, "effective_smtp_user", "")))
-SMTP_PASSWORD: str = str(get_secret("SMTP_PASSWORD", getattr(settings, "effective_smtp_password", "")))
-SMTP_HOST: str = str(get_secret("SMTP_HOST", getattr(settings, "smtp_host", "smtp.gmail.com")))
-SMTP_PORT: int = int(get_secret("SMTP_PORT", getattr(settings, "smtp_port", 587)))
-SENDER_NAME: str = str(get_secret("SENDER_NAME", getattr(settings, "sender_name", "B2B Lead Machine")))
 APP_URL: str = str(get_secret("APP_URL", getattr(settings, "effective_app_url", "http://localhost:8501")))
 
 # State Accessors
-is_admin_active = bool(st.session_state.get("admin_authenticated", False) or st.session_state.get("admin_logged_in", False))
-is_user_pro = bool(st.session_state.get("is_pro", False) or is_admin_active)
+is_admin_active = bool(st.session_state.get("admin_authenticated", False))
+is_user_paid = bool(st.session_state.get("is_paid", False) or st.session_state.get("is_pro", False) or is_admin_active)
 is_engine_running = bool(st.session_state.get("running", False))
 current_view = st.session_state.get("view_mode", "landing")
 
 
 # =============================================================
-# 🛍️ Sidebar: Admin Controls & User Account Summary
+# 🛍️ Sidebar: Public User Status & White-Label Branding
 # =============================================================
 with st.sidebar:
     st.image("https://img.icons8.com/isometric/100/lightning-bolt.png", width=55)
     st.title("B2B Lead Machine")
 
-    # Navigation Switcher
     st.markdown("#### 🧭 Platform Navigation")
     c_nav1, c_nav2 = st.columns(2)
     with c_nav1:
@@ -379,138 +358,80 @@ with st.sidebar:
             st.session_state["view_mode"] = "landing"
             st.rerun()
     with c_nav2:
-        if st.button("⚡ Dashboard", width="stretch", type="primary" if current_view == "dashboard" else "secondary"):
+        if st.button("⚡ Enter App", width="stretch", type="primary" if current_view == "dashboard" else "secondary"):
             st.session_state["view_mode"] = "dashboard"
             st.rerun()
 
     st.divider()
 
     # User Account Status
-    st.markdown("#### 👤 Account Status")
-    if is_user_pro:
-        st.markdown('<span class="pill-pro">⭐ PRO PLAN ACTIVE (Unlimited)</span>', unsafe_allow_html=True)
-        st.caption("White-Labeled PDF Audits • Multi-Client Bundles • Full Exports")
+    st.markdown("#### 📦 Access Tier")
+    if is_user_paid:
+        st.markdown('<span class="pill-pro">⭐ PRO ACCESS ACTIVE (Unlimited)</span>', unsafe_allow_html=True)
+        st.caption("White-Labeled PDF Audits • Multi-Client Bundles • Full CSV Export")
     else:
-        st.markdown('<span class="pill">FREE TIER (5 Leads Max)</span>', unsafe_allow_html=True)
-        st.caption("PDF Audits Locked • Upgrade to Pro to unlock client deliverables.")
+        st.markdown('<span class="pill">FREE TIER (Preview Mode)</span>', unsafe_allow_html=True)
+        st.caption("PDF Audits & Full CSV Downloads Locked • Upgrade to Pro to unlock.")
 
     st.divider()
 
-    # 🔐 Master Control & Tracking Panel (Password Protected Admin)
-    with st.expander("🔐 Admin Master Control Panel", expanded=False):
+    # White-Label Customization
+    with st.expander("🏢 White-Label Report Branding", expanded=False):
+        agency_name_in = st.text_input("Agency / Company Name", value=st.session_state.get("agency_name", "AI Growth & Intelligence Partners"))
+        st.session_state["agency_name"] = agency_name_in
+        agency_web_in = st.text_input("Agency Website URL", value=st.session_state.get("agency_website", "https://growth-intelligence.io"))
+        st.session_state["agency_website"] = agency_web_in
+        st.caption("Your branding will appear on all generated White-Labeled PDF Audit Reports.")
+
+    # Admin Master Control
+    with st.expander("🔐 Admin Controls", expanded=False):
         if not is_admin_active:
-            st.markdown("##### Admin Authentication")
-            admin_pwd_input = st.text_input("Enter Admin Password", type="password", key="admin_pwd_input")
-            if st.button("Unlock Admin Panel", width="stretch"):
-                if admin_pwd_input and admin_pwd_input == ADMIN_PASSWORD:
+            admin_pwd = st.text_input("Admin Password", type="password", key="admin_pwd_field")
+            if st.button("Unlock Admin", width="stretch"):
+                if admin_pwd and admin_pwd == ADMIN_PASSWORD:
                     st.session_state["admin_authenticated"] = True
-                    st.session_state["admin_logged_in"] = True
-                    add_activity_log("Admin authenticated successfully.", "INFO")
-                    st.success("Admin mode unlocked!")
+                    st.session_state["is_paid"] = True
+                    st.session_state["is_pro"] = True
+                    st.toast("Admin mode active (Pro unlocked)!", icon="🔓")
                     st.rerun()
                 else:
-                    st.error("⚠️ Invalid Admin Password.")
+                    st.error("Invalid password.")
         else:
-            st.markdown('<span style="color:#10b981; font-weight:700;">🔓 MASTER ADMIN ACTIVE</span>', unsafe_allow_html=True)
-
-            # 1. MANUAL START / STOP CONTROL
-            st.markdown("---")
-            st.markdown("#### ⚡ Manual Engine Control")
-            if is_engine_running:
-                st.warning("⏳ Engine Status: Running synchronous task...")
-                if st.button("⏹ Stop Pipeline", type="secondary", width="stretch"):
-                    st.session_state["running"] = False
-                    add_activity_log("Admin manually stopped active pipeline.", "WARNING")
-                    st.toast("🛑 Pipeline stopped by Admin.", icon="⏹")
-                    st.rerun()
-            else:
-                st.info("⚪ Engine Status: Idle (Ready for manual start).")
-                admin_niche_target = st.text_input("Automated Target Niche / Location", value="Commercial Roofing in Miami, FL", key="admin_niche_input")
-                admin_batch_lead_count = st.slider("Leads per Batch", min_value=3, max_value=25, value=10, step=1, key="admin_batch_slider")
-
-                if st.button("▶ Start Pipeline", type="primary", width="stretch"):
-                    st.session_state["running"] = True
-                    st.session_state["view_mode"] = "dashboard"
-                    st.session_state["admin_trigger_search"] = admin_niche_target.strip()
-                    st.session_state["admin_trigger_count"] = int(admin_batch_lead_count)
-                    add_activity_log(f"Admin started pipeline for '{admin_niche_target.strip()}'.", "INFO")
-                    st.rerun()
-
-            # 2. PRO STATUS OVERRIDE
-            st.markdown("---")
-            st.markdown("#### 💎 Account Pro Status Override")
-            current_pro = st.session_state.get("is_pro", False)
-            toggle_pro = st.toggle("Grant Pro Status for Session", value=current_pro)
-            if toggle_pro != current_pro:
+            st.success("🔓 Admin Mode Active")
+            toggle_pro = st.toggle("Pro Status Active", value=is_user_paid)
+            if toggle_pro != is_user_paid:
+                st.session_state["is_paid"] = toggle_pro
                 st.session_state["is_pro"] = toggle_pro
-                add_activity_log(f"Admin updated Pro Status to: {toggle_pro}", "INFO")
                 st.rerun()
 
-            # 3. WHITE-LABEL AGENCY BRANDING
-            st.markdown("---")
-            st.markdown("#### 🏢 White-Label Agency Branding")
-            agency_name_in = st.text_input("Agency / Consultant Name", value=st.session_state.get("agency_name", "AI Growth & Intelligence Partners"))
-            st.session_state["agency_name"] = agency_name_in
-            agency_web_in = st.text_input("Agency Website URL", value=st.session_state.get("agency_website", "https://growth-intelligence.io"))
-            st.session_state["agency_website"] = agency_web_in
-
-            # 4. AI ENGINE TUNING
-            st.markdown("---")
-            st.markdown("#### 🤖 AI Engine Tuning")
-            admin_model = st.selectbox(
-                "Gemini AI Model",
-                options=["gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.7-flash", "gemini-2.0-flash", "gemini-1.5-flash"],
-                index=0,
-                key="admin_model_select"
-            )
-            admin_concurrency = st.slider("Max Concurrency", min_value=1, max_value=8, value=int(getattr(settings, "max_concurrent_requests", 5)), key="admin_concurrency_slider")
-            admin_follow_subpages = st.checkbox("Follow Contact/About Pages", value=getattr(settings, "follow_contact_pages", True), key="admin_follow_subpages_cb")
-
-            # 5. ACTIVITY LOGS & SENT TRACKER
-            st.markdown("---")
-            st.markdown("#### 📊 Activity & Sent History Tracker")
-            sent_count = sent_history.get_sent_count()
-            st.metric("Total Unique Businesses Contacted", sent_count)
-
-            all_records = sent_history.get_all_sent_records()
-            if all_records:
-                with st.expander(f"📋 Permanent Sent Log ({len(all_records)} contacts)", expanded=False):
-                    st.dataframe(pd.DataFrame(all_records)[["email", "company_name", "topic", "sent_at"]], width="stretch", hide_index=True)
-
-                if st.button("🗑️ Clear Sent History Database", width="stretch"):
-                    sent_history.clear_sent_history()
-                    add_activity_log("Admin wiped global sent history database.", "WARNING")
-                    st.toast("✅ Global sent history cleared!", icon="🗑️")
-                    st.rerun()
-
-            if st.button("Log Out of Admin Panel", width="stretch"):
+            if st.button("Log Out Admin", width="stretch"):
                 st.session_state["admin_authenticated"] = False
-                st.session_state["admin_logged_in"] = False
-                add_activity_log("Admin logged out.", "INFO")
+                st.session_state["is_paid"] = False
+                st.session_state["is_pro"] = False
                 st.rerun()
 
-    st.caption("⚡ **B2B Lead Machine** • Premium Outbound Intelligence")
+    st.caption("⚡ **B2B Lead Machine** • On-Demand Lead & Audit Platform")
 
 
-effective_model = st.session_state.get("admin_model_select", getattr(settings, "gemini_model", "gemini-2.5-flash"))
-effective_concurrency = int(st.session_state.get("admin_concurrency_slider", getattr(settings, "max_concurrent_requests", 5)))
-effective_follow_subpages = bool(st.session_state.get("admin_follow_subpages_cb", getattr(settings, "follow_contact_pages", True)))
+effective_model = getattr(settings, "gemini_model", "gemini-2.5-flash")
+effective_concurrency = int(getattr(settings, "max_concurrent_requests", 5))
+effective_follow_subpages = bool(getattr(settings, "follow_contact_pages", True))
 effective_agency_name = str(st.session_state.get("agency_name", "AI Growth & Intelligence Partners"))
 effective_agency_website = str(st.session_state.get("agency_website", "https://growth-intelligence.io"))
 
 
 # =============================================================
-# 🚀 PILLAR 4: PROFESSIONAL LANDING STATE (THE HOOK)
+# 🚀 PILLAR 2: PUBLIC LANDING PAGE (THE HOOK)
 # =============================================================
 if current_view == "landing":
-    # Custom SaaS Navigation Bar
+    # SaaS Navbar
     st.markdown("""
     <div class="saas-navbar">
         <div class="saas-logo">
             ⚡ <span>B2B Lead Machine</span>
         </div>
         <div>
-            <span class="pill-pro">✨ 2026 AI Outbound Engine</span>
+            <span class="pill-pro">✨ 2026 AI Outbound & Audit Engine</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -519,9 +440,9 @@ if current_view == "landing":
     st.markdown("""
     <div class="hero-container">
         <span class="pill-gold" style="margin-bottom: 14px;">⚡ THE NEW STANDARD IN HIGH-TICKET CLIENT ACQUISITION</span>
-        <h1 class="hero-title">B2B Lead Machine: Automate Your Client Acquisition</h1>
+        <h1 class="hero-title">Automate Your Agency's Lead Generation & Auditing</h1>
         <p class="hero-subtitle">
-            Discover high-intent local businesses, extract verified decision-maker emails, and generate client-ready <b>3-Point Digital Mini-Audits</b> with Gemini AI to close high-ticket deals effortlessly.
+            Discover high-intent local businesses, extract verified decision-maker emails, and generate client-ready <b>3-Point Digital Growth Audits</b> with Gemini AI to close deals effortlessly.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -529,11 +450,11 @@ if current_view == "landing":
     # Call-to-Action Buttons
     c_btn1, c_btn2 = st.columns([1, 1])
     with c_btn1:
-        if st.button("🚀 Start Free Trial (5 Free Leads)", type="primary", width="stretch"):
+        if st.button("🚀 Enter App / Start Free Search", type="primary", width="stretch"):
             st.session_state["view_mode"] = "dashboard"
             st.rerun()
     with c_btn2:
-        if st.button("💎 View Pro Pricing ($19/mo)", width="stretch"):
+        if st.button("💎 View Pro Access ($19/mo)", width="stretch"):
             st.session_state["view_mode"] = "dashboard"
             st.session_state["open_upgrade_tab"] = True
             st.rerun()
@@ -547,7 +468,7 @@ if current_view == "landing":
         st.markdown("""
         <div class="feature-card">
             <div class="feature-icon">🎯</div>
-            <h4 style="color:#f8fafc; margin-top:0;">1. Target Any Niche</h4>
+            <h4 style="color:#f8fafc; margin-top:0;">1. Target Any Niche & Metro</h4>
             <p style="color:#94a3b8; font-size:0.9rem; line-height:1.5;">
                 Enter any local industry and geography (e.g. <i>"Commercial roofing in Miami, FL"</i>) or upload your own CSV list of target accounts.
             </p>
@@ -569,16 +490,16 @@ if current_view == "landing":
         st.markdown("""
         <div class="feature-card">
             <div class="feature-icon">📄</div>
-            <h4 style="color:#f8fafc; margin-top:0;">3. Close High-Ticket Clients</h4>
+            <h4 style="color:#f8fafc; margin-top:0;">3. Deliver White-Labeled PDFs</h4>
             <p style="color:#94a3b8; font-size:0.9rem; line-height:1.5;">
-                Download white-labeled client PDF reports to hand directly to prospects or dispatch value-first mini-audit emails automatically.
+                Download ready-to-print white-labeled client PDF reports branded with your agency name to hand directly to clients and close deals.
             </p>
         </div>
         """, unsafe_allow_html=True)
 
     st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
 
-    # Live Sample Preview of an AI Mini-Audit
+    # Interactive Sample Mini-Audit Preview
     st.markdown("### 👁️ Interactive Mini-Audit Preview (Sample Deliverable)")
     st.markdown("""
     <div class="protected-sample-container">
@@ -604,23 +525,23 @@ if current_view == "landing":
 
     st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
 
-    # Pricing Section
-    st.markdown("### 💎 Simple, Transparent Pricing")
+    # Transparent Pricing Matrix
+    st.markdown("### 💎 Transparent, Flat-Rate Pricing")
     c_pr1, c_pr2 = st.columns(2)
     with c_pr1:
         st.markdown("""
         <div class="pricing-card-free">
             <h3 style="color:#f8fafc; margin:0;">Free Tier</h3>
             <h2 style="color:#94a3b8; margin:14px 0;">$0 <font size="3">/ forever</font></h2>
-            <p style="color:#64748b; font-size:0.88rem;">Best for testing the platform</p>
+            <p style="color:#64748b; font-size:0.88rem;">Explore lead discovery & preview audits</p>
             <hr style="border:0; border-top:1px solid #1f2937; margin:16px 0;">
             <p style="text-align:left; font-size:0.9rem; color:#cbd5e1; line-height:1.8;">
-                ✓ 5 Verified Leads per Search<br/>
-                ✓ Standard Lead Table View<br/>
-                ✓ Basic CSV Export Preview<br/>
+                ✓ Run On-Demand Lead Searches<br/>
+                ✓ Interactive Data Table View<br/>
+                ✓ Preview AI 3-Point Mini-Audits<br/>
                 ✗ <span style="color:#64748b;">White-Labeled PDF Audits</span><br/>
-                ✗ <span style="color:#64748b;">Multi-Client PDF Bundle</span><br/>
-                ✗ <span style="color:#64748b;">Automated Email Dispatcher</span>
+                ✗ <span style="color:#64748b;">Multi-Client PDF Audit Bundle</span><br/>
+                ✗ <span style="color:#64748b;">Full Unmasked CSV Export</span>
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -629,25 +550,25 @@ if current_view == "landing":
         st.markdown("""
         <div class="pricing-card-pro">
             <span class="pill-pro" style="margin-bottom:8px;">RECOMMENDED FOR AGENCIES</span>
-            <h3 style="color:#f8fafc; margin:4px 0 0 0;">Pro Growth Tier</h3>
+            <h3 style="color:#f8fafc; margin:4px 0 0 0;">Pro Access Tier</h3>
             <h2 style="color:#38bdf8; margin:14px 0;">$19 <font size="3" color="#94a3b8">/ month</font></h2>
             <p style="color:#94a3b8; font-size:0.88rem;">Or $9 one-time 24h day pass</p>
             <hr style="border:0; border-top:1px solid #334155; margin:16px 0;">
             <p style="text-align:left; font-size:0.9rem; color:#f8fafc; line-height:1.8;">
                 ✓ <b>Unlimited Verified B2B Leads</b><br/>
                 ✓ <b>White-Labeled PDF Client Reports</b><br/>
-                ✓ <b>Complete Multi-Client PDF Audit Bundle</b><br/>
+                ✓ <b>Multi-Client PDF Audit Bundle</b><br/>
                 ✓ <b>Full Unmasked CSV & JSON Exports</b><br/>
-                ✓ <b>Automated Value-First Email Engine</b><br/>
-                ✓ <b>Permanent Anti-Spam Deduplication</b>
+                ✓ <b>Custom Agency Branding on Deliverables</b><br/>
+                ✓ <b>Zero Lead Lockouts</b>
             </p>
         </div>
         """, unsafe_allow_html=True)
 
     st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
 
-    # Launch Button to Dashboard
-    if st.button("🚀 Launch B2B Lead Machine Dashboard Now", type="primary", width="stretch"):
+    # Big Launch CTA
+    if st.button("🚀 Enter App & Start Lead Generation", type="primary", width="stretch"):
         st.session_state["view_mode"] = "dashboard"
         st.rerun()
 
@@ -655,32 +576,23 @@ if current_view == "landing":
 
 
 # =============================================================
-# 🚀 PILLAR 3: DASHBOARD & CONCURRENT ENGINE (WHEN IN DASHBOARD VIEW)
+# 🚀 PILLAR 3: PUBLIC DASHBOARD & STRIPE MONETIZATION
 # =============================================================
-st.markdown('<div class="saas-navbar"><div class="saas-logo">⚡ B2B Lead Machine Dashboard</div><div><span class="pill-pro">Pro Outbound Intelligence</span></div></div>', unsafe_allow_html=True)
+st.markdown('<div class="saas-navbar"><div class="saas-logo">⚡ B2B Lead Machine Dashboard</div><div><span class="pill-pro">On-Demand Lead & Audit Engine</span></div></div>', unsafe_allow_html=True)
 
 c_usr1, c_usr2 = st.columns([3, 1])
 with c_usr1:
-    user_display = st.session_state.get("user_name") or st.session_state.get("user_email") or "Agency Leader"
-    if is_user_pro:
-        st.markdown(f"👤 **Active Account:** `{user_display}` • <span class='pill-pro'>⭐ PRO PLAN ACTIVE (Unlimited Access)</span>", unsafe_allow_html=True)
+    if is_user_paid:
+        st.markdown("👤 **Access Status:** <span class='pill-pro'>⭐ PRO ACCESS ACTIVE (Full Downloads Unlocked)</span>", unsafe_allow_html=True)
     else:
-        st.markdown(f"👤 **Active Account:** `{user_display}` • <span class='pill'>FREE TIER (5 Leads/Search)</span>", unsafe_allow_html=True)
+        st.markdown("👤 **Access Status:** <span class='pill'>FREE TIER (Exports & PDFs Locked)</span>", unsafe_allow_html=True)
 with c_usr2:
-    if not is_user_pro:
+    if not is_user_paid:
         if st.button("⭐ Upgrade to Pro ($19)", type="primary", width="stretch"):
             st.session_state["open_upgrade_tab"] = True
             st.rerun()
 
-tab_search, tab_csv, tab_upgrade = st.tabs(["🔍 Search & Generate Client Audits", "📁 Upload Existing CSV", "💎 Pro Plan & Stripe Billing"])
-
-
-# -------------------------------------------------------------
-# Trigger from Admin Manual Start or User Form
-# -------------------------------------------------------------
-trigger_admin_run = bool(st.session_state.get("running", False) and st.session_state.get("admin_trigger_search"))
-admin_target_query = st.session_state.get("admin_trigger_search", "")
-admin_target_count = int(st.session_state.get("admin_trigger_count", 10))
+tab_search, tab_csv, tab_upgrade = st.tabs(["🔍 Search & Generate Client Audits", "📁 Upload Existing CSV", "💎 Pro Access & Stripe Checkout"])
 
 
 # -------------------------------------------------------------
@@ -694,30 +606,27 @@ with tab_search:
     with col1:
         search_query = st.text_input(
             "Search Query / Niche + Location",
-            value=admin_target_query if trigger_admin_run else "",
             placeholder="e.g. Commercial HVAC contractors in Dallas, TX",
             key="keyword_search_input"
         )
     with col2:
-        max_allowed_leads = 30 if is_user_pro else 5
+        max_allowed_leads = 30 if is_user_paid else 5
         num_leads = st.number_input(
-            f"Target Leads ({'Unlimited Pro' if is_user_pro else 'Free Tier Max 5'})",
+            f"Target Leads ({'Unlimited Pro' if is_user_paid else 'Free Tier Max 5'})",
             min_value=3,
             max_value=max_allowed_leads,
-            value=admin_target_count if trigger_admin_run else min(10, max_allowed_leads),
+            value=min(10, max_allowed_leads),
             step=1
         )
 
     btn_discover = st.button("🚀 Generate Leads & Mini-Audits", type="primary", width="stretch", disabled=is_engine_running)
 
-    if btn_discover or trigger_admin_run:
-        target_q = (admin_target_query if trigger_admin_run else search_query).strip()
-        target_n = admin_target_count if trigger_admin_run else int(num_leads)
+    if btn_discover:
+        target_q = search_query.strip()
+        target_n = int(num_leads)
 
         if not target_q:
             st.error("Please enter a valid search query.")
-            st.session_state["running"] = False
-            st.session_state["admin_trigger_search"] = None
         else:
             st.session_state["running"] = True
             try:
@@ -783,7 +692,6 @@ with tab_search:
                                 df_data = [r.model_dump() for r in sanitized_results]
                                 st.session_state["df"] = pd.DataFrame(df_data)
                                 st.session_state["last_query"] = target_q
-                                st.session_state["campaign_results"] = None
 
                             except Exception as pipe_err:
                                 logger.error(f"Pipeline execution error: {pipe_err}")
@@ -792,7 +700,6 @@ with tab_search:
 
             finally:
                 st.session_state["running"] = False
-                st.session_state["admin_trigger_search"] = None
 
 
 # -------------------------------------------------------------
@@ -825,7 +732,7 @@ with tab_csv:
                     if c_name and c_name.lower() != "nan":
                         input_leads.append(LeadInput(company_name=c_name))
 
-                if not is_user_pro:
+                if not is_user_paid:
                     input_leads = input_leads[:5]
 
                 if not input_leads:
@@ -877,7 +784,6 @@ with tab_csv:
                                     st.session_state["leads"] = sanitized_results
                                     st.session_state["df"] = pd.DataFrame([r.model_dump() for r in sanitized_results])
                                     st.session_state["last_query"] = f"CSV: {uploaded_file.name}"
-                                    st.session_state["campaign_results"] = None
 
                                 except Exception as csv_pipe_err:
                                     logger.error(f"CSV enrichment error: {csv_pipe_err}")
@@ -891,12 +797,12 @@ with tab_csv:
             st.error(f"Error reading CSV file: {e}")
 
 
-# =============================================================
-# 💳 STRIPE BILLING & UPGRADE TAB
-# =============================================================
+# -------------------------------------------------------------
+# TAB 3: STRIPE BILLING & UPGRADE CHECKOUT
+# -------------------------------------------------------------
 with tab_upgrade:
-    st.markdown("### 💎 Upgrade to B2B Lead Machine Pro")
-    st.markdown("Unlock unlimited lead discoveries, client-ready **White-Labeled PDF Reports**, full unmasked exports, and the automated email engine.")
+    st.markdown("### 💎 Unlock Pro Access")
+    st.markdown("Unlock unlimited leads, client-ready **White-Labeled PDF Reports**, full unmasked exports, and multi-client audit bundles.")
 
     c_pl1, c_pl2 = st.columns(2)
     with c_pl1:
@@ -907,11 +813,11 @@ with tab_upgrade:
             <h2 style="color:#38bdf8; margin:10px 0;">$19 <font size="3" color="#94a3b8">USD / month</font></h2>
             <p style="font-size:0.85rem; color:#94a3b8;">Full continuous agency client acquisition</p>
             <p style="text-align:left; font-size:0.88rem; color:#f8fafc; line-height:1.8;">
-                ✓ Unlimited Leads & Search Queries<br/>
+                ✓ Unlimited Leads & Searches<br/>
                 ✓ <b>White-Labeled PDF Client Reports</b><br/>
                 ✓ <b>Multi-Client PDF Audit Bundle</b><br/>
                 ✓ Full Unmasked CSV & JSON Exports<br/>
-                ✓ Automated Outbound Email Engine
+                ✓ Custom Agency Branding
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -931,6 +837,7 @@ with tab_upgrade:
                 else:
                     st.error(f"Could not create checkout session: {sess.get('error')}")
             except Exception as str_err:
+                st.session_state["is_paid"] = True
                 st.session_state["is_pro"] = True
                 st.toast("🎉 Upgraded to Pro Plan (Test Mode)!", icon="💎")
                 st.rerun()
@@ -966,6 +873,7 @@ with tab_upgrade:
                 else:
                     st.error(f"Could not create checkout session: {sess.get('error')}")
             except Exception as str_err:
+                st.session_state["is_paid"] = True
                 st.session_state["is_pro"] = True
                 st.toast("🎉 Upgraded with 24-Hour Pass (Test Mode)!", icon="💎")
                 st.rerun()
@@ -975,6 +883,7 @@ with tab_upgrade:
         if st.button("Verify & Unlock Pro Plan", width="stretch"):
             clean_code = entered_passcode.strip()
             if clean_code and (clean_code == UNLOCK_CODE or clean_code == ADMIN_PASSWORD or clean_code.startswith("cs_")):
+                st.session_state["is_paid"] = True
                 st.session_state["is_pro"] = True
                 add_activity_log(f"User verified Pro access with code/session.", "INFO")
                 st.toast("🎉 Pro Plan Unlocked!", icon="💎")
@@ -984,7 +893,7 @@ with tab_upgrade:
 
 
 # =============================================================
-# 📊 PILLAR 2: PREMIUM PDF AUDIT DELIVERABLE & LEADS DISPLAY
+# 📊 PILLAR 4: LEADS DISPLAY & PREMIUM DELIVERABLES
 # =============================================================
 if st.session_state["leads"]:
     df = st.session_state["df"]
@@ -993,7 +902,6 @@ if st.session_state["leads"]:
     st.markdown("---")
     st.markdown("### 📋 Generated Leads & Custom Mini-Audits")
 
-    # KPI Metrics
     total_leads = len(leads)
     emails_found = sum(1 for l in leads if l.primary_email)
     email_rate = f"{(emails_found / total_leads * 100):.1f}%" if total_leads else "0%"
@@ -1006,15 +914,15 @@ if st.session_state["leads"]:
     with m3:
         st.metric("Contact Discovery Rate", email_rate)
     with m4:
-        if is_user_pro:
+        if is_user_paid:
             st.metric("PDF Audit Deliverables", "✅ Pro Unlocked")
         else:
             st.metric("PDF Audit Deliverables", "🔒 Locked (Pro Feature)")
 
     # ---------------------------------------------------------
-    # PRO TIER UNLOCKED VIEW
+    # 🔓 PRO TIER UNLOCKED VIEW (FULL DELIVERABLES)
     # ---------------------------------------------------------
-    if is_user_pro:
+    if is_user_paid:
         # Full Interactive Table
         st.dataframe(
             df[["company_name", "website_url", "primary_email", "company_summary", "custom_audit", "status"]],
@@ -1027,7 +935,7 @@ if st.session_state["leads"]:
             hide_index=True
         )
 
-        # White-Labeled PDF Audit Bundle & CSV Downloads
+        # White-Labeled PDF Audit Bundle & Full CSV Download
         st.markdown("#### 📄 White-Labeled Client PDF Reports & Audits")
         st.caption(f"Branded for: **{effective_agency_name}** ({effective_agency_website})")
 
@@ -1097,155 +1005,40 @@ if st.session_state["leads"]:
                 st.divider()
 
     # ---------------------------------------------------------
-    # FREE TIER PREVIEW & PRO UPGRADE GATE
+    # 🔒 FREE TIER VIEW (GATED EXPORTS & PDF DELIVERABLES)
     # ---------------------------------------------------------
     else:
-        st.markdown("#### 👁️ Free Preview (Top Leads)")
-        st.caption("🛡️ *You are viewing the Free Tier. Upgrade to Pro ($19/mo) to unlock client-ready White-Labeled PDF Audits and full unmasked exports.*")
+        # Free users can see data table
+        st.dataframe(
+            df[["company_name", "website_url", "primary_email", "company_summary", "custom_audit", "status"]],
+            column_config={
+                "website_url": st.column_config.LinkColumn("Website URL"),
+                "primary_email": st.column_config.TextColumn("Contact Email"),
+                "custom_audit": st.column_config.TextColumn("Custom Mini-Audit", width="large")
+            },
+            width="stretch",
+            hide_index=True
+        )
 
-        sample_leads = leads[:2]
-        hidden_count = max(0, total_leads - len(sample_leads))
+        st.markdown(f"""
+        <div class="locked-teaser-card">
+            <span class="pill-pro" style="margin-bottom:8px;">🔒 PRO FEATURE DELIVERABLE</span>
+            <h3 style="color:#f8fafc; margin-top:6px; font-weight:800;">White-Labeled PDF Reports & Full CSV Downloads Locked</h3>
+            <p style="color:#94a3b8; font-size:0.95rem; margin-bottom:0;">
+                Client-ready <b>White-Labeled PDF Digital Audits</b>, Multi-Client PDF Bundles, and full CSV exports are exclusively available with <b>Pro Access</b> ($19/mo or $9 pass).
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
-        for idx, lead in enumerate(sample_leads, 1):
-            masked_email = mask_email_address(lead.primary_email)
-            st.markdown(f"""
-            <div class="protected-sample-container">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <span style="font-size:1.1rem; font-weight:700; color:#38bdf8;">📌 Lead #{idx}: {lead.company_name}</span>
-                    <span class="pill-gold">Verified Lead</span>
-                </div>
-                <div style="font-size:0.9rem; color:#94a3b8; margin-bottom:6px;">
-                    <strong>Website:</strong> <a href="{lead.website_url or '#'}" target="_blank" style="color:#38bdf8;">{lead.website_url or 'N/A'}</a> | 
-                    <strong>Contact Email:</strong> <code style="color:#38bdf8; background:#1e293b; padding:2px 6px; border-radius:4px;">{masked_email}</code>
-                </div>
-                <div style="font-size:0.88rem; color:#cbd5e1; margin-bottom:8px;">
-                    <strong>Company Summary:</strong> {lead.company_summary or 'N/A'}
-                </div>
-                <div class="audit-card">
-                    <strong>AI Custom Mini-Audit Preview:</strong><br>
-                    {lead.custom_audit or lead.personalized_pitch or 'Custom audit generated by Gemini'}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        if hidden_count > 0:
-            st.markdown(f"""
-            <div class="locked-teaser-card">
-                <span class="pill-pro" style="margin-bottom:8px;">🔒 PRO FEATURE DELIVERABLE</span>
-                <h3 style="color:#f8fafc; margin-top:6px; font-weight:800;">+{hidden_count} More Verified Leads & White-Labeled PDFs Locked</h3>
-                <p style="color:#94a3b8; font-size:0.95rem; margin-bottom:0;">
-                    White-Labeled PDF Client Reports, Multi-Client PDF Bundles, and full unmasked exports are exclusively available on the <b>Pro Plan</b>.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-        c_up1, c_up2 = st.columns([1, 1])
-        with c_up1:
-            if st.button("⭐ Upgrade to Pro Plan ($19/mo)", type="primary", width="stretch"):
-                st.session_state["selected_tier"] = "Pro ($19/mo)"
-                st.toast("Redirecting to Pro checkout...", icon="💎")
+        c_lock1, c_lock2 = st.columns([1, 1])
+        with c_lock1:
+            st.button("📑 Download Premium PDF Audit (🔒 Locked)", disabled=True, width="stretch", help="Upgrade to Pro to download client-ready white-labeled PDF audits.")
+            if st.button("⭐ Upgrade to Pro to Download PDF ($19/mo)", type="primary", width="stretch"):
+                st.session_state["open_upgrade_tab"] = True
                 st.rerun()
-        with c_up2:
-            csv_buffer = io.StringIO()
-            df.head(5).to_csv(csv_buffer, index=False)
-            st.download_button(
-                label="📥 Download Free Sample CSV (5 Leads)",
-                data=csv_buffer.getvalue(),
-                file_name=f"sample_leads_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-                width="stretch"
-            )
 
-    st.markdown("---")
-
-    # =========================================================
-    # 📨 Value-First Custom Mini-Audit Campaign Launcher
-    # =========================================================
-    st.markdown("### 📨 Value-First Mini-Audit Campaign Launcher")
-    st.markdown("Dispatches personalized **Custom Mini-Audits** via Gmail SMTP synchronously in the main thread with **strict global deduplication**.")
-
-    eligible_leads = []
-    for l in leads:
-        em = getattr(l, "primary_email", None)
-        if em and isinstance(em, str):
-            is_valid, _ = is_valid_business_email(em)
-            if is_valid:
-                eligible_leads.append(l)
-
-    unsent_leads, skipped_leads = sent_history.filter_leads_for_dispatch(eligible_leads)
-
-    if eligible_leads:
-        sample_lead = eligible_leads[0]
-        subj, html_prev, txt_prev = build_outreach_email(sample_lead, app_url=APP_URL, sender_name=SENDER_NAME)
-
-        col_adm_info, col_adm_prev = st.columns([1, 1])
-        with col_adm_info:
-            st.info(f"• **Fresh Unsent Contacts:** {len(unsent_leads)}\n• **Already Contacted (Globally Skipped):** {len(skipped_leads)}\n• **Sender:** `{SMTP_USER}`\n• **App URL:** `{APP_URL}`")
-        with col_adm_prev:
-            with st.expander(f"👁️ Preview Mini-Audit Email to {sample_lead.company_name}", expanded=False):
-                st.markdown(f"**Subject:** `{subj}`")
-                st.text(txt_prev)
-
-        send_delay = st.slider("Safety Delay Between Outgoing Emails (Sec)", min_value=3, max_value=15, value=5, step=1, help="5-10s delay prevents triggering Gmail anti-spam sending blocks.", key="batch_delay_slider")
-
-        if len(unsent_leads) == 0:
-            st.warning("🛡️ All eligible leads in this dataset have already been contacted in past runs. Global deduplication filter has protected them from receiving duplicate emails.")
-        else:
-            if not is_user_pro:
-                st.info("ℹ️ Free Plan allows testing lead discovery and previewing emails. Upgrade to Pro ($19/mo) to unlock mass 1-click automated outbound dispatching.")
-            else:
-                btn_launch_campaign = st.button("🚀 Run Audit & Dispatch Campaign (Manual Trigger Only)", type="primary", width="stretch", disabled=is_engine_running)
-
-                if btn_launch_campaign:
-                    if not SMTP_USER or not SMTP_PASSWORD:
-                        st.warning("⚠️ SMTP credentials (SMTP_USER, SMTP_PASSWORD) not set in secrets.")
-                    else:
-                        st.session_state["running"] = True
-                        try:
-                            with st.spinner("Connecting to Gmail SMTP & dispatching custom mini-audits in main thread..."):
-                                progress_container = st.container()
-                                with progress_container:
-                                    dispatch_status = st.empty()
-                                    dispatch_bar = st.progress(0)
-
-                                    def on_email_progress(lead: Any, success: bool, msg: str, idx: int, tot: int):
-                                        pct = int((idx / tot) * 100) if tot > 0 else 0
-                                        dispatch_bar.progress(min(100, max(0, pct)))
-                                        icon = "✅" if success else "❌"
-                                        c_name = getattr(lead, "company_name", None) or (lead.get("company_name") if isinstance(lead, dict) else "Lead")
-                                        p_email = getattr(lead, "primary_email", None) or (lead.get("primary_email") if isinstance(lead, dict) else "")
-                                        dispatch_status.text(f"Processing ({idx}/{tot}) {icon} -> {c_name} ({p_email}) [{msg}]")
-
-                                    add_activity_log(f"Launching mini-audit campaign to {len(unsent_leads)} unsent contacts...", "INFO")
-
-                                    report = dispatch_campaign(
-                                        leads=unsent_leads,
-                                        sender_email=SMTP_USER,
-                                        app_password=SMTP_PASSWORD,
-                                        app_url=APP_URL,
-                                        sender_name=SENDER_NAME,
-                                        smtp_host=SMTP_HOST,
-                                        smtp_port=SMTP_PORT,
-                                        topic=st.session_state.get("last_query", "Manual Mini-Audit Outreach"),
-                                        delay_seconds=float(send_delay),
-                                        progress_callback=on_email_progress
-                                    )
-
-                                    dispatch_bar.progress(100)
-                                    st.session_state["campaign_results"] = report
-                                    if report.get("success"):
-                                        add_activity_log(f"Campaign finished: Sent {report.get('sent_count')} mini-audits, skipped {report.get('skipped_duplicates', 0)} duplicates, skipped {report.get('skipped_invalid', 0)} invalid.", "INFO")
-                                        st.success(f"🎉 Campaign Finished! Successfully sent {report.get('sent_count')} value-first mini-audits ({report.get('skipped_duplicates', 0)} duplicates skipped, {report.get('skipped_invalid', 0)} invalid artifacts skipped).")
-                                    else:
-                                        add_activity_log(f"Campaign failed: {report.get('message')}", "ERROR")
-                                        st.warning(f"⚠️ {report.get('message')}")
-
-                        finally:
-                            st.session_state["running"] = False
-
-        if st.session_state["campaign_results"]:
-            rep = st.session_state["campaign_results"]
-            if rep.get("results"):
-                st.dataframe(pd.DataFrame(rep.get("results", [])), width="stretch", hide_index=True)
-    else:
-        st.info("ℹ️ No leads with verified business email addresses found in the current table to dispatch.")
+        with c_lock2:
+            st.button("📥 Download Full CSV (🔒 Locked)", disabled=True, width="stretch", help="Upgrade to Pro to download unmasked CSV datasets.")
+            if st.button("⚡ Get 24-Hour Pass ($9)", width="stretch"):
+                st.session_state["open_upgrade_tab"] = True
+                st.rerun()
