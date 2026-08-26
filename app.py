@@ -23,7 +23,7 @@ from b2b_leadgen.pipeline import LeadGenPipeline, detect_company_column
 logger = logging.getLogger(__name__)
 
 # =============================================================
-# 📱 Page Configuration & Session State Initialization
+# 📱 Page Configuration & Constants
 # =============================================================
 st.set_page_config(
     page_title="B2B Lead Machine: Automate Your Lead Generation & Auditing",
@@ -34,15 +34,79 @@ st.set_page_config(
 
 MAX_FREE_SEARCHES = 3
 ADMIN_CONTACT_EMAIL = "hariskandapg@gmail.com"
+USER_USAGE_FILE = "user_usage.json"
 CLERK_SIGN_IN_URL = "https://internal-chamois-9541.clerk.accounts.dev/sign-in"
 CLERK_SIGN_UP_URL = "https://internal-chamois-9541.clerk.accounts.dev/sign-up"
 CLERK_USER_PROFILE_URL = "https://internal-chamois-9541.clerk.accounts.dev/user"
 
+
+# =============================================================
+# 💾 Persistent Per-User Search Limit Storage Helper
+# =============================================================
+def load_all_user_usage() -> Dict[str, Dict[str, Any]]:
+    """Loads all user profile usage records from JSON storage."""
+    if os.path.exists(USER_USAGE_FILE):
+        try:
+            with open(USER_USAGE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading user usage: {e}")
+            return {}
+    return {}
+
+
+def save_all_user_usage(data: Dict[str, Dict[str, Any]]) -> None:
+    """Saves user profile usage records to JSON storage."""
+    try:
+        with open(USER_USAGE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        logger.error(f"Error saving user usage: {e}")
+
+
+def get_user_usage(email: str) -> Dict[str, Any]:
+    """Retrieves usage statistics for a specific user email."""
+    if not email:
+        return {"search_count": 0, "is_unlimited": False}
+    norm = email.strip().lower()
+    data = load_all_user_usage()
+    if norm == ADMIN_CONTACT_EMAIL.lower():
+        return {"search_count": 0, "is_unlimited": True}
+    return data.get(norm, {"search_count": 0, "is_unlimited": False})
+
+
+def record_user_search(email: str) -> int:
+    """Increments and persists search count for the given user."""
+    if not email:
+        return 0
+    norm = email.strip().lower()
+    data = load_all_user_usage()
+    if norm not in data:
+        data[norm] = {"search_count": 0, "is_unlimited": False, "created_at": datetime.now().isoformat()}
+    data[norm]["search_count"] = data[norm].get("search_count", 0) + 1
+    data[norm]["updated_at"] = datetime.now().isoformat()
+    save_all_user_usage(data)
+    return data[norm]["search_count"]
+
+
+def admin_reset_user_limit(email: str, grant_unlimited: bool = False) -> None:
+    """Resets user search count to 0 and optionally grants unlimited access."""
+    if not email:
+        return
+    norm = email.strip().lower()
+    data = load_all_user_usage()
+    if norm not in data:
+        data[norm] = {"created_at": datetime.now().isoformat()}
+    data[norm]["search_count"] = 0
+    if grant_unlimited:
+        data[norm]["is_unlimited"] = True
+    data[norm]["updated_at"] = datetime.now().isoformat()
+    save_all_user_usage(data)
+
+
 SESSION_DEFAULTS: Dict[str, Any] = {
-    "user_email": None,           # Clerk authenticated user email
+    "user_email": None,           # Logged-in user email
     "user_name": None,
-    "search_count": 0,            # Usage limit counter (Max 3 free searches)
-    "is_unlimited": False,        # Admin unlocked unlimited access
     "admin_authenticated": False, # Admin login state
     "leads": [],
     "df": pd.DataFrame(),
@@ -56,6 +120,12 @@ SESSION_DEFAULTS: Dict[str, Any] = {
 for state_key, state_default in SESSION_DEFAULTS.items():
     if state_key not in st.session_state:
         st.session_state[state_key] = state_default
+
+
+# Auto-detect email from query parameters (e.g. redirected from Clerk Auth)
+query_params = st.query_params
+if "email" in query_params and query_params["email"] and not st.session_state["user_email"]:
+    st.session_state["user_email"] = query_params["email"].strip().lower()
 
 
 def add_activity_log(message: str, level: str = "INFO") -> None:
@@ -141,6 +211,18 @@ st.markdown("""
         line-height: 1.6;
     }
 
+    /* Auth Sign-In Wall Box */
+    .auth-wall-container {
+        background: linear-gradient(135deg, #111827 0%, #1e1b4b 50%, #111827 100%);
+        border: 2px solid #6366f1;
+        border-radius: 24px;
+        padding: 40px;
+        max-width: 680px;
+        margin: 30px auto;
+        box-shadow: 0 16px 48px rgba(99, 102, 241, 0.2);
+        text-align: center;
+    }
+
     /* Limit Warning Box */
     .limit-warning-box {
         background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
@@ -174,11 +256,11 @@ st.markdown("""
         background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
         color: #ffffff !important;
         text-decoration: none;
-        padding: 8px 18px;
-        border-radius: 8px;
-        font-weight: 600;
-        font-size: 0.88rem;
-        box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+        padding: 10px 22px;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 0.95rem;
+        box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
         border: 1px solid #818cf8;
     }
     .clerk-btn-outline {
@@ -186,11 +268,11 @@ st.markdown("""
         background: transparent;
         color: #cbd5e1 !important;
         text-decoration: none;
-        padding: 8px 18px;
-        border-radius: 8px;
+        padding: 10px 22px;
+        border-radius: 10px;
         font-weight: 600;
-        font-size: 0.88rem;
-        border: 1px solid #334155;
+        font-size: 0.95rem;
+        border: 1px solid #475569;
     }
 
     /* Feature Badges & Pills */
@@ -321,27 +403,28 @@ def safe_execute_pipeline_sync(
             loop.close()
 
 
-def render_limit_reached_card() -> None:
-    """Renders the professional limit-reached message and pre-formatted mailto link."""
-    mailto_url = (
-        "mailto:hariskandapg@gmail.com"
-        "?subject=Request%20to%20Extend%20App%20Limit"
-        "&body=Hi%20Haris,%20I%20hit%20my%20limit%20on%20your%20B2B%20Lead%20App%20and%20would%20like%20to%20get%20more%20access."
-    )
+def render_user_limit_reached_card(user_email: str) -> None:
+    """Renders the professional limit-reached message and personalized mailto link."""
+    clean_email = user_email.strip() if user_email else "user@agency.com"
+    subject_encoded = urllib.parse.quote("Unlock More Searches")
+    body_text = f"Hi Haris, my account ({clean_email}) has exhausted its free searches. Please extend my limit!"
+    body_encoded = urllib.parse.quote(body_text)
+    mailto_url = f"mailto:{ADMIN_CONTACT_EMAIL}?subject={subject_encoded}&body={body_encoded}"
+
     st.markdown(f"""
     <div class="limit-warning-box">
         <span class="pill" style="background:#312e81; color:#c7d2fe; border-color:#6366f1;">⚠️ USAGE LIMIT REACHED</span>
-        <h2 style="color:#ffffff; margin: 12px 0 8px 0; font-weight: 800;">You have reached your free search limit for this session.</h2>
+        <h2 style="color:#ffffff; margin: 12px 0 8px 0; font-weight: 800;">You have used all your free searches.</h2>
         <p style="color:#cbd5e1; font-size: 1.02rem; max-width: 680px; margin: 0 auto 18px auto; line-height: 1.5;">
-            You have used all <b>{MAX_FREE_SEARCHES} of {MAX_FREE_SEARCHES}</b> free searches for this session. To request extended or unlimited access, click the button below to send an email to Haris.
+            Your account (<b>{clean_email}</b>) has used all <b>{MAX_FREE_SEARCHES} of {MAX_FREE_SEARCHES}</b> complimentary lead generation searches. Click below to request more limit from Haris.
         </p>
-        <div style="margin: 18px 0;">
+        <div style="margin: 20px 0;">
             <a href="{mailto_url}" target="_blank" class="mailto-btn">
-                Request More Limit via Email
+                📧 Request More Searches via Email
             </a>
         </div>
         <p style="color:#94a3b8; font-size: 0.88rem; margin-top: 14px; margin-bottom: 0;">
-            Direct Email: <a href="mailto:{ADMIN_CONTACT_EMAIL}" style="color:#38bdf8; text-decoration:none;"><b>{ADMIN_CONTACT_EMAIL}</b></a>
+            Direct Contact: <a href="mailto:{ADMIN_CONTACT_EMAIL}" style="color:#38bdf8; text-decoration:none;"><b>{ADMIN_CONTACT_EMAIL}</b></a>
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -352,123 +435,131 @@ GEMINI_API_KEY: Optional[str] = get_secret("GEMINI_API_KEY", getattr(settings, "
 ADMIN_PASSWORD: str = str(get_secret("ADMIN_PASSWORD", getattr(settings, "admin_password", "admin123")))
 UNLOCK_CODE: str = str(get_secret("UNLOCK_CODE", getattr(settings, "unlock_code", "4990")))
 
-# State Accessors
-is_admin_active = bool(st.session_state.get("admin_authenticated", False))
-is_unlimited = bool(st.session_state.get("is_unlimited", False) or is_admin_active)
-search_count = int(st.session_state.get("search_count", 0))
-has_limit_reached = (search_count >= MAX_FREE_SEARCHES) and not is_unlimited
+# Authentication & State
+current_user_email: Optional[str] = st.session_state.get("user_email")
+is_admin_active = bool(st.session_state.get("admin_authenticated", False) or (current_user_email and current_user_email.lower() == ADMIN_CONTACT_EMAIL.lower()))
+
+# Per-User Usage Statistics
+user_stats = get_user_usage(current_user_email or "")
+user_searches_used = int(user_stats.get("search_count", 0))
+user_is_unlimited = bool(user_stats.get("is_unlimited", False) or is_admin_active)
+user_searches_remaining = max(0, MAX_FREE_SEARCHES - user_searches_used)
+has_user_hit_limit = (user_searches_used >= MAX_FREE_SEARCHES) and not user_is_unlimited
 is_engine_running = bool(st.session_state.get("running", False))
-user_authenticated_email = st.session_state.get("user_email")
 
 
 # =============================================================
-# 🛍️ Sidebar: Clerk Auth, Usage Tracker, White-Label & Admin
+# 🛍️ Sidebar: User Profile, Usage, Branding & Admin Panel
 # =============================================================
 with st.sidebar:
     st.image("https://img.icons8.com/isometric/100/lightning-bolt.png", width=55)
     st.title("B2B Lead Machine")
 
-    # Clerk Authentication Section
-    st.markdown("#### 👤 Authentication")
-    if user_authenticated_email:
+    if current_user_email:
+        st.markdown("#### 👤 Active Account")
         st.markdown(f"""
         <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:12px; margin-bottom:12px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
                 <span style="font-size:1.1rem;">👤</span>
-                <strong style="color:#f8fafc; font-size:0.88rem;">{user_authenticated_email}</strong>
+                <strong style="color:#f8fafc; font-size:0.88rem; word-break:break-all;">{current_user_email}</strong>
             </div>
             <a href="{CLERK_USER_PROFILE_URL}" target="_blank" style="color:#38bdf8; font-size:0.8rem; text-decoration:none;">⚙️ Manage Clerk Profile</a>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Log Out of Session", width="stretch"):
+
+        if st.button("Log Out", width="stretch"):
             st.session_state["user_email"] = None
             st.session_state["user_name"] = None
+            st.session_state["admin_authenticated"] = False
             st.rerun()
-    else:
-        st.markdown(f"""
-        <div style="display:flex; gap:8px; margin-bottom:14px;">
-            <a href="{CLERK_SIGN_IN_URL}" target="_blank" class="clerk-btn" style="flex:1; text-align:center;">🔑 Sign In</a>
-            <a href="{CLERK_SIGN_UP_URL}" target="_blank" class="clerk-btn-outline" style="flex:1; text-align:center;">✨ Sign Up</a>
-        </div>
-        """, unsafe_allow_html=True)
 
-        with st.expander("⚡ Quick Account Sign-In", expanded=False):
-            in_email = st.text_input("Enter Email to Sync", placeholder="e.g. founder@agency.com", key="quick_email_in")
-            if st.button("Sync Account", width="stretch"):
-                if in_email and "@" in in_email:
-                    st.session_state["user_email"] = in_email.strip()
-                    st.toast(f"Welcome, {in_email.strip()}!", icon="👤")
-                    st.rerun()
+        st.divider()
 
-    st.divider()
-
-    # Usage Status Card
-    if is_unlimited:
-        st.markdown("""
-        <div style="background:#064e3b; border:1px solid #34d399; border-radius:12px; padding:14px; margin-bottom:14px;">
-            <span class="pill-free">⭐ UNLIMITED ACCESS ACTIVE</span>
-            <p style="font-size:0.84rem; color:#e2e8f0; margin-top:8px; margin-bottom:0;">
-                Unlimited lead generation & audit searches unlocked.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown(f"""
-        <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:14px; margin-bottom:14px;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:0.85rem; font-weight:700; color:#f8fafc;">Search Usage:</span>
-                <span class="pill">{search_count} / {MAX_FREE_SEARCHES} Searches</span>
+        # Per-User Search Limit Tracker
+        st.markdown("#### 📊 Search Balance")
+        if user_is_unlimited:
+            st.markdown("""
+            <div style="background:#064e3b; border:1px solid #34d399; border-radius:12px; padding:14px; margin-bottom:14px;">
+                <span class="pill-free">⭐ UNLIMITED SEARCHES ACTIVE</span>
+                <p style="font-size:0.84rem; color:#e2e8f0; margin-top:8px; margin-bottom:0;">
+                    Unlimited lead generation and audit queries unlocked.
+                </p>
             </div>
-            <p style="font-size:0.82rem; color:#94a3b8; margin-top:8px; margin-bottom:0;">
-                Free tier limit: <b>{MAX_FREE_SEARCHES} searches per session</b>.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:14px; margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <span style="font-size:0.85rem; font-weight:700; color:#f8fafc;">Searches Remaining:</span>
+                    <span class="pill" style="background:#1e293b; color:{'#ef4444' if user_searches_remaining == 0 else '#38bdf8'}; font-weight:700;">
+                        {user_searches_remaining} / {MAX_FREE_SEARCHES} Left
+                    </span>
+                </div>
+                <div style="background:#1f2937; border-radius:9999px; height:8px; width:100%; overflow:hidden; margin-top:8px;">
+                    <div style="background:{'#ef4444' if user_searches_remaining == 0 else '#38bdf8'}; height:100%; width:{(user_searches_remaining / MAX_FREE_SEARCHES) * 100}%;"></div>
+                </div>
+                <p style="font-size:0.8rem; color:#94a3b8; margin-top:8px; margin-bottom:0;">
+                    Used <b>{user_searches_used} of {MAX_FREE_SEARCHES}</b> free searches.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
-    st.divider()
+        st.divider()
 
-    # White-Label Customization for PDF Export
-    st.markdown("#### 🏢 White-Label Report Branding")
-    agency_name_in = st.text_input("Agency / Company Name", value=st.session_state.get("agency_name", "AI Growth & Intelligence Partners"))
-    st.session_state["agency_name"] = agency_name_in
-    agency_web_in = st.text_input("Agency Website URL", value=st.session_state.get("agency_website", "https://growth-intelligence.io"))
-    st.session_state["agency_website"] = agency_web_in
-    st.caption("Your branding is automatically stamped onto all generated White-Labeled PDF Audit Reports.")
+        # White-Label Customization for PDF Export
+        st.markdown("#### 🏢 White-Label Report Branding")
+        agency_name_in = st.text_input("Agency / Company Name", value=st.session_state.get("agency_name", "AI Growth & Intelligence Partners"))
+        st.session_state["agency_name"] = agency_name_in
+        agency_web_in = st.text_input("Agency Website URL", value=st.session_state.get("agency_website", "https://growth-intelligence.io"))
+        st.session_state["agency_website"] = agency_web_in
+        st.caption("Your branding is automatically stamped onto all generated White-Labeled PDF Audit Reports.")
 
-    st.divider()
+        st.divider()
 
-    # Contact & Admin Access
-    with st.expander("🔐 Admin Access / Reset Limit", expanded=False):
+    # 🔑 Admin Override Panel
+    with st.expander("🔐 Admin Override Panel", expanded=False):
         if not is_admin_active:
             admin_pwd = st.text_input("Admin Password", type="password", key="admin_pwd_field")
-            if st.button("Unlock Unlimited Access", width="stretch"):
+            if st.button("Authenticate Admin", width="stretch"):
                 if admin_pwd and (admin_pwd == ADMIN_PASSWORD or admin_pwd == UNLOCK_CODE):
                     st.session_state["admin_authenticated"] = True
-                    st.session_state["is_unlimited"] = True
-                    st.session_state["search_count"] = 0
-                    add_activity_log("Admin unlocked unlimited access and reset limit counter.", "INFO")
-                    st.toast("🎉 Unlimited access unlocked!", icon="🔓")
+                    add_activity_log("Admin authenticated successfully.", "INFO")
+                    st.toast("🔓 Admin mode unlocked!", icon="👑")
                     st.rerun()
                 else:
-                    st.error("Invalid password.")
+                    st.error("Invalid admin password.")
         else:
-            st.success("🔓 Admin Mode: Unlimited Access Active")
-            if st.button("🔄 Reset Search Limit to 0", width="stretch"):
-                st.session_state["search_count"] = 0
-                st.toast("Search count reset to 0!", icon="🔄")
-                st.rerun()
+            st.success("👑 Admin Mode Active")
+            all_users = list(load_all_user_usage().keys())
+            
+            target_override_email = st.text_input("Target User Email to Replenish", value=current_user_email or "", key="admin_target_email_in")
+            col_ad1, col_ad2 = st.columns(2)
+            with col_ad1:
+                if st.button("🔄 Reset to 3 Searches", width="stretch"):
+                    if target_override_email:
+                        admin_reset_user_limit(target_override_email, grant_unlimited=False)
+                        add_activity_log(f"Admin reset limit for {target_override_email} to 3 searches.", "INFO")
+                        st.toast(f"Limit reset to 3 for {target_override_email}!", icon="🔄")
+                        st.rerun()
+            with col_ad2:
+                if st.button("⭐ Grant Unlimited", width="stretch"):
+                    if target_override_email:
+                        admin_reset_user_limit(target_override_email, grant_unlimited=True)
+                        add_activity_log(f"Admin granted unlimited access to {target_override_email}.", "INFO")
+                        st.toast(f"Unlimited granted for {target_override_email}!", icon="⭐")
+                        st.rerun()
 
-            toggle_unlimited = st.toggle("Unlimited Searches Active", value=st.session_state.get("is_unlimited", True))
-            if toggle_unlimited != st.session_state.get("is_unlimited", True):
-                st.session_state["is_unlimited"] = toggle_unlimited
-                st.rerun()
+            if all_users:
+                st.caption(f"Registered User Profiles ({len(all_users)}):")
+                for u in all_users[:8]:
+                    u_stat = get_user_usage(u)
+                    st.text(f"• {u}: {u_stat.get('search_count', 0)} used {'(Unlimited)' if u_stat.get('is_unlimited') else ''}")
 
-            if st.button("Log Out Admin", width="stretch"):
+            if st.button("Exit Admin Mode", width="stretch"):
                 st.session_state["admin_authenticated"] = False
-                st.session_state["is_unlimited"] = False
                 st.rerun()
 
-    st.caption(f"⚡ **B2B Lead Machine** • Contact: `{ADMIN_CONTACT_EMAIL}`")
+    st.caption(f"⚡ **B2B Lead Machine** • Support: `{ADMIN_CONTACT_EMAIL}`")
 
 
 effective_model = getattr(settings, "gemini_model", "gemini-2.5-flash")
@@ -479,28 +570,85 @@ effective_agency_website = str(st.session_state.get("agency_website", "https://g
 
 
 # =============================================================
-# 🚀 MAIN SAAS DASHBOARD (WITH CLERK AUTH & LIMIT TRACKING)
+# 🔒 PILLAR 1: MANDATORY SIGN-IN WALL (WHEN LOGGED OUT)
 # =============================================================
-auth_nav_html = (
-    f"""<div style="display:flex; align-items:center; gap:12px;">
-        <span style="color:#94a3b8; font-size:0.88rem;">👤 {user_authenticated_email}</span>
-        <a href="{CLERK_USER_PROFILE_URL}" target="_blank" class="clerk-btn" style="padding:6px 14px; font-size:0.8rem;">Profile</a>
-    </div>"""
-    if user_authenticated_email
-    else f"""<div style="display:flex; align-items:center; gap:8px;">
-        <a href="{CLERK_SIGN_IN_URL}" target="_blank" class="clerk-btn" style="padding:6px 14px; font-size:0.82rem;">Sign In</a>
-        <a href="{CLERK_SIGN_UP_URL}" target="_blank" class="clerk-btn-outline" style="padding:6px 14px; font-size:0.82rem;">Sign Up</a>
-    </div>"""
-)
+if not current_user_email:
+    # SaaS Navbar (Logged Out State)
+    st.markdown(f"""
+    <div class="saas-navbar">
+        <div class="saas-logo">
+            ⚡ <span>B2B Lead Machine</span>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <a href="{CLERK_SIGN_IN_URL}" target="_blank" class="clerk-btn" style="padding:8px 18px; font-size:0.85rem;">🔑 Sign In</a>
+            <a href="{CLERK_SIGN_UP_URL}" target="_blank" class="clerk-btn-outline" style="padding:8px 18px; font-size:0.85rem;">✨ Sign Up</a>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
+    # Hero Section
+    st.markdown("""
+    <div class="hero-container">
+        <span class="pill-free" style="margin-bottom: 12px;">⚡ THE NEW STANDARD IN HIGH-TICKET CLIENT ACQUISITION</span>
+        <h1 class="hero-title">Automate Your Agency's Lead Generation & Auditing</h1>
+        <p class="hero-subtitle">
+            Discover high-intent local businesses, extract verified decision-maker emails, and generate client-ready <b>3-Point Digital Growth Audits</b> with Gemini AI.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Mandatory Auth Card
+    st.markdown("""
+    <div class="auth-wall-container">
+        <span class="pill" style="background:#312e81; color:#c7d2fe; border-color:#6366f1; margin-bottom:12px;">🔒 SIGN-IN REQUIRED TO ACCESS ENGINE</span>
+        <h2 style="color:#ffffff; margin: 12px 0 8px 0; font-weight: 800;">Sign in to Start Generating Leads & Audits</h2>
+        <p style="color:#cbd5e1; font-size: 0.98rem; max-width: 540px; margin: 0 auto 24px auto; line-height: 1.5;">
+            Create your account or sign in with your email to claim your <b>3 free lead generation searches</b> and white-labeled PDF deliverables.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Direct Sign-in Form
+    col_c1, col_c2, col_c3 = st.columns([1, 2, 1])
+    with col_c2:
+        st.markdown("#### ⚡ Quick Email Sign-In / Register")
+        sign_in_email = st.text_input("Work / Agency Email Address", placeholder="e.g. founder@growthagency.com", key="auth_wall_email")
+        sign_in_name = st.text_input("Your Name / Company Name (Optional)", placeholder="e.g. Alex Rivera", key="auth_wall_name")
+
+        c_auth1, c_auth2 = st.columns(2)
+        with c_auth1:
+            if st.button("🚀 Access B2B Lead Machine", type="primary", width="stretch"):
+                clean_e = sign_in_email.strip().lower()
+                if not clean_e or "@" not in clean_e or "." not in clean_e:
+                    st.error("Please enter a valid email address.")
+                else:
+                    st.session_state["user_email"] = clean_e
+                    st.session_state["user_name"] = sign_in_name.strip() if sign_in_name else clean_e.split("@")[0]
+                    # Ensure user profile exists in persistent storage
+                    get_user_usage(clean_e)
+                    add_activity_log(f"User signed in: {clean_e}", "INFO")
+                    st.toast(f"Welcome to B2B Lead Machine, {clean_e}!", icon="👋")
+                    st.rerun()
+        with c_auth2:
+            st.link_button("🔐 Sign in via Clerk Portal", url=CLERK_SIGN_IN_URL, width="stretch")
+
+    st.stop()
+
+
+# =============================================================
+# 🚀 MAIN SAAS DASHBOARD (LOGGED IN STATE)
+# =============================================================
 st.markdown(f"""
 <div class="saas-navbar">
     <div class="saas-logo">
         ⚡ <span>B2B Lead Machine</span>
     </div>
     <div style="display:flex; align-items:center; gap:16px;">
-        {'<span class="pill-pro">⭐ Unlimited Searches</span>' if is_unlimited else f'<span class="pill">🔍 {search_count} / {MAX_FREE_SEARCHES} Free Searches</span>'}
-        {auth_nav_html}
+        {'<span class="pill-pro">⭐ Unlimited Searches</span>' if user_is_unlimited else f'<span class="pill" style="color:{"#ef4444" if user_searches_remaining == 0 else "#38bdf8"};">🔍 {user_searches_remaining} / {MAX_FREE_SEARCHES} Free Searches Left</span>'}
+        <div style="display:flex; align-items:center; gap:8px;">
+            <span style="color:#94a3b8; font-size:0.88rem;">👤 {current_user_email}</span>
+            <a href="{CLERK_USER_PROFILE_URL}" target="_blank" class="clerk-btn" style="padding:6px 14px; font-size:0.8rem;">Profile</a>
+        </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -523,8 +671,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Show Limit Reached Warning if user hit limit
-if has_limit_reached:
-    render_limit_reached_card()
+if has_user_hit_limit:
+    render_user_limit_reached_card(current_user_email)
 
 tab_search, tab_csv = st.tabs(["🔍 Search & Generate Client Audits", "📁 Upload Existing CSV"])
 
@@ -542,7 +690,7 @@ with tab_search:
             "Search Query / Niche + Location",
             placeholder="e.g. Commercial HVAC contractors in Dallas, TX",
             key="keyword_search_input",
-            disabled=has_limit_reached
+            disabled=has_user_hit_limit
         )
     with col2:
         num_leads = st.number_input(
@@ -551,14 +699,14 @@ with tab_search:
             max_value=30,
             value=10,
             step=1,
-            disabled=has_limit_reached
+            disabled=has_user_hit_limit
         )
 
-    btn_discover = st.button("🚀 Generate Leads & Mini-Audits", type="primary", width="stretch", disabled=is_engine_running or has_limit_reached)
+    btn_discover = st.button("🚀 Generate Leads & Mini-Audits", type="primary", width="stretch", disabled=is_engine_running or has_user_hit_limit)
 
     if btn_discover:
-        if has_limit_reached:
-            st.warning("⚠️ You have reached your free search limit for this session.")
+        if has_user_hit_limit:
+            st.warning("⚠️ You have used all your free searches.")
         else:
             target_q = search_query.strip()
             target_n = int(num_leads)
@@ -574,7 +722,7 @@ with tab_search:
                             status_text = st.empty()
                             prog_bar = st.progress(0)
 
-                            add_activity_log(f"Starting discovery for '{target_q}' (Target: {target_n} leads)...", "INFO")
+                            add_activity_log(f"Starting discovery for '{target_q}' (User: {current_user_email})...", "INFO")
                             status_text.info(f"🔎 Discovering businesses matching '{target_q}' via DuckDuckGo...")
 
                             try:
@@ -622,10 +770,10 @@ with tab_search:
                                     df_data = [r.model_dump() for r in results]
                                     st.session_state["df"] = pd.DataFrame(df_data)
                                     st.session_state["last_query"] = target_q
-                                    
-                                    # Increment search usage counter
-                                    if not is_unlimited:
-                                        st.session_state["search_count"] = st.session_state.get("search_count", 0) + 1
+
+                                    # Record per-user search count in persistent storage
+                                    if not user_is_unlimited and current_user_email:
+                                        record_user_search(current_user_email)
                                         st.rerun()
 
                                 except Exception as pipe_err:
@@ -644,7 +792,7 @@ with tab_csv:
     st.markdown("### 📁 Upload Existing CSV for Mini-Audits")
     st.markdown("Upload a CSV containing company names to enrich them with verified contact emails and AI digital audits.")
 
-    uploaded_file = st.file_uploader("Upload CSV file", type=["csv"], disabled=has_limit_reached)
+    uploaded_file = st.file_uploader("Upload CSV file", type=["csv"], disabled=has_user_hit_limit)
 
     if uploaded_file is not None:
         try:
@@ -656,14 +804,14 @@ with tab_csv:
                 "Select Company Name Column",
                 options=list(uploaded_df.columns),
                 index=list(uploaded_df.columns).index(company_col_detected) if company_col_detected in uploaded_df.columns else 0,
-                disabled=has_limit_reached
+                disabled=has_user_hit_limit
             )
 
-            btn_enrich_csv = st.button("⚡ Generate Mini-Audits from Uploaded CSV", type="primary", disabled=is_engine_running or has_limit_reached)
+            btn_enrich_csv = st.button("⚡ Generate Mini-Audits from Uploaded CSV", type="primary", disabled=is_engine_running or has_user_hit_limit)
 
             if btn_enrich_csv:
-                if has_limit_reached:
-                    st.warning("⚠️ You have reached your free search limit for this session.")
+                if has_user_hit_limit:
+                    st.warning("⚠️ You have used all your free searches.")
                 else:
                     input_leads = []
                     for _, row in uploaded_df.iterrows():
@@ -713,9 +861,9 @@ with tab_csv:
                                         st.session_state["df"] = pd.DataFrame([r.model_dump() for r in results])
                                         st.session_state["last_query"] = f"CSV: {uploaded_file.name}"
 
-                                        # Increment search usage counter
-                                        if not is_unlimited:
-                                            st.session_state["search_count"] = st.session_state.get("search_count", 0) + 1
+                                        # Record per-user search count in persistent storage
+                                        if not user_is_unlimited and current_user_email:
+                                            record_user_search(current_user_email)
                                             st.rerun()
 
                                     except Exception as csv_pipe_err:
