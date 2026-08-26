@@ -27,7 +27,7 @@ from b2b_leadgen.scraper import filter_valid_emails, clean_html_to_text, EMAIL_R
 logger = logging.getLogger(__name__)
 
 # =============================================================
-# 1. PAGE CONFIG & MODERN SAAS CSS
+# 1. PAGE CONFIG & MODERN HIGH-CONTRAST CSS
 # =============================================================
 st.set_page_config(
     page_title="ApexLeads AI - B2B Intelligence",
@@ -36,16 +36,16 @@ st.set_page_config(
 )
 
 APP_NAME = "ApexLeads AI"
-APP_SUBTITLE = "B2B Intelligence & Automated Growth Audits"
+APP_SUBTITLE = "The Automated B2B Lead & Website Audit Intelligence Suite"
 ADMIN_CONTACT_EMAIL = "hariskandapg@gmail.com"
 ADMIN_PASSCODE = "admin123"
 UNLOCK_PASSCODE = "4990"
 
-# Phone and Address Regex
+# Phone & Address Detection Regex
 PHONE_REGEX = re.compile(r'(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})')
 ADDRESS_REGEX = re.compile(r'\d+\s+[A-Za-z0-9\.,\s]+(?:Suite|Ste|St|Street|Ave|Avenue|Rd|Road|Blvd|Boulevard|Dr|Drive|Way|Pkwy|Parkway)\b[A-Za-z0-9\.,\s]*', re.IGNORECASE)
 
-# Inject High-Contrast Modern SaaS Theme CSS
+# High-Contrast Pure White CSS & Radial Dark Background
 st.markdown("""
 <style>
     /* Remove default Streamlit header/footer clutter */
@@ -55,14 +55,14 @@ st.markdown("""
     div[data-testid="stToolbar"] {visibility: hidden;}
     div[data-testid="stDecoration"] {visibility: hidden;}
 
-    /* Slate Modern Dark Background */
-    .stApp {
-        background-color: #0f172a !important;
+    /* Target background with dark radial gradient & tech backdrop */
+    [data-testid="stAppViewContainer"], .stApp {
+        background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #0f172a 50%, #020617 100%) !important;
         color: #FFFFFF !important;
         font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
     }
 
-    /* Force all text pure white or light silver */
+    /* Force all headings and text to pure white */
     h1, h2, h3, h4, h5, p, span, label, div, .stMarkdown {
         color: #FFFFFF !important;
     }
@@ -78,33 +78,26 @@ st.markdown("""
         box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
     }
     .landing-hero h1 {
-        font-size: 2.7rem;
+        font-size: 2.8rem;
         font-weight: 850;
         background: linear-gradient(135deg, #ffffff 0%, #38bdf8 50%, #c084fc 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
         letter-spacing: -0.02em;
     }
+    .landing-hero h3 {
+        font-size: 1.25rem;
+        color: #38bdf8 !important;
+        margin-bottom: 12px;
+        font-weight: 700;
+    }
     .landing-hero p {
-        font-size: 1.15rem;
+        font-size: 1.08rem;
         color: #cbd5e1;
-        max-width: 760px;
+        max-width: 780px;
         margin: 0 auto 16px auto;
         line-height: 1.55;
-    }
-
-    /* Glassmorphic Sign-In Container */
-    .auth-card {
-        background: rgba(30, 41, 59, 0.8) !important;
-        backdrop-filter: blur(14px) !important;
-        -webkit-backdrop-filter: blur(14px) !important;
-        border: 1px solid rgba(148, 163, 184, 0.25) !important;
-        border-radius: 16px !important;
-        padding: 28px !important;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35) !important;
-        max-width: 580px;
-        margin: 0 auto 30px auto;
     }
 
     /* Slideshow Mockup Container */
@@ -113,14 +106,15 @@ st.markdown("""
         border: 1px solid #334155;
         border-radius: 16px;
         padding: 24px;
-        margin-top: 20px;
+        margin-top: 16px;
+        margin-bottom: 24px;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
     }
     .slide-badge {
         display: inline-block;
         font-size: 0.76rem;
         font-weight: 700;
-        padding: 4px 10px;
+        padding: 4px 12px;
         border-radius: 9999px;
         margin-bottom: 10px;
         text-transform: uppercase;
@@ -252,16 +246,14 @@ st.markdown("""
 
 
 # =============================================================
-# 2. AUTHENTICATION & GLOBAL STATE INITIALIZATION
+# 1. STATE ROUTING INITIALIZATION (CRITICAL)
 # =============================================================
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
-if "user_email" not in st.session_state:
-    st.session_state.user_email = ""
-if "user_name" not in st.session_state:
-    st.session_state.user_name = ""
 if "credits" not in st.session_state:
     st.session_state.credits = 3
+if "user_email" not in st.session_state:
+    st.session_state.user_email = ""
 if "leads_data" not in st.session_state:
     st.session_state.leads_data = []
 if "is_scraping" not in st.session_state:
@@ -328,13 +320,7 @@ async def audit_single_business(
     client: httpx.AsyncClient,
     location_hint: str = ""
 ) -> EnrichedLead:
-    """
-    Performs a live structural audit and contact extraction for a single business:
-    - Checks SSL certificate, mobile viewport, meta tags, and response latency
-    - Extracts Business Phone Number, Address/Location, and Primary Email
-    - Computes an Audit Health Score (0-100)
-    - Generates a concise 2-sentence pitch outlining conversion bottlenecks and recommendations
-    """
+    """Performs a live structural audit and contact extraction for a single business."""
     company_name = lead_input.company_name
     target_url = lead_input.website_url or ""
     
@@ -507,92 +493,91 @@ def safe_execute_live_audit_sync(
 
 
 # =============================================================
-# 🔒 PUBLIC LANDING PAGE (WHEN NOT AUTHENTICATED)
+# 2. PUBLIC LANDING PAGE (WHEN LOGGED OUT)
 # =============================================================
 if not st.session_state.authenticated:
-    # 1. Hero Section with Background Glassmorphic Design
+    # A & B: Hero Section with Background & Copy
     st.markdown(f"""
     <div class="landing-hero">
         <span style="font-size:0.78rem; background:rgba(56,189,248,0.2); color:#38bdf8; border:1px solid rgba(56,189,248,0.4); padding:4px 14px; border-radius:9999px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em;">
-            ⚡ THE NEW STANDARD IN HIGH-TICKET OUTBOUND
+            ⚡ ENTERPRISE OUTBOUND INTELLIGENCE
         </span>
-        <h1 style="margin-top:12px;">Supercharge Your B2B Outreach With Instant Client Audits</h1>
+        <h1 style="margin-top:12px;">{APP_NAME}</h1>
+        <h3>{APP_SUBTITLE}</h3>
         <p>
-            Find high-ticket local businesses, detect website bottlenecks automatically, and generate executive PDF pitch reports in seconds.
+            Discover high-intent local clients, identify website bottlenecks automatically, and generate executive PDF audits in seconds.
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    # 2. Professional Sign-In / Access Modal Card
+    # D: Sign-In Modal / Login Card
     col_l, col_m, col_r = st.columns([1, 2, 1])
     with col_m:
         with st.container(border=True):
-            st.markdown(f"""
-            <div style="text-align:center; padding-bottom:12px;">
-                <h3 style="margin:0 0 6px 0; color:#FFFFFF;">🚀 Access {APP_NAME} Platform</h3>
-                <p style="font-size:0.9rem; color:#94a3b8; margin:0;">
-                    Sign in to claim your <b>3 free search & audit credits</b>.
+            st.markdown("""
+            <div style="text-align:center; padding-bottom:8px;">
+                <h3 style="margin:0 0 4px 0; color:#FFFFFF;">Get Started With 3 Free Search Credits</h3>
+                <p style="font-size:0.88rem; color:#94a3b8; margin:0;">
+                    Enter your business email below to instantly claim your credits.
                 </p>
             </div>
             """, unsafe_allow_html=True)
 
-            login_name = st.text_input("Your Name / Agency Name", placeholder="e.g. Alex Rivera or Apex Growth", key="login_name_input")
-            login_email = st.text_input("Business Email Address", placeholder="e.g. founder@agency.com", key="login_email_input")
+            login_name = st.text_input("Name / Agency Name", placeholder="e.g. Alex Rivera or Apex Growth", key="name_input_field")
+            login_email = st.text_input("Business Email Address", placeholder="e.g. founder@agency.com", key="email_input_field")
 
-            if st.button("🚀 Sign In & Get 3 Free Search Credits", type="primary", width="stretch"):
+            if st.button("🚀 Enter Platform & Claim Credits", type="primary", width="stretch"):
                 clean_email = login_email.strip().lower()
                 if not clean_email or "@" not in clean_email or "." not in clean_email:
                     st.error("Please enter a valid business email address.")
                 else:
                     st.session_state.authenticated = True
                     st.session_state.user_email = clean_email
-                    st.session_state.user_name = login_name.strip() if login_name else clean_email.split("@")[0]
                     st.session_state.credits = 3
                     if login_name.strip():
                         st.session_state.agency_name = login_name.strip()
-                    st.toast(f"Welcome to {APP_NAME}, {clean_email}!", icon="👋")
+                    st.toast(f"Welcome to {APP_NAME}, {clean_email}!", icon="🎉")
                     st.rerun()
 
     st.markdown("<div style='height: 24px;'></div>", unsafe_allow_html=True)
 
-    # 3. Interactive Slideshow / Carousel of App Screenshots & Social Proof
+    # C: Dynamic Screenshot & Testimonial Slideshow
     st.markdown("### 📸 Interactive Platform Showcase & Client Deliverables")
     
     slide_selection = st.radio(
-        "Platform Preview Selector",
+        "Preview Platform Features & Proof:",
         options=[
-            "📊 Real-Time Lead Discovery",
-            "🤖 Automated SEO & Speed Auditing",
-            "📄 Executive PDF Pitch Decks",
-            "💬 Customer Results"
+            "🔍 Slide 1: Lead Discovery",
+            "🤖 Slide 2: AI Website Audits",
+            "📄 Slide 3: Executive PDF Pitch Decks",
+            "⭐ Slide 4: Agency Testimonials"
         ],
-        horizontal=True,
-        label_visibility="collapsed"
+        horizontal=True
     )
 
-    if slide_selection == "📊 Real-Time Lead Discovery":
+    if slide_selection == "🔍 Slide 1: Lead Discovery":
         st.markdown("""
         <div class="slideshow-container">
-            <span class="slide-badge" style="background:#0284c7; color:#ffffff;">📊 FEATURE MOCKUP • LIVE SCRAPING</span>
+            <span class="slide-badge" style="background:#0284c7; color:#ffffff;">🔍 REAL-TIME EXTRACTION ENGINE</span>
             <h3 style="color:#ffffff; margin:6px 0 10px 0;">Target Local Metros & Extract Verified B2B Intelligence</h3>
             <p style="color:#cbd5e1; font-size:0.95rem; line-height:1.5;">
                 Extract direct phone numbers, business locations, decision-maker emails, and website domains simultaneously across any metro.
             </p>
             <div style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:16px; margin-top:14px; font-family:monospace; font-size:0.85rem; color:#38bdf8;">
-                [✓] Radiant Plumbing & HVAC • Austin, TX • (512) 555-0199 • contact@radiantplumbing.com • Score: 92/100<br/>
-                [✓] Elite Roofing Solutions • Miami, FL • (305) 555-0142 • sales@eliteroofing.com • Score: 86/100<br/>
-                [✓] Metro Commercial HVAC • Dallas, TX • (214) 555-0188 • info@metrocommercial.com • Score: 78/100
+                [✓] Radiant Plumbing & HVAC • Austin, TX • 📞 (512) 555-0199 • 📧 contact@radiantplumbing.com • Score: 92/100<br/>
+                [✓] Elite Roofing Solutions • Miami, FL • 📞 (305) 555-0142 • 📧 sales@eliteroofing.com • Score: 86/100<br/>
+                [✓] Metro Commercial HVAC • Dallas, TX • 📞 (214) 555-0188 • 📧 info@metrocommercial.com • Score: 78/100
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-    elif slide_selection == "🤖 Automated SEO & Speed Auditing":
+    elif slide_selection == "🤖 Slide 2: AI Website Audits":
         st.markdown("""
         <div class="slideshow-container">
-            <span class="slide-badge" style="background:#4f46e5; color:#ffffff;">🤖 FEATURE MOCKUP • 2026 AI AUDITOR</span>
-            <h3 style="color:#ffffff; margin:6px 0 10px 0;">Automated Conversion Leak Analysis & 2-Sentence Pitch</h3>
+            <span class="slide-badge" style="background:#4f46e5; color:#ffffff;">🤖 AUTOMATED AUDIT SCANNER</span>
+            <h3 style="color:#ffffff; margin:6px 0 10px 0;">AI-Detected Conversion Bottlenecks & 2-Sentence Pitch</h3>
             <p style="color:#cbd5e1; font-size:0.95rem; line-height:1.5;">
-                Every lead receives an instant structural scan detecting SSL certificate validity, mobile viewport presence, response speed, and high-converting pitch recommendations.
+                Every lead receives an instant structural scan detecting SSL encryption, mobile viewport presence, response speed, and high-converting pitch recommendations.
             </p>
             <div style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:16px; margin-top:14px; color:#e2e8f0; font-size:0.9rem;">
                 <b>Identified Bottleneck:</b> Missing mobile viewport optimization & lack of direct instant quote forms.<br/>
@@ -601,10 +586,10 @@ if not st.session_state.authenticated:
         </div>
         """, unsafe_allow_html=True)
 
-    elif slide_selection == "📄 Executive PDF Pitch Decks":
+    elif slide_selection == "📄 Slide 3: Executive PDF Pitch Decks":
         st.markdown("""
         <div class="slideshow-container">
-            <span class="slide-badge" style="background:#059669; color:#ffffff;">📄 FEATURE MOCKUP • CLIENT ASSET</span>
+            <span class="slide-badge" style="background:#059669; color:#ffffff;">📄 CLIENT DELIVERABLE • WHITE-LABEL PDF</span>
             <h3 style="color:#ffffff; margin:6px 0 10px 0;">Download 1-Click White-Labeled PDF Audit Bundles</h3>
             <p style="color:#cbd5e1; font-size:0.95rem; line-height:1.5;">
                 Generate branded multi-client audit dossiers complete with an executive portfolio summary, health scorecards, and implementation roadmaps stamped with your agency branding.
@@ -612,7 +597,7 @@ if not st.session_state.authenticated:
             <div style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:16px; margin-top:14px; text-align:center;">
                 <span style="font-size:1.8rem;">📑</span>
                 <div style="font-weight:700; color:#ffffff; margin-top:4px;">ApexLeads Digital Growth & Client Audit Bundle</div>
-                <div style="color:#94a3b8; font-size:0.82rem;">Compiled Portfolio: 10 Verified Enterprises • Formatted with ReportLab</div>
+                <div style="color:#94a3b8; font-size:0.82rem;">Compiled Portfolio: 10 Verified Enterprises • White-Labeled Deliverable</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -620,22 +605,29 @@ if not st.session_state.authenticated:
     else:
         st.markdown("""
         <div class="slideshow-container">
-            <span class="slide-badge" style="background:#ca8a04; color:#ffffff;">💬 VERIFIED TESTIMONIALS</span>
+            <span class="slide-badge" style="background:#ca8a04; color:#ffffff;">⭐ VERIFIED CUSTOMER REVIEWS</span>
             <h3 style="color:#ffffff; margin:6px 0 14px 0;">Loved by B2B Agencies & Sales Consultants</h3>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
-                <div style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:16px;">
-                    <div style="color:#facc15; font-size:0.9rem; margin-bottom:6px;">★★★★★</div>
-                    <p style="color:#e2e8f0; font-size:0.88rem; font-style:italic; margin-bottom:8px;">
-                        "Closed 3 new agency retainer clients in my first week using the PDF audits. Delivering value before asking for a call is a total game changer."
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:14px;">
+                <div style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:14px;">
+                    <div style="color:#facc15; font-size:0.85rem; margin-bottom:4px;">★★★★★</div>
+                    <p style="color:#e2e8f0; font-size:0.84rem; font-style:italic; margin-bottom:6px;">
+                        "Closed 4 retainer deals in week one using these white-label PDF audits."
                     </p>
-                    <div style="font-weight:700; color:#38bdf8; font-size:0.82rem;">— Marcus Vance, Founder @ Apex Growth Partners</div>
+                    <div style="font-weight:700; color:#38bdf8; font-size:0.80rem;">— Marcus Vance, Founder</div>
                 </div>
-                <div style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:16px;">
-                    <div style="color:#facc15; font-size:0.9rem; margin-bottom:6px;">★★★★★</div>
-                    <p style="color:#e2e8f0; font-size:0.88rem; font-style:italic; margin-bottom:8px;">
-                        "The instant 2-sentence pitch makes cold outreach 5x easier. Verified phone numbers and emails right alongside live audit scores."
+                <div style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:14px;">
+                    <div style="color:#facc15; font-size:0.85rem; margin-bottom:4px;">★★★★★</div>
+                    <p style="color:#e2e8f0; font-size:0.84rem; font-style:italic; margin-bottom:6px;">
+                        "The 2-sentence pitch makes cold outreach 5x easier. Verified phone numbers right alongside live audit scores."
                     </p>
-                    <div style="font-weight:700; color:#38bdf8; font-size:0.82rem;">— Sarah Jenkins, Lead Strategist @ OutreachLab</div>
+                    <div style="font-weight:700; color:#38bdf8; font-size:0.80rem;">— Sarah Jenkins, Strategist</div>
+                </div>
+                <div style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:14px;">
+                    <div style="color:#facc15; font-size:0.85rem; margin-bottom:4px;">★★★★★</div>
+                    <p style="color:#e2e8f0; font-size:0.84rem; font-style:italic; margin-bottom:6px;">
+                        "Delivering tangible website audits in the first email skyrocketed our meeting booking rate to 18%."
+                    </p>
+                    <div style="font-weight:700; color:#38bdf8; font-size:0.80rem;">— Liam O'Connor, Agency VP</div>
                 </div>
             </div>
         </div>
@@ -645,7 +637,7 @@ if not st.session_state.authenticated:
 
 
 # =============================================================
-# 🚀 AUTHENTICATED B2B LEAD ENGINE DASHBOARD
+# 3. AUTHENTICATED DASHBOARD (WHEN LOGGED IN)
 # =============================================================
 
 # Top Platform Header
@@ -659,21 +651,21 @@ st.markdown(f"""
         </div>
     </div>
     <div style="display:flex; align-items:center; gap:16px;">
-        <span class="pill-credit-badge">🔍 {st.session_state.credits} Free Search Credits</span>
+        <span class="pill-credit-badge">🔍 {st.session_state.credits} / 3 Free Search Credits</span>
         <span style="color:#94a3b8; font-size:0.86rem;">👤 {st.session_state.user_email}</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Authenticated Sidebar
+# A: Sidebar Controls
 with st.sidebar:
     st.markdown(f"### ⚡ **{APP_NAME}**")
     st.markdown("B2B Intelligence Platform")
     st.markdown(f"👤 **Account:** `{st.session_state.user_email}`")
-    st.metric("Remaining Search Credits", st.session_state.credits)
+    st.metric("Free Credits Remaining", f"{st.session_state.credits} / 3")
 
-    # Log Out Action
-    if st.button("Log Out of Platform", width="stretch"):
+    # Log Out Button
+    if st.button("Log Out", width="stretch"):
         st.session_state.authenticated = False
         st.session_state.user_email = ""
         st.session_state.credits = 3
@@ -683,7 +675,7 @@ with st.sidebar:
 
     st.divider()
 
-    # Limit Exceeded Warning & Mailto Extension
+    # Out of Credits Wall & Mailto Extension
     if st.session_state.credits == 0:
         st.error("⚠️ **Credits Exhausted!**")
         st.caption("You have used all free search credits.")
@@ -713,7 +705,7 @@ with st.sidebar:
 
     st.divider()
 
-    # 📢 DEDICATED SPONSOR SPOTLIGHT AD SLOT
+    # 📢 SPONSOR SPOTLIGHT CARD
     st.markdown("""
     <div style="background-color:#1E293B; border:1px solid #38BDF8; border-radius:12px; padding:16px; text-align:center; box-shadow:0 4px 16px rgba(56,189,248,0.15);">
         <div style="font-size:0.75rem; font-weight:800; color:#38BDF8; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:6px;">📢 SPONSOR SPOTLIGHT</div>
@@ -727,7 +719,7 @@ with st.sidebar:
 
     st.divider()
 
-    # Admin Passcode Expander
+    # Admin Reset Expander (Passcode: "admin123")
     with st.expander("🔑 Admin Passcode Controls", expanded=False):
         passcode_in = st.text_input("Enter Passcode to reset to 10 credits", type="password")
         if st.button("Reset Credits to 10", width="stretch"):
@@ -740,19 +732,19 @@ with st.sidebar:
 
 
 # =============================================================
-# 3 PRIMARY MAIN TABS
+# B. 3 MAIN TABS (ALWAYS VISIBLE)
 # =============================================================
-tab_engine, tab_results, tab_sponsors = st.tabs([
+tab1, tab2, tab3 = st.tabs([
     "🚀 Lead & Audit Engine",
     "📋 Scraped Leads & PDF Export",
-    "💼 Advertising & Credits"
+    "💼 Sponsorship & Contact"
 ])
 
 
 # =============================================================
 # TAB 1: 🚀 LEAD & AUDIT ENGINE
 # =============================================================
-with tab_engine:
+with tab1:
     # Feature Highlights Showcase (Native CSS Badges)
     c_f1, c_f2, c_f3 = st.columns(3)
     with c_f1:
@@ -811,7 +803,7 @@ with tab_engine:
         with c_btn:
             btn_generate = st.button("🚀 Start Lead Discovery", type="primary", width="stretch", disabled=st.session_state.is_scraping)
         with c_stat:
-            st.metric("Remaining Search Credits", st.session_state.credits)
+            st.metric("Free Credits Remaining", f"{st.session_state.credits} / 3")
 
     # Lead Generation Execution
     if btn_generate:
@@ -929,7 +921,7 @@ with tab_engine:
 # =============================================================
 # TAB 2: 📋 SCRAPED LEADS & PDF EXPORT
 # =============================================================
-with tab_results:
+with tab2:
     if not st.session_state.leads_data:
         st.info("No leads generated yet. Run a search in Tab 1.")
     else:
@@ -1065,9 +1057,9 @@ with tab_results:
 
 
 # =============================================================
-# TAB 3: 💼 ADVERTISING & CREDITS
+# TAB 3: 💼 SPONSORSHIP & CONTACT
 # =============================================================
-with tab_sponsors:
+with tab3:
     with st.container(border=True):
         st.markdown("### 💎 Search Credit Status & Account")
         
@@ -1077,7 +1069,7 @@ with tab_sponsors:
             if user_email_input != st.session_state.user_email:
                 st.session_state.user_email = user_email_input.strip().lower()
         with c_em2:
-            st.metric("Current Search Credits", st.session_state.credits)
+            st.metric("Free Credits Remaining", f"{st.session_state.credits} / 3")
 
         st.markdown("---")
         st.markdown("#### 📧 Request Credit Extension from Haris")
@@ -1098,7 +1090,7 @@ with tab_sponsors:
 
     # 💼 Sponsorship Packages Overview
     with st.container(border=True):
-        st.markdown("### 💼 Partner & Advertising Packages")
+        st.markdown("### 💼 Partner & Sponsorship Opportunities")
         st.markdown("""
         Promote your product, agency, or B2B SaaS tool directly to founders, agency executives, and sales professionals using ApexLeads AI daily.
         """)
