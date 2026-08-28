@@ -1,91 +1,92 @@
-import asyncio
 import io
-import json
 import logging
 import os
 import re
 import time
 import urllib.parse
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-import requests
 from bs4 import BeautifulSoup
 from fpdf import FPDF
 import pandas as pd
+import requests
 import streamlit as st
 
 logger = logging.getLogger(__name__)
 
 # ==============================================================================
-# 1. CORE LAYOUT & SEOPTIMER DESIGN SYSTEM
+# 1. CORE IMPORTS & CONFIGURATION
 # ==============================================================================
 st.set_page_config(
-    page_title="ApexAudit | Instant SEO & Website Analyzer",
+    page_title="ApexAudit AI | SEO & Website Analyzer",
     page_icon="⚡",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-APP_NAME = "ApexAudit Engine"
-APP_SUBTITLE = "Instant SEO & Website Analyzer"
+APP_NAME = "ApexAudit AI"
+APP_SUBTITLE = "Executive SEO & Performance Analyzer"
 ADMIN_CONTACT_EMAIL = "hariskandapg@gmail.com"
 ADMIN_PASSCODE = "admin123"
 UNLOCK_PASSCODE = "4990"
 
-# High-contrast, clean dark theme CSS modeled after SEOptimer
+
+# ==============================================================================
+# 2. BULLETPROOF CSS THEME (SEOPTIMER CONTRAST)
+# ==============================================================================
 st.markdown("""
 <style>
-    /* Clean up default Streamlit chrome */
+    /* Remove default Streamlit header/footer */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
     div[data-testid="stToolbar"] {visibility: hidden;}
     div[data-testid="stDecoration"] {visibility: hidden;}
 
-    /* Background: Slate gradient #0B0F19 to #111827 */
+    /* Base App: Clean slate background #0B0F19 */
     [data-testid="stAppViewContainer"], .stApp {
-        background: linear-gradient(180deg, #0B0F19 0%, #111827 100%) !important;
+        background-color: #0B0F19 !important;
+        background-image: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #0B0F19 65%) !important;
         color: #FFFFFF !important;
         font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
     }
 
-    /* Force text readability */
-    h1, h2, h3, h4, h5, h6, p, span, label, div, .stMarkdown {
+    /* Force #FFFFFF on all headers, labels, metrics, text inputs, and table cells */
+    h1, h2, h3, h4, h5, h6, p, span, label, div, .stMarkdown, [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {
         color: #FFFFFF !important;
     }
 
-    /* Hero Header Container */
-    .hero-container {
+    /* Audit Cards: Background #1E293B with border 1px solid #334155 and border-radius: 12px */
+    .saas-card {
+        background-color: #1E293B !important;
+        border: 1px solid #334155 !important;
+        border-radius: 12px !important;
+        padding: 1.5rem !important;
+        margin-bottom: 1.2rem !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+    }
+
+    /* Hero Header Styling */
+    .hero-banner {
         text-align: center;
-        padding: 36px 20px 24px 20px;
-        margin-bottom: 20px;
+        padding: 24px 16px 16px 16px;
+        margin-bottom: 16px;
     }
     .hero-title {
-        font-size: 2.8rem;
+        font-size: 2.6rem;
         font-weight: 850;
         background: linear-gradient(135deg, #FFFFFF 0%, #38BDF8 50%, #818CF8 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         letter-spacing: -0.02em;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
     }
-    .hero-subtitle {
-        font-size: 1.15rem;
+    .hero-sub {
+        font-size: 1.1rem;
         color: #94A3B8 !important;
-        max-width: 680px;
+        max-width: 720px;
         margin: 0 auto;
         line-height: 1.5;
-    }
-
-    /* Container Cards */
-    .saas-card {
-        background: #1E293B !important;
-        border: 1px solid #1F2937 !important;
-        border-radius: 12px !important;
-        padding: 1.5rem !important;
-        margin-bottom: 1.2rem !important;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
     }
 
     /* Score Badges */
@@ -93,66 +94,66 @@ st.markdown("""
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 80px;
-        height: 80px;
+        width: 90px;
+        height: 90px;
         background: #10B981;
         color: #FFFFFF !important;
         font-weight: 900;
-        font-size: 2.4rem;
+        font-size: 2.5rem;
         border-radius: 50%;
-        box-shadow: 0 0 24px rgba(16, 185, 129, 0.45);
+        box-shadow: 0 0 26px rgba(16, 185, 129, 0.5);
     }
     .grade-badge-b {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 80px;
-        height: 80px;
+        width: 90px;
+        height: 90px;
         background: #F59E0B;
         color: #FFFFFF !important;
         font-weight: 900;
-        font-size: 2.4rem;
+        font-size: 2.5rem;
         border-radius: 50%;
-        box-shadow: 0 0 24px rgba(245, 158, 11, 0.45);
+        box-shadow: 0 0 26px rgba(245, 158, 11, 0.5);
     }
     .grade-badge-c {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 80px;
-        height: 80px;
+        width: 90px;
+        height: 90px;
         background: #EF4444;
         color: #FFFFFF !important;
         font-weight: 900;
-        font-size: 2.4rem;
+        font-size: 2.5rem;
         border-radius: 50%;
-        box-shadow: 0 0 24px rgba(239, 68, 68, 0.45);
+        box-shadow: 0 0 26px rgba(239, 68, 68, 0.5);
     }
 
-    /* Pillar Metric Card */
+    /* Metric Column Card */
     .pillar-card {
         background: #0F172A;
         border: 1px solid #334155;
         border-radius: 10px;
-        padding: 16px;
+        padding: 14px;
         text-align: center;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
     }
     .pillar-title {
-        font-size: 0.82rem;
+        font-size: 0.80rem;
         font-weight: 700;
         color: #94A3B8;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        margin-bottom: 6px;
+        margin-bottom: 4px;
     }
     .pillar-score {
-        font-size: 1.6rem;
+        font-size: 1.55rem;
         font-weight: 800;
         color: #FFFFFF;
     }
 
-    /* Prioritized Checklist Items */
+    /* Recommendation Checklist Items */
     .rec-item-high {
         border-left: 4px solid #EF4444;
         background: rgba(239, 68, 68, 0.12);
@@ -178,20 +179,20 @@ st.markdown("""
         color: #F8FAFC !important;
     }
 
-    /* Electric Blue Action Buttons */
+    /* Buttons: Blue-to-violet gradient with bold white text */
     .stButton > button {
-        background: linear-gradient(90deg, #0284C7, #2563EB) !important;
+        background: linear-gradient(90deg, #2563EB, #7C3AED) !important;
         color: #FFFFFF !important;
         font-weight: 700 !important;
         border: none !important;
         padding: 12px 24px !important;
         border-radius: 8px !important;
-        box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4) !important;
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4) !important;
         transition: all 0.2s ease-in-out !important;
     }
     .stButton > button:hover {
         transform: translateY(-2px) !important;
-        box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5) !important;
+        box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5) !important;
     }
 
     /* Ad Container (.ad-card) */
@@ -207,7 +208,7 @@ st.markdown("""
         align-items: center;
     }
 
-    /* Styled Mail Links */
+    /* Mail Action Link */
     .mail-btn {
         display: inline-block;
         background-color: #38BDF8 !important;
@@ -225,7 +226,7 @@ st.markdown("""
         box-shadow: 0 4px 16px rgba(56, 189, 248, 0.5) !important;
     }
 
-    /* Form Input Fields */
+    /* Input Fields */
     .stTextInput > div > div > input {
         background-color: #1E293B !important;
         color: #FFFFFF !important;
@@ -239,44 +240,46 @@ st.markdown("""
 
 
 # ==============================================================================
-# 2. STATE & USAGE LIMIT MANAGEMENT
+# 3. STATE INITIALIZATION
 # ==============================================================================
 if "credits" not in st.session_state:
     st.session_state.credits = 3
-if "audit_data" not in st.session_state:
-    st.session_state.audit_data = None
-if "target_url" not in st.session_state:
-    st.session_state.target_url = ""
+if "audit_result" not in st.session_state:
+    st.session_state.audit_result = None
+if "last_url" not in st.session_state:
+    st.session_state.last_url = ""
 if "agency_name" not in st.session_state:
     st.session_state.agency_name = "ApexAudit Agency Partners"
 if "agency_website" not in st.session_state:
     st.session_state.agency_website = "https://apexaudit.ai"
 
 
-# Sidebar Navigation & Monetization Controls
+# ==============================================================================
+# 4. SIDEBAR MONETIZATION & LIMIT CONTROLS
+# ==============================================================================
 with st.sidebar:
     st.markdown(f"### ⚡ **{APP_NAME}**")
     st.markdown(f"<span style='color:#94A3B8; font-size:0.85rem;'>{APP_SUBTITLE}</span>", unsafe_allow_html=True)
     st.divider()
 
-    # Credit Counter Metric
-    st.metric("Audit Credits Remaining", f"{st.session_state.credits} / 3")
+    # Metric Card
+    st.metric("Free Audits Remaining", f"{st.session_state.credits} / 3")
 
-    # Limit Handler (Red Alert + Mailto Link)
+    # Limit Check
     if st.session_state.credits <= 0:
-        st.error("⚠️ **Free Audit Limit Reached!**")
-        st.markdown("<p style='font-size:0.82rem; color:#EF4444;'>You have used your 3 free website audits. Request an extension below:</p>", unsafe_allow_html=True)
+        st.error("⚠️ **Limit Reached!**")
+        st.markdown("<p style='font-size:0.82rem; color:#EF4444;'>You have used all 3 free audits.</p>", unsafe_allow_html=True)
         mailto_url = (
-            f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Extend%20Audit%20Credits"
-            f"&body=Hi%20Haris,%20I%20have%20reached%20my%203%20free%20audits%20on%20ApexAudit.%20Please%20extend%20my%20limit."
+            f"mailto:{ADMIN_CONTACT_EMAIL}?subject=ApexAudit:%20Request%20More%20Credits"
+            f"&body=Hi%20Haris,%20I%20have%20used%20all%203%20free%20audits%20on%20ApexAudit%20AI.%20Please%20extend%20my%20limit."
         )
         st.markdown(f"""
         <a href="{mailto_url}" target="_blank" class="mail-btn" style="display:block; text-align:center; background:#EF4444 !important; color:#FFFFFF !important; margin-top:4px;">
-            📧 Request Credit Extension
+            📧 Request More Credits
         </a>
         """, unsafe_allow_html=True)
     else:
-        st.caption("3 free enterprise website audits per session.")
+        st.caption("3 free executive website audits per session.")
 
     st.divider()
 
@@ -290,23 +293,23 @@ with st.sidebar:
 
     st.divider()
 
-    # 📢 SPONSOR SPOTLIGHT CARD
+    # 📢 SPONSOR SPOTLIGHT
     st.markdown("""
     <div style="background-color:#1E293B; border:1px solid #38BDF8; border-radius:12px; padding:16px; text-align:center; box-shadow:0 4px 16px rgba(56,189,248,0.15);">
-        <div style="font-size:0.75rem; font-weight:800; color:#38BDF8; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:6px;">📢 SPONSOR SPOTLIGHT</div>
+        <div style="font-size:0.75rem; font-weight:800; color:#38BDF8; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:6px;">📢 Sponsor Space</div>
         <div style="font-size:0.88rem; font-weight:700; color:#FFFFFF; margin-bottom:6px;">Promote Your B2B Tool or Agency</div>
         <p style="font-size:0.78rem; color:#CBD5E1; line-height:1.4; margin-bottom:12px;">
             Reach active digital agencies, marketers, and business owners running website audits daily.
         </p>
-        <a href="mailto:hariskandapg@gmail.com?subject=Sponsor%20Ad%20Placement%20Inquiry&body=Hi%20Haris,%20I%20am%20interested%20in%20placing%20an%20ad/banner%20on%20your%20ApexAudit%20platform.%20Let%20me%20know%20your%20rates%20and%20availability." target="_blank" class="mail-btn" style="display:inline-block; width:100%; text-align:center;">Reserve This Ad Spot ($)</a>
+        <a href="mailto:hariskandapg@gmail.com?subject=Sponsor%20Ad%20Placement%20Inquiry&body=Hi%20Haris,%20I%20am%20interested%20in%20placing%20an%20ad/banner%20on%20your%20ApexAudit%20platform.%20Let%20me%20know%20your%20rates%20and%20availability." target="_blank" class="mail-btn" style="display:inline-block; width:100%; text-align:center;">Buy Ad Placement ($)</a>
     </div>
     """, unsafe_allow_html=True)
 
     st.divider()
 
-    # Collapsible Admin Reset Box (Passcode: "admin123")
+    # Admin Override
     with st.expander("🔑 Admin Controls", expanded=False):
-        passcode_in = st.text_input("Enter Passcode to replenish credits", type="password")
+        passcode_in = st.text_input("Enter Passcode to reset to 10 credits", type="password")
         if st.button("Reset Credits to 10", width="stretch"):
             if passcode_in.strip() in [ADMIN_PASSCODE, UNLOCK_PASSCODE]:
                 st.session_state.credits = 10
@@ -317,17 +320,10 @@ with st.sidebar:
 
 
 # ==============================================================================
-# 3. LIVE AUDIT & 5-PILLAR SCORING ENGINE
+# AUDIT INSPECTION & 5-PILLAR CALCULATION
 # ==============================================================================
-def run_real_audit(target_url: str) -> Dict[str, Any]:
-    """
-    Executes a real-time inspection analyzing:
-    1. On-Page SEO (Title length, Meta Description, H1 tags, Image Alt tags)
-    2. Mobile Usability (Viewport tag, responsive cues)
-    3. Performance & Speed (Response latency, page weight)
-    4. Security (HTTPS/SSL active, secure headers)
-    5. Social Signals (OpenGraph tags, Twitter cards)
-    """
+def execute_website_audit(target_url: str) -> Dict[str, Any]:
+    """Inspects target URL across 5 Core Pillars using requests & BeautifulSoup."""
     url = target_url.strip()
     if not url.startswith("http://") and not url.startswith("https://"):
         url = "https://" + url
@@ -340,8 +336,8 @@ def run_real_audit(target_url: str) -> Dict[str, Any]:
     }
 
     resp = None
-    latency_ms = 480
-    page_size_kb = 36.0
+    latency_ms = 450
+    page_size_kb = 35.0
     status_code = 200
     is_live = False
 
@@ -357,7 +353,7 @@ def run_real_audit(target_url: str) -> Dict[str, Any]:
 
     soup = BeautifulSoup(resp.text if resp and resp.text else "<html><head><title>Business Portal</title></head><body></body></html>", "html.parser")
 
-    # PILLAR 1: On-Page SEO
+    # Pillar 1: On-Page SEO (Title length, Meta Description, H1 tags, Image Alt tags)
     title_tag = soup.find("title")
     title_text = title_tag.get_text().strip() if title_tag else ""
     title_len = len(title_text)
@@ -391,12 +387,12 @@ def run_real_audit(target_url: str) -> Dict[str, Any]:
         seo_score += 10
     seo_score = min(100, max(45, seo_score))
 
-    # PILLAR 2: Mobile Usability
+    # Pillar 2: Usability & Mobile Viewport
     viewport = soup.find("meta", attrs={"name": "viewport"})
     has_viewport = bool(viewport)
     mobile_score = 95 if has_viewport else 48
 
-    # PILLAR 3: Performance & Speed
+    # Pillar 3: Performance & Speed
     scripts = soup.find_all("script")
     script_count = len(scripts)
     speed_score = 95 if latency_ms < 600 else (80 if latency_ms < 1400 else 55)
@@ -404,11 +400,11 @@ def run_real_audit(target_url: str) -> Dict[str, Any]:
         speed_score -= 10
     speed_score = min(100, max(40, speed_score))
 
-    # PILLAR 4: Security
+    # Pillar 4: SSL & Security Headers
     is_https = url.startswith("https://") or (resp and str(resp.url).startswith("https://"))
     security_score = 98 if is_https else 40
 
-    # PILLAR 5: Social Signals
+    # Pillar 5: Social Metadata (OpenGraph & Twitter Cards)
     has_og_title = bool(soup.find("meta", attrs={"property": "og:title"}))
     has_og_img = bool(soup.find("meta", attrs={"property": "og:image"}))
     has_twitter = bool(soup.find("meta", attrs={"name": "twitter:card"}))
@@ -421,36 +417,30 @@ def run_real_audit(target_url: str) -> Dict[str, Any]:
         social_score += 15
     social_score = min(100, max(40, social_score))
 
-    # Overall Numerical Score (0-100) & Letter Grade (A+, A, B, C, D, F)
+    # Overall Numerical Score (0-100) & Letter Grade (A, B, C, D)
     overall_score = int((seo_score * 0.30) + (mobile_score * 0.25) + (speed_score * 0.20) + (security_score * 0.15) + (social_score * 0.10))
     overall_score = min(98, max(50, overall_score))
 
-    if overall_score >= 93:
-        grade = "A+"
-        grade_desc = "Outstanding - Fully optimized for search rankings & conversions"
-    elif overall_score >= 88:
+    if overall_score >= 90:
         grade = "A"
-        grade_desc = "Excellent - Highly optimized with strong technical foundations"
+        grade_desc = "Outstanding - Optimized for organic rankings & conversions"
     elif overall_score >= 75:
         grade = "B"
         grade_desc = "Good - Minor technical bottlenecks and conversion leaks"
-    elif overall_score >= 60:
+    elif overall_score >= 55:
         grade = "C"
         grade_desc = "Needs Improvement - Noticeable SEO and speed issues"
-    elif overall_score >= 45:
-        grade = "D"
-        grade_desc = "Poor - High risk of lost sales and ranking penalties"
     else:
-        grade = "F"
+        grade = "D"
         grade_desc = "Critical - Major structural and security defects detected"
 
-    # Prioritized Recommendations
+    # Prioritized Issues Breakdown
     high_priority = []
     med_priority = []
     passed_audits = []
 
     if not is_https:
-        high_priority.append("Install an active SSL/HTTPS certificate to secure traffic and avoid browser security warnings.")
+        high_priority.append("Install an active SSL/HTTPS certificate to secure customer traffic and avoid browser security warnings.")
     else:
         passed_audits.append("SSL/HTTPS encryption is active and verified.")
 
@@ -517,7 +507,7 @@ def run_real_audit(target_url: str) -> Dict[str, Any]:
 
 
 # ==============================================================================
-# 4. WHITE-LABEL PDF REPORT GENERATOR (FPDF)
+# WHITE-LABEL EXECUTIVE PDF BUILDER (FPDF)
 # ==============================================================================
 class ApexAuditPDF(FPDF):
     def __init__(self, agency_name: str, agency_website: str):
@@ -546,12 +536,12 @@ def generate_executive_pdf(
     agency_name: str = "ApexAudit Agency Partners",
     agency_website: str = "https://apexaudit.ai"
 ) -> bytes:
-    """Generates an executive-grade white-label PDF audit report."""
+    """Compiles a client-ready white-label PDF audit report."""
     pdf = ApexAuditPDF(agency_name=agency_name, agency_website=agency_website)
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
 
-    # Executive Title & Target Domain
+    # Title & Target Domain
     pdf.set_font('helvetica', 'B', 20)
     pdf.set_text_color(15, 23, 42)
     pdf.cell(0, 10, "Comprehensive Website Audit Report", ln=1, align='L')
@@ -584,8 +574,8 @@ def generate_executive_pdf(
     pdf.cell(38, 8, " On-Page SEO", 1, 0, 'C', True)
     pdf.cell(38, 8, " Mobile Usability", 1, 0, 'C', True)
     pdf.cell(38, 8, " Speed & Latency", 1, 0, 'C', True)
-    pdf.cell(38, 8, " Security (SSL)", 1, 0, 'C', True)
-    pdf.cell(38, 8, " Social Signals", 1, 1, 'C', True)
+    pdf.cell(38, 8, " SSL & Security", 1, 0, 'C', True)
+    pdf.cell(38, 8, " Social Metadata", 1, 1, 'C', True)
 
     pdf.set_font('helvetica', 'B', 11)
     pdf.set_text_color(30, 41, 59)
@@ -604,7 +594,7 @@ def generate_executive_pdf(
     if audit.get("high_priority"):
         pdf.set_font('helvetica', 'B', 10)
         pdf.set_text_color(220, 38, 38)
-        pdf.cell(0, 6, "HIGH PRIORITY ISSUES (Critical Conversion & Ranking Bottlenecks):", ln=1)
+        pdf.cell(0, 6, "HIGH PRIORITY (Critical Conversion & Ranking Bottlenecks):", ln=1)
         pdf.set_font('helvetica', '', 9)
         pdf.set_text_color(51, 65, 85)
         for rec in audit["high_priority"]:
@@ -615,7 +605,7 @@ def generate_executive_pdf(
     if audit.get("med_priority"):
         pdf.set_font('helvetica', 'B', 10)
         pdf.set_text_color(217, 119, 6)
-        pdf.cell(0, 6, "MEDIUM PRIORITY IMPROVEMENTS (Optimization Opportunities):", ln=1)
+        pdf.cell(0, 6, "MEDIUM PRIORITY (Optimization Opportunities):", ln=1)
         pdf.set_font('helvetica', '', 9)
         pdf.set_text_color(51, 65, 85)
         for rec in audit["med_priority"]:
@@ -626,7 +616,7 @@ def generate_executive_pdf(
     if audit.get("passed_audits"):
         pdf.set_font('helvetica', 'B', 10)
         pdf.set_text_color(5, 150, 105)
-        pdf.cell(0, 6, "PASSED TECHNICAL AUDITS:", ln=1)
+        pdf.cell(0, 6, "PASSED TECHNICAL CHECKS:", ln=1)
         pdf.set_font('helvetica', '', 9)
         pdf.set_text_color(51, 65, 85)
         for rec in audit["passed_audits"][:6]:
@@ -650,60 +640,60 @@ def generate_executive_pdf(
 
 
 # ==============================================================================
-# 5. MAIN HERO SEARCH BAR & LIVE AUDIT CONTROLS
+# 5. HERO AUDIT SEARCH BAR (MAIN SCREEN)
 # ==============================================================================
 st.markdown("""
-<div class="hero-container">
-    <div style="display:inline-block; background:rgba(56,189,248,0.15); color:#38BDF8; border:1px solid rgba(56,189,248,0.35); padding:4px 14px; border-radius:9999px; font-weight:700; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px;">
-        ⚡ Instant SEO & Website Analyzer
+<div class="hero-banner">
+    <div style="display:inline-block; background:rgba(37,99,235,0.2); color:#38BDF8; border:1px solid rgba(56,189,248,0.4); padding:4px 14px; border-radius:9999px; font-weight:700; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:10px;">
+        ⚡ Enterprise SEOptimer Suite
     </div>
-    <div class="hero-title">Audit Any Website in Seconds</div>
-    <div class="hero-subtitle">
-        Identify critical SEO bottlenecks, evaluate mobile speed, and generate white-label executive audit reports.
+    <div class="hero-title">⚡ Instant SEO & Website Audit Suite</div>
+    <div class="hero-sub">
+        Enter any website URL to generate a comprehensive 5-pillar technical audit and client pitch report.
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Centered Large Hero Search Form
-col_pad_left, col_search, col_pad_right = st.columns([1, 6, 1])
+# Centered Search Form
+col_l, col_center, col_r = st.columns([1, 6, 1])
 
-with col_search:
+with col_center:
     with st.container(border=True):
-        c_url, c_btn = st.columns([4, 1.5], gap="small")
-        with c_url:
-            input_url = st.text_input(
-                "Website URL to Analyze",
-                value=st.session_state.target_url if st.session_state.target_url else "apple.com",
-                placeholder="e.g. apple.com, stripe.com, or https://example.com",
-                label_visibility="collapsed"
+        c_in, c_act = st.columns([4, 1.6], gap="small")
+        with c_in:
+            url_input = st.text_input(
+                "Enter Website Domain / URL:",
+                value=st.session_state.last_url if st.session_state.last_url else "dentistbangalore.com",
+                placeholder="e.g. dentistbangalore.com or https://example.com"
             )
-        with c_btn:
-            btn_audit = st.button("Audit Website →", type="primary", width="stretch")
+        with c_act:
+            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+            btn_analyze = st.button("🚀 Analyze Website Now", type="primary", width="stretch")
 
-    if btn_audit:
-        clean_url = input_url.strip()
+    if btn_analyze:
+        clean_url = url_input.strip()
         if not clean_url:
-            st.error("Please enter a website URL to audit.")
+            st.error("Please enter a valid website domain or URL to analyze.")
         elif st.session_state.credits <= 0:
-            st.error("⚠️ Credits exhausted. Please request an extension from Haris via the sidebar.")
+            st.error("⚠️ Credits exhausted. Please request more credits via the sidebar.")
         else:
-            st.session_state.target_url = clean_url
+            st.session_state.last_url = clean_url
             with st.status(f"⚡ Inspecting '{clean_url}' across 5 Core Pillars...", expanded=True) as status_box:
                 p_bar = st.progress(0)
-                st.write("🔍 Testing DNS & Establishing Secure Connection...")
+                st.write("🔍 Testing DNS & Establishing Connection...")
                 time.sleep(0.3)
                 p_bar.progress(25)
-                st.write("📊 Evaluating On-Page SEO, Meta tags, and H1 tags...")
+                st.write("📊 Evaluating Title, Meta description, and H1 tags...")
                 time.sleep(0.3)
                 p_bar.progress(50)
-                st.write("📱 Scanning Mobile Viewport & Page Latency...")
+                st.write("📱 Checking Mobile Viewport & Page Latency...")
                 time.sleep(0.3)
                 p_bar.progress(75)
-                st.write("🔒 Validating SSL Security & Social OpenGraph Tags...")
+                st.write("🔒 Validating SSL Security & Social Metadata...")
                 
                 # Execute audit
-                audit_res = run_real_audit(clean_url)
-                st.session_state.audit_data = audit_res
+                audit_res = execute_website_audit(clean_url)
+                st.session_state.audit_result = audit_res
                 st.session_state.credits -= 1
                 p_bar.progress(100)
                 status_box.update(label=f"🎉 Audit Complete for {audit_res['domain']}! (1 credit deducted)", state="complete")
@@ -711,26 +701,26 @@ with col_search:
 
 
 # ==============================================================================
-# 6. RESULTS DASHBOARD & REPORT EXPORT
+# 6. SEOPTIMER-STYLE SCORECARD & REPORT DASHBOARD
 # ==============================================================================
-if st.session_state.audit_data:
-    audit = st.session_state.audit_data
+if st.session_state.audit_result:
+    audit = st.session_state.audit_result
 
-    # Grade Badge styling selector
-    if "A" in audit["grade"]:
+    # Select Grade Badge styling
+    if audit["grade"] == "A":
         badge_style = "grade-badge-a"
-    elif "B" in audit["grade"]:
+    elif audit["grade"] == "B":
         badge_style = "grade-badge-b"
     else:
         badge_style = "grade-badge-c"
 
     st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
 
-    # 1. Top Summary Card: Large Circular Letter Grade Badge + Health Score
+    # 1. Top Hero Scorecard: Giant visual letter grade badge & score
     st.markdown(f"""
     <div class="saas-card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
         <div style="flex:1; min-width:280px;">
-            <div style="color:#38BDF8; font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:0.05em;">AUDIT REPORT FOR</div>
+            <div style="color:#38BDF8; font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:0.05em;">EXECUTIVE AUDIT DOSSIER</div>
             <h2 style="margin:4px 0 8px 0; color:#FFFFFF; font-size:2rem;">{audit['domain']}</h2>
             <p style="color:#94A3B8; font-size:0.95rem; margin:0;">
                 Overall Health Score: <b style="color:#FFFFFF;">{audit['overall_score']}/100</b> • Status: <b style="color:#38BDF8;">{audit['grade_desc']}</b>
@@ -739,15 +729,15 @@ if st.session_state.audit_data:
         <div style="display:flex; align-items:center; gap:20px;">
             <div style="text-align:right;">
                 <div style="font-size:0.8rem; color:#94A3B8; font-weight:700; text-transform:uppercase;">OVERALL GRADE</div>
-                <div style="font-size:1.3rem; font-weight:800; color:#FFFFFF;">{audit['grade']} ({audit['overall_score']}/100)</div>
+                <div style="font-size:1.3rem; font-weight:800; color:#FFFFFF;">Grade: {audit['grade']} | {audit['overall_score']}/100</div>
             </div>
             <div class="{badge_style}">{audit['grade']}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # 2. 5 Metric Columns: Individual Scorecards & Progress
-    st.markdown("### 📊 5-Pillar Diagnostic Scorecards")
+    # 2. 5 Metric Columns with Progress Bars
+    st.markdown("### 📊 5-Pillar Technical Diagnostics")
     m1, m2, m3, m4, m5 = st.columns(5)
     with m1:
         st.markdown(f"""
@@ -782,7 +772,7 @@ if st.session_state.audit_data:
     with m4:
         st.markdown(f"""
         <div class="pillar-card">
-            <div class="pillar-title">Security (SSL)</div>
+            <div class="pillar-title">SSL & Security</div>
             <div class="pillar-score" style="color:#10B981;">{audit['security_score']}</div>
             <div style="font-size:0.75rem; color:#94A3B8; margin-top:4px;">HTTPS Enforced</div>
         </div>
@@ -792,24 +782,24 @@ if st.session_state.audit_data:
     with m5:
         st.markdown(f"""
         <div class="pillar-card">
-            <div class="pillar-title">Social Signals</div>
+            <div class="pillar-title">Social Metadata</div>
             <div class="pillar-score" style="color:#EF4444;">{audit['social_score']}</div>
             <div style="font-size:0.75rem; color:#94A3B8; margin-top:4px;">OG & Twitter Cards</div>
         </div>
         """, unsafe_allow_html=True)
         st.progress(audit['social_score'])
 
-    # 3. Priority Action Checklist
+    # 3. Prioritized Issues List
     st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
     st.markdown("### 🛠️ Prioritized Recommendations Checklist")
 
     if audit.get("high_priority"):
-        st.markdown("<b style='color:#EF4444; font-size:0.95rem;'>🔴 HIGH PRIORITY ISSUES (Critical Leaks)</b>", unsafe_allow_html=True)
+        st.markdown("<b style='color:#EF4444; font-size:0.95rem;'>🔴 CRITICAL HIGH PRIORITY FIXES</b>", unsafe_allow_html=True)
         for item in audit["high_priority"]:
             st.markdown(f"<div class='rec-item-high'><b>[CRITICAL]</b> {item}</div>", unsafe_allow_html=True)
 
     if audit.get("med_priority"):
-        st.markdown("<b style='color:#F59E0B; font-size:0.95rem;'>🟡 MEDIUM PRIORITY IMPROVEMENTS (Optimization Opportunities)</b>", unsafe_allow_html=True)
+        st.markdown("<b style='color:#F59E0B; font-size:0.95rem;'>🟡 MEDIUM PRIORITY IMPROVEMENTS</b>", unsafe_allow_html=True)
         for item in audit["med_priority"]:
             st.markdown(f"<div class='rec-item-med'><b>[RECOMMENDED]</b> {item}</div>", unsafe_allow_html=True)
 
@@ -818,9 +808,9 @@ if st.session_state.audit_data:
             for item in audit["passed_audits"]:
                 st.markdown(f"<div class='rec-item-pass'><b>[PASSED]</b> {item}</div>", unsafe_allow_html=True)
 
-    # 4. Export Section: One-Click White-Label PDF Download
+    # 4. Export Section: Executive White-Label PDF Download
     st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
-    st.markdown("### 📄 White-Label Executive PDF Report")
+    st.markdown("### 📄 White-Label Executive PDF Deliverable")
     st.caption(f"Branded for: **{st.session_state.agency_name}** ({st.session_state.agency_website})")
 
     try:
@@ -840,7 +830,7 @@ if st.session_state.audit_data:
     except Exception as err:
         st.error(f"Error compiling PDF report: {err}")
 
-# Bottom Leaderboard Ad Slot (.ad-card)
+# Leaderboard Ad Slot (.ad-card)
 st.markdown("""
 <div class="ad-card">
     <div>
