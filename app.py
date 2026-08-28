@@ -68,7 +68,7 @@ st.markdown("""
         color: #F8FAFC !important;
     }
 
-    /* SEOptimer Frosted Glass Cards */
+    /* Frosted Glass Card Containers */
     .saas-card {
         background: rgba(30, 41, 59, 0.7) !important;
         backdrop-filter: blur(12px) !important;
@@ -121,7 +121,7 @@ st.markdown("""
         letter-spacing: -0.02em;
     }
 
-    /* Grade & Score Badges */
+    /* Score Badges */
     .grade-badge-a {
         display: inline-block;
         background: #10B981;
@@ -153,7 +153,7 @@ st.markdown("""
         box-shadow: 0 4px 18px rgba(239, 68, 68, 0.4);
     }
 
-    /* Pillar Metric Card */
+    /* Pillar Metric Cards */
     .pillar-card {
         background: #111827;
         border: 1px solid #374151;
@@ -338,11 +338,11 @@ def generate_credit_extension_mailto(user_email: str) -> str:
 def run_real_audit(target_url: str) -> Dict[str, Any]:
     """
     Executes a comprehensive 5-Pillar website audit analyzing:
-    1. On-Page SEO
-    2. Usability & Mobile
-    3. Performance & Speed
-    4. Security
-    5. Social & Branding
+    1. On-Page SEO (30%)
+    2. Usability & Mobile (25%)
+    3. Performance & Speed (20%)
+    4. Security (15%)
+    5. Social & Branding (10%)
     """
     url = target_url.strip()
     if not url.startswith("http://") and not url.startswith("https://"):
@@ -371,7 +371,6 @@ def run_real_audit(target_url: str) -> Dict[str, Any]:
     except Exception as ex:
         logger.warning(f"Live fetch error for {url}: {ex}. Running fallback diagnostic.")
 
-    # Parse HTML signals
     soup = BeautifulSoup(resp.text if resp and resp.text else "<html><head><title>Business Portal</title></head><body></body></html>", "html.parser")
 
     # PILLAR 1: On-Page SEO (Checks: Title length, Meta desc, H1 count, Image Alt attributes)
@@ -549,15 +548,21 @@ class SEOptimerPDF(FPDF):
         self.set_y(-15)
         self.set_font('helvetica', 'I', 8)
         self.set_text_color(148, 163, 184)
-        self.cell(0, 10, f"Confidential Audit Report • Prepared by {self.agency_name} ({self.agency_website}) • Page {self.page_no()}", align='C')
+        self.cell(0, 10, f"Prepared for executive review. Powered by {self.agency_name} ({self.agency_website}) • Page {self.page_no()}", align='C')
 
 
 def generate_executive_pdf(
-    audit: Dict[str, Any],
+    audit_data: Dict[str, Any],
+    target_url: Optional[str] = None,
     agency_name: str = "ApexAudit Agency Partners",
     agency_website: str = "https://apexaudit.ai"
 ) -> bytes:
     """Generates an executive-ready white-labeled PDF report."""
+    audit = audit_data
+    domain_label = target_url or audit.get("domain", "Target Website")
+    if "https://" in domain_label or "http://" in domain_label:
+        domain_label = domain_label.replace("https://", "").replace("http://", "").split("/")[0]
+
     pdf = SEOptimerPDF(agency_name=agency_name, agency_website=agency_website)
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
@@ -565,14 +570,14 @@ def generate_executive_pdf(
     # Executive Title & Domain
     pdf.set_font('helvetica', 'B', 20)
     pdf.set_text_color(15, 23, 42)
-    pdf.cell(0, 10, "Executive Website & SEO Audit Report", ln=1, align='L')
+    pdf.cell(0, 10, "ApexAudit AI - Comprehensive Website Audit Report", ln=1, align='L')
 
     pdf.set_font('helvetica', '', 10)
     pdf.set_text_color(100, 116, 139)
-    pdf.cell(0, 6, f"Target Domain: {audit['domain']} | Audit Timestamp: {datetime.now().strftime('%B %d, %Y')}", ln=1, align='L')
+    pdf.cell(0, 6, f"Domain Analyzed: {domain_label} | Audit Timestamp: {datetime.now().strftime('%B %d, %Y')}", ln=1, align='L')
     pdf.ln(4)
 
-    # Score & Grade Banner Card
+    # Big Letter Grade & Overall Health Score
     pdf.set_fill_color(15, 23, 42)
     pdf.rect(10, pdf.get_y(), 190, 28, 'F')
     
@@ -588,7 +593,7 @@ def generate_executive_pdf(
     pdf.cell(160, 8, safe_desc, ln=1)
     pdf.ln(10)
 
-    # 5-Pillar Scorecard Grid Table
+    # Pillar-by-Pillar Breakdown Table
     pdf.set_fill_color(30, 41, 59)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font('helvetica', 'B', 9)
@@ -607,12 +612,12 @@ def generate_executive_pdf(
     pdf.cell(38, 9, f"{audit['social_score']}/100", 1, 1, 'C')
     pdf.ln(8)
 
-    # Prioritized Recommendations
+    # Prioritized Action List
     pdf.set_font('helvetica', 'B', 13)
     pdf.set_text_color(15, 23, 42)
-    pdf.cell(0, 8, "Prioritized Action & Remediation Plan", ln=1)
+    pdf.cell(0, 8, "Prioritized Action List for Web Developers & Marketers", ln=1)
 
-    if audit["high_priority"]:
+    if audit.get("high_priority"):
         pdf.set_font('helvetica', 'B', 10)
         pdf.set_text_color(220, 38, 38)
         pdf.cell(0, 6, "HIGH PRIORITY (Direct Conversion & Ranking Leaks):", ln=1)
@@ -623,7 +628,7 @@ def generate_executive_pdf(
             pdf.multi_cell(190, 5, f"- {clean_rec}")
         pdf.ln(4)
 
-    if audit["med_priority"]:
+    if audit.get("med_priority"):
         pdf.set_font('helvetica', 'B', 10)
         pdf.set_text_color(217, 119, 6)
         pdf.cell(0, 6, "MEDIUM PRIORITY (Optimization Opportunities):", ln=1)
@@ -634,7 +639,7 @@ def generate_executive_pdf(
             pdf.multi_cell(190, 5, f"- {clean_rec}")
         pdf.ln(4)
 
-    if audit["passed_checks"]:
+    if audit.get("passed_checks"):
         pdf.set_font('helvetica', 'B', 10)
         pdf.set_text_color(5, 150, 105)
         pdf.cell(0, 6, "PASSED TECHNICAL CHECKS:", ln=1)
@@ -645,7 +650,7 @@ def generate_executive_pdf(
             pdf.multi_cell(190, 5, f"[PASS] {clean_rec}")
         pdf.ln(6)
 
-    # Agency Footer Box
+    # Professional White-Label Footer Box
     pdf.set_fill_color(15, 23, 42)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font('helvetica', 'B', 9)
@@ -655,7 +660,7 @@ def generate_executive_pdf(
     pdf.set_font('helvetica', '', 8)
     pdf.set_text_color(203, 213, 225)
     pdf.set_x(14)
-    pdf.cell(0, 4, f"To execute this growth roadmap, visit {agency_website} or contact your executive representative.", ln=1)
+    pdf.cell(0, 4, f"Prepared for executive review. Powered by ApexAudit AI. Visit {agency_website} to execute.", ln=1)
 
     return bytes(pdf.output())
 
@@ -676,7 +681,7 @@ if not st.session_state.authenticated:
         </div>
         <div style="display:flex; align-items:center; gap:16px;">
             <span style="background:rgba(0, 210, 255, 0.15); color:#00D2FF; padding:6px 14px; border-radius:9999px; font-weight:700; font-size:0.84rem; border:1px solid rgba(0, 210, 255, 0.3);">
-                🎁 3 Free Audit Credits Included
+                🎁 Sign In / 3 Free Credits Included
             </span>
         </div>
     </div>
@@ -858,7 +863,7 @@ with st.sidebar:
 
     st.divider()
 
-    # Out of Credits Wall & Mailto Extension
+    # Credit Extension Handler
     if st.session_state.credits <= 0:
         st.error("⚠️ **Credits Exhausted!**")
         st.caption("You have used all free audit credits.")
@@ -888,7 +893,7 @@ with st.sidebar:
 
     st.divider()
 
-    # 📢 SPONSOR SPOTLIGHT CARD
+    # 📢 SPONSOR AD UNIT
     st.markdown("""
     <div style="background-color:#1E293B; border:1px solid #00D2FF; border-radius:12px; padding:16px; text-align:center; box-shadow:0 4px 16px rgba(0, 210, 255, 0.15);">
         <div style="font-size:0.75rem; font-weight:800; color:#00D2FF; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:6px;">📢 SPONSOR SPOTLIGHT</div>
@@ -1038,17 +1043,17 @@ with tab_audit:
         # Prioritized Recommendations Checklist
         st.markdown("#### 🛠️ Prioritized Remediation Action List")
         
-        if audit["high_priority"]:
+        if audit.get("high_priority"):
             st.markdown("<b style='color:#EF4444;'>🚨 HIGH PRIORITY FIXES</b>", unsafe_allow_html=True)
             for item in audit["high_priority"]:
                 st.markdown(f"<div class='rec-item-high'><b>[CRITICAL]</b> {item}</div>", unsafe_allow_html=True)
 
-        if audit["med_priority"]:
+        if audit.get("med_priority"):
             st.markdown("<b style='color:#F59E0B;'>⚠️ MEDIUM PRIORITY OPTIMIZATIONS</b>", unsafe_allow_html=True)
             for item in audit["med_priority"]:
                 st.markdown(f"<div class='rec-item-med'><b>[RECOMMENDED]</b> {item}</div>", unsafe_allow_html=True)
 
-        if audit["passed_checks"]:
+        if audit.get("passed_checks"):
             with st.expander(f"✅ View {len(audit['passed_checks'])} Passed Checks", expanded=False):
                 for item in audit["passed_checks"]:
                     st.markdown(f"<div class='rec-item-pass'><b>[PASSED]</b> {item}</div>", unsafe_allow_html=True)
@@ -1060,7 +1065,8 @@ with tab_audit:
 
         try:
             pdf_bytes = generate_executive_pdf(
-                audit=audit,
+                audit_data=audit,
+                target_url=audit.get("url"),
                 agency_name=st.session_state.agency_name,
                 agency_website=st.session_state.agency_website
             )
@@ -1129,7 +1135,6 @@ with tab_leadgen:
 
                             batch_results: List[EnrichedLead] = []
                             for idx, lead_in in enumerate(discovered, 1):
-                                # Perform real-time audit scan
                                 comp_name = lead_in.company_name
                                 web_url = lead_in.website_url or ""
                                 audit_sample = run_real_audit(web_url) if web_url else {
