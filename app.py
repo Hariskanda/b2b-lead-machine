@@ -22,8 +22,7 @@ st.set_page_config(
 APP_NAME = "ApexLeads AI"
 APP_SUBTITLE = "Hybrid SEOptimer + D7 Lead Intelligence"
 ADMIN_CONTACT_EMAIL = "hariskandapg@gmail.com"
-ADMIN_PASSCODE = "admin123"
-UNLOCK_PASSCODE = "4990"
+ADMIN_PASSCODES = ["harisadmin", "admin123", "4990"]
 
 
 # ==============================================================================
@@ -31,10 +30,34 @@ UNLOCK_PASSCODE = "4990"
 # ==============================================================================
 if "credits" not in st.session_state:
     st.session_state.credits = 3
+if "vip_mode" not in st.session_state:
+    st.session_state.vip_mode = False
 if "audit_data" not in st.session_state:
     st.session_state.audit_data = None
 if "bulk_leads" not in st.session_state:
     st.session_state.bulk_leads = []
+
+# Platform Telemetry & Analytics
+if "total_audits" not in st.session_state:
+    st.session_state.total_audits = 0
+if "total_leads_scraped" not in st.session_state:
+    st.session_state.total_leads_scraped = 0
+if "total_credits_consumed" not in st.session_state:
+    st.session_state.total_credits_consumed = 0
+if "paywall_hits" not in st.session_state:
+    st.session_state.paywall_hits = 0
+
+# Dynamic Live Ad Settings
+if "ad_title" not in st.session_state:
+    st.session_state.ad_title = "📢 SPONSOR SPOTLIGHT"
+if "ad_body" not in st.session_state:
+    st.session_state.ad_body = "Reach hundreds of B2B sales professionals and agencies daily."
+if "ad_cta" not in st.session_state:
+    st.session_state.ad_cta = "Reserve This Ad Spot ($)"
+if "show_ads" not in st.session_state:
+    st.session_state.show_ads = True
+
+# White-Label Branding Settings
 if "agency_name" not in st.session_state:
     st.session_state.agency_name = "ApexLeads Agency Partners"
 if "agency_website" not in st.session_state:
@@ -239,52 +262,47 @@ def generate_leads_pdf(
 
 
 # ==============================================================================
-# 4. SIDEBAR: CREDITS, LIMIT WALL & SPONSOR AD SLOT
+# 4. SIDEBAR: CREDITS, LIMIT WALL, SPONSOR AD SLOT & ADMIN CONTROLS
 # ==============================================================================
 with st.sidebar:
     st.title("⚡ ApexLeads AI")
     st.caption("Hybrid SEOptimer + D7 Lead Intelligence")
     st.divider()
 
-    st.metric("Free Search Credits Remaining", f"{st.session_state.credits} / 3")
+    # Credit Display (or VIP Status)
+    if st.session_state.vip_mode:
+        st.metric("Search Credits", "♾️ VIP Unlimited")
+        st.caption("VIP Mode Active: Free unlimited searches & audits.")
+    else:
+        st.metric("Free Search Credits Remaining", f"{st.session_state.credits} / 3")
 
     # LIMIT PAYWALL LOGIC
-    if st.session_state.credits <= 0:
+    if not st.session_state.vip_mode and st.session_state.credits <= 0:
         st.error("⚠️ Free search limit reached (0/3 remaining).")
         mailto_link = (
             f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Extend%20Search%20Credits"
             f"&body=Hi%20Haris,%20I%20have%20exhausted%20my%203%20free%20credits%20on%20ApexLeads.%20Please%20unlock%20more%20searches."
         )
         st.link_button("📩 Request More Credits via Email", mailto_link, type="primary")
-    else:
+    elif not st.session_state.vip_mode:
         st.caption("Each URL audit or bulk lead search consumes 1 free credit.")
 
     st.divider()
 
-    # SPONSOR AD CONTAINER
-    with st.container(border=True):
-        st.subheader("📢 Sponsor Spotlight")
-        st.write("Reach hundreds of B2B sales professionals and agencies daily.")
-        ad_mailto = (
-            f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Sponsor%20Ad%20Placement"
-            f"&body=Hi%20Haris,%20I%20want%20to%20reserve%20ad%20space%20on%20ApexLeads."
-        )
-        st.link_button("Reserve This Ad Spot ($)", ad_mailto)
+    # DYNAMIC SPONSOR AD CONTAINER
+    if st.session_state.show_ads:
+        with st.container(border=True):
+            st.subheader(st.session_state.ad_title)
+            st.write(st.session_state.ad_body)
+            ad_mailto = (
+                f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Sponsor%20Ad%20Placement"
+                f"&body=Hi%20Haris,%20I%20want%20to%20reserve%20ad%20space%20on%20ApexLeads."
+            )
+            st.link_button(st.session_state.ad_cta, ad_mailto)
 
-    st.divider()
+        st.divider()
 
-    # ADMIN RESET EXPANDER
-    with st.expander("🔑 Admin Settings"):
-        passcode_input = st.text_input("Enter Admin Passcode", type="password")
-        if st.button("Reset Credits to 10"):
-            if passcode_input.strip() in [ADMIN_PASSCODE, UNLOCK_PASSCODE]:
-                st.session_state.credits = 10
-                st.success("Credits reset to 10!")
-                st.rerun()
-            else:
-                st.error("Invalid passcode.")
-
-    # White-Label Branding Settings
+    # WHITE-LABEL BRANDING SETTINGS
     with st.expander("🏢 White-Label Report Settings"):
         b_name = st.text_input("Agency Name", value=st.session_state.agency_name)
         st.session_state.agency_name = b_name
@@ -320,7 +338,8 @@ with tab_audit:
         clean_url = target_url.strip()
         if not clean_url:
             st.error("Please enter a website URL to analyze.")
-        elif st.session_state.credits <= 0:
+        elif not st.session_state.vip_mode and st.session_state.credits <= 0:
+            st.session_state.paywall_hits += 1
             st.error("Limit exceeded. Check the sidebar to request more credits.")
         else:
             if not clean_url.startswith("http://") and not clean_url.startswith("https://"):
@@ -390,8 +409,15 @@ with tab_audit:
                     "passed_audits": passed_checks
                 }
 
-                st.session_state.credits -= 1
-                status_box.update(label=f"🎉 Audit Complete for {domain_name}! (1 credit deducted)", state="complete")
+                # Telemetry & Credit deduction
+                st.session_state.total_audits += 1
+                if not st.session_state.vip_mode:
+                    st.session_state.credits -= 1
+                    st.session_state.total_credits_consumed += 1
+                    status_box.update(label=f"🎉 Audit Complete for {domain_name}! (1 credit deducted)", state="complete")
+                else:
+                    status_box.update(label=f"🎉 Audit Complete for {domain_name}! (VIP Unlimited)", state="complete")
+                
                 st.rerun()
 
     # DISPLAY AUDIT RESULTS
@@ -465,10 +491,15 @@ with tab_audit:
             st.error(f"PDF generation error: {err}")
 
     # Tab 1 Bottom Ad Banner
-    with st.container(border=True):
-        st.caption("— ADVERTISEMENT SPACE AVAILABLE —")
-        st.write("Promote your marketing agency or B2B software to active sales teams.")
-        st.link_button("Contact Admin for Rates (hariskandapg@gmail.com)", ad_mailto)
+    if st.session_state.show_ads:
+        with st.container(border=True):
+            st.caption(f"— {st.session_state.ad_title} —")
+            st.write(st.session_state.ad_body)
+            ad_mailto_t1 = (
+                f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Leaderboard%20Ad%20Placement"
+                f"&body=Hi%20Haris,%20I%20want%20to%20reserve%20a%20leaderboard%20ad%20spot."
+            )
+            st.link_button(st.session_state.ad_cta, ad_mailto_t1, key="ad_btn_tab1")
 
 
 # ==============================================================================
@@ -491,7 +522,8 @@ with tab_leads:
 
         if not clean_niche or not clean_city:
             st.error("Please provide both a niche and a city.")
-        elif st.session_state.credits <= 0:
+        elif not st.session_state.vip_mode and st.session_state.credits <= 0:
+            st.session_state.paywall_hits += 1
             st.error("Limit exceeded. Check the sidebar to request more credits.")
         else:
             with st.status(f"Scraping and auditing local {clean_niche} in {clean_city}...", expanded=True) as status_lead:
@@ -533,8 +565,15 @@ with tab_leads:
                     })
 
                 st.session_state.bulk_leads = results
-                st.session_state.credits -= 1
-                status_lead.update(label=f"🎉 Successfully extracted {len(results)} verified leads! (1 credit deducted)", state="complete")
+                st.session_state.total_leads_scraped += len(results)
+
+                if not st.session_state.vip_mode:
+                    st.session_state.credits -= 1
+                    st.session_state.total_credits_consumed += 1
+                    status_lead.update(label=f"🎉 Successfully extracted {len(results)} verified leads! (1 credit deducted)", state="complete")
+                else:
+                    status_lead.update(label=f"🎉 Successfully extracted {len(results)} verified leads! (VIP Unlimited)", state="complete")
+                
                 st.rerun()
 
     # DISPLAY LEADS
@@ -573,10 +612,15 @@ with tab_leads:
                 st.error(f"Error compiling batch PDF: {pdf_err}")
 
     # Tab 2 Bottom Ad Banner
-    with st.container(border=True):
-        st.caption("— ADVERTISEMENT SPACE AVAILABLE —")
-        st.write("Promote your marketing agency or B2B software to active sales teams.")
-        st.link_button("Contact Admin for Rates (hariskandapg@gmail.com)", ad_mailto, key="ad_btn_tab2")
+    if st.session_state.show_ads:
+        with st.container(border=True):
+            st.caption(f"— {st.session_state.ad_title} —")
+            st.write(st.session_state.ad_body)
+            ad_mailto_t2 = (
+                f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Leaderboard%20Ad%20Placement"
+                f"&body=Hi%20Haris,%20I%20want%20to%20reserve%20a%20leaderboard%20ad%20spot."
+            )
+            st.link_button(st.session_state.ad_cta, ad_mailto_t2, key="ad_btn_tab2")
 
 
 # ==============================================================================
@@ -622,3 +666,110 @@ with tab_sponsor:
             f"&body=Hi%20Haris,%20I%20am%20interested%20in%20upgrading%20my%20ApexLeads%20plan%20or%20purchasing%20ad%20space."
         )
         st.link_button("📩 Inquire About Sponsorship (hariskandapg@gmail.com)", sponsor_mailto, type="primary")
+
+
+# ==============================================================================
+# 6. MASTER ADMIN CONTROL CENTER
+# ==============================================================================
+st.divider()
+with st.expander("🔐 Master Admin Control Center", expanded=False):
+    admin_key = st.text_input("Enter Master Admin Passcode:", type="password", key="admin_master_key")
+
+    if admin_key.strip() in ADMIN_PASSCODES:
+        st.success("✅ Master Admin Authentication Verified.")
+
+        adm_tab1, adm_tab2, adm_tab3, adm_tab4 = st.tabs([
+            "💳 Credit Controls",
+            "📊 Platform Analytics",
+            "📢 Live Ad Manager",
+            "⚙️ Data & Reset"
+        ])
+
+        # ADMIN TAB 1: CREDIT CONTROLS
+        with adm_tab1:
+            st.subheader("💳 User Search Credit Controls")
+            c_cr1, c_cr2 = st.columns([2, 1])
+            with c_cr1:
+                new_credit_amount = st.number_input(
+                    "Set Search Credits Balance:",
+                    min_value=1,
+                    max_value=1000,
+                    value=max(10, st.session_state.credits)
+                )
+                if st.button("⚡ Apply Credits to Current Session", type="primary"):
+                    st.session_state.credits = int(new_credit_amount)
+                    st.success(f"Credits balance successfully updated to {new_credit_amount}!")
+                    st.rerun()
+
+            with c_cr2:
+                vip_checked = st.checkbox(
+                    "Enable Unlimited VIP Mode (Infinite Searches)",
+                    value=st.session_state.vip_mode
+                )
+                if vip_checked != st.session_state.vip_mode:
+                    st.session_state.vip_mode = vip_checked
+                    st.success("VIP mode preference updated.")
+                    st.rerun()
+
+        # ADMIN TAB 2: PLATFORM USAGE & ANALYTICS
+        with adm_tab2:
+            st.subheader("📊 Live Session Telemetry & Platform Analytics")
+            m_a1, m_a2, m_a3, m_a4 = st.columns(4)
+            with m_a1:
+                st.metric("Single URL Audits Run", st.session_state.total_audits)
+            with m_a2:
+                st.metric("Bulk Leads Scraped", st.session_state.total_leads_scraped)
+            with m_a3:
+                st.metric("Credits Consumed", st.session_state.total_credits_consumed)
+            with m_a4:
+                st.metric("Paywall Hits (Blocked)", st.session_state.paywall_hits)
+
+        # ADMIN TAB 3: LIVE SPONSOR & AD BANNER MANAGER
+        with adm_tab3:
+            st.subheader("📢 Dynamic Sponsor & Ad Banner Manager")
+            st.write("Modify ad copy and rates in real time without editing source code:")
+
+            edit_ad_title = st.text_input("Sponsor Card Headline:", value=st.session_state.ad_title)
+            edit_ad_body = st.text_area("Sponsor Description:", value=st.session_state.ad_body)
+            edit_ad_cta = st.text_input("Ad Rate / CTA Text:", value=st.session_state.ad_cta)
+            edit_show_ads = st.checkbox("Show / Hide All Ads Across Dashboard", value=st.session_state.show_ads)
+
+            if st.button("💾 Save & Publish Ad Changes", type="primary"):
+                st.session_state.ad_title = edit_ad_title
+                st.session_state.ad_body = edit_ad_body
+                st.session_state.ad_cta = edit_ad_cta
+                st.session_state.show_ads = edit_show_ads
+                st.success("Ad settings saved and published across dashboard!")
+                st.rerun()
+
+        # ADMIN TAB 4: SYSTEM MAINTENANCE & LOGS
+        with adm_tab4:
+            st.subheader("⚙️ System Maintenance & Data Logs")
+
+            c_act1, c_act2 = st.columns(2)
+            with c_act1:
+                if st.button("🗑️ Clear Cached Leads & Reset Engine", type="secondary"):
+                    st.session_state.bulk_leads = []
+                    st.session_state.audit_data = None
+                    st.success("Cached audit data and bulk leads cleared.")
+                    st.rerun()
+
+            with c_act2:
+                telemetry_log = f"""ApexLeads AI System Diagnostics Log
+Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Session Credits Remaining: {st.session_state.credits}
+VIP Mode: {st.session_state.vip_mode}
+Total Single Audits Run: {st.session_state.total_audits}
+Total Bulk Leads Scraped: {st.session_state.total_leads_scraped}
+Total Credits Consumed: {st.session_state.total_credits_consumed}
+Paywall Hits: {st.session_state.paywall_hits}
+Agency Partner: {st.session_state.agency_name} ({st.session_state.agency_website})
+"""
+                st.download_button(
+                    label="📥 Export System Diagnostics Log",
+                    data=telemetry_log,
+                    file_name=f"apexleads_diagnostics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                    mime="text/plain"
+                )
+    elif admin_key:
+        st.error("❌ Invalid Admin Passcode.")
