@@ -10,54 +10,43 @@ import requests
 import streamlit as st
 
 # ==============================================================================
-# 1. IMPORTS & GLOBAL CONFIGURATION
+# 1. IMPORTS & CONFIGURATION
 # ==============================================================================
 st.set_page_config(
-    page_title="ApexLeads AI | SEO & B2B Engine",
+    page_title="ApexLeads AI | SEO & B2B Intelligence",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 APP_NAME = "ApexLeads AI"
-APP_SUBTITLE = "Hybrid SEOptimer + D7 Lead Intelligence"
+APP_SUBTITLE = "Hybrid SEOptimer & D7 Lead Intelligence Suite"
 ADMIN_CONTACT_EMAIL = "hariskandapg@gmail.com"
 ADMIN_PASSCODES = ["harisadmin", "admin123", "4990"]
+UPI_ID = "9019525230@fam"
 
 
 # ==============================================================================
-# 2. PERSISTENT STATE INITIALIZATION
+# 2. STATE INITIALIZATION & SESSION PERSISTENCE
 # ==============================================================================
 if "credits" not in st.session_state:
     st.session_state.credits = 3
 if "vip_mode" not in st.session_state:
     st.session_state.vip_mode = False
-if "audit_data" not in st.session_state:
-    st.session_state.audit_data = None
 if "bulk_leads" not in st.session_state:
     st.session_state.bulk_leads = []
-
-# Platform Telemetry & Analytics
-if "total_audits" not in st.session_state:
-    st.session_state.total_audits = 0
+if "single_audit" not in st.session_state:
+    st.session_state.single_audit = None
+if "total_audits_run" not in st.session_state:
+    st.session_state.total_audits_run = 0
 if "total_leads_scraped" not in st.session_state:
     st.session_state.total_leads_scraped = 0
-if "total_credits_consumed" not in st.session_state:
-    st.session_state.total_credits_consumed = 0
-if "paywall_hits" not in st.session_state:
-    st.session_state.paywall_hits = 0
-
-# Dynamic Live Ad Settings
 if "ad_title" not in st.session_state:
     st.session_state.ad_title = "📢 SPONSOR SPOTLIGHT"
 if "ad_body" not in st.session_state:
-    st.session_state.ad_body = "Reach hundreds of B2B sales professionals and agencies daily."
+    st.session_state.ad_body = "Reach hundreds of agency founders and outbound sales teams daily."
 if "ad_cta" not in st.session_state:
-    st.session_state.ad_cta = "Reserve This Ad Spot ($)"
-if "show_ads" not in st.session_state:
-    st.session_state.show_ads = True
-
-# White-Label Branding Settings
+    st.session_state.ad_cta = "Reserve This Spot ($)"
 if "agency_name" not in st.session_state:
     st.session_state.agency_name = "ApexLeads Agency Partners"
 if "agency_website" not in st.session_state:
@@ -65,7 +54,7 @@ if "agency_website" not in st.session_state:
 
 
 # ==============================================================================
-# 3. PDF GENERATOR HELPER FUNCTIONS (FPDF)
+# 3. PDF GENERATION ENGINE (FPDF)
 # ==============================================================================
 class ApexCleanPDF(FPDF):
     def __init__(self, agency_name: str, agency_website: str):
@@ -93,21 +82,22 @@ def generate_audit_pdf(
     url: str,
     score: int,
     grade: str,
+    pillars: Dict[str, int],
     issues: Dict[str, Any],
     agency_name: str = "ApexLeads Agency Partners",
     agency_website: str = "https://apexleads.ai"
 ) -> bytes:
-    """Generates an executive single-domain SEOptimer-style audit report in PDF format."""
+    """Formats a clean executive website audit report and returns latin-1 encoded PDF bytes."""
     domain = url.replace("https://", "").replace("http://", "").split("/")[0]
 
     pdf = ApexCleanPDF(agency_name=agency_name, agency_website=agency_website)
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
 
-    # Title & Metadata
+    # Executive Title & Domain
     pdf.set_font('helvetica', 'B', 20)
     pdf.set_text_color(15, 23, 42)
-    pdf.cell(0, 10, "Comprehensive Website & SEO Audit Report", ln=1, align='L')
+    pdf.cell(0, 10, "Executive Website & SEO Audit Report", ln=1, align='L')
 
     pdf.set_font('helvetica', '', 10)
     pdf.set_text_color(100, 116, 139)
@@ -141,11 +131,11 @@ def generate_audit_pdf(
     pdf.cell(38, 8, " Social Metadata", 1, 1, 'C', True)
 
     pdf.set_font('helvetica', 'B', 11)
-    pdf.cell(38, 9, f"{issues.get('seo_score', 85)}/100", 1, 0, 'C')
-    pdf.cell(38, 9, f"{issues.get('mobile_score', 90)}/100", 1, 0, 'C')
-    pdf.cell(38, 9, f"{issues.get('speed_score', 75)}/100", 1, 0, 'C')
-    pdf.cell(38, 9, f"{issues.get('security_score', 95)}/100", 1, 0, 'C')
-    pdf.cell(38, 9, f"{issues.get('social_score', 60)}/100", 1, 1, 'C')
+    pdf.cell(38, 9, f"{pillars.get('seo', 88)}/100", 1, 0, 'C')
+    pdf.cell(38, 9, f"{pillars.get('mobile', 94)}/100", 1, 0, 'C')
+    pdf.cell(38, 9, f"{pillars.get('speed', 72)}/100", 1, 0, 'C')
+    pdf.cell(38, 9, f"{pillars.get('security', 98)}/100", 1, 0, 'C')
+    pdf.cell(38, 9, f"{pillars.get('social', 60)}/100", 1, 1, 'C')
     pdf.ln(8)
 
     # Prioritized Action Checklist
@@ -186,7 +176,7 @@ def generate_audit_pdf(
             pdf.multi_cell(190, 5, f"[PASS] {clean_item}")
         pdf.ln(6)
 
-    # Executive Agency Partner Box
+    # Executive Partner Box
     pdf.set_fill_color(248, 250, 252)
     pdf.set_draw_color(203, 213, 225)
     pdf.rect(10, pdf.get_y(), 190, 16, 'DF')
@@ -209,7 +199,7 @@ def generate_leads_pdf(
     agency_name: str = "ApexLeads Agency Partners",
     agency_website: str = "https://apexleads.ai"
 ) -> bytes:
-    """Generates a batch lead intelligence portfolio PDF report."""
+    """Formats a clean B2B lead sheet and returns latin-1 encoded PDF bytes."""
     pdf = ApexCleanPDF(agency_name=agency_name, agency_website=agency_website)
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
@@ -231,7 +221,7 @@ def generate_leads_pdf(
     pdf.cell(50, 8, " Business Name", 1, 0, 'L', True)
     pdf.cell(48, 8, " Website Domain", 1, 0, 'L', True)
     pdf.cell(38, 8, " Phone Number", 1, 0, 'L', True)
-    pdf.cell(36, 8, " Identified Flaw", 1, 0, 'L', True)
+    pdf.cell(36, 8, " SEO Flaw Detected", 1, 0, 'L', True)
     pdf.cell(18, 8, " Score", 1, 1, 'C', True)
 
     # Table Rows
@@ -243,7 +233,7 @@ def generate_leads_pdf(
         c_name = str(row.get("Business Name", "Business"))[:24]
         w_url = str(row.get("Website", "N/A")).replace("https://", "").replace("http://", "").replace("www.", "")[:24]
         phone = str(row.get("Phone", "N/A"))[:18]
-        flaw = str(row.get("Identified Flaw", "Speed Optimization"))[:20]
+        flaw = str(row.get("SEO Flaw", "Speed Bottleneck"))[:20]
         score = f"{row.get('Performance Score', 80)}/100"
 
         c_name_safe = c_name.encode('latin-1', 'replace').decode('latin-1')
@@ -262,47 +252,48 @@ def generate_leads_pdf(
 
 
 # ==============================================================================
-# 4. SIDEBAR: CREDITS, LIMIT WALL, SPONSOR AD SLOT & ADMIN CONTROLS
+# 4. SIDEBAR: CREDITS, LIMIT WALL & SPONSOR SPOTLIGHT
 # ==============================================================================
 with st.sidebar:
     st.title("⚡ ApexLeads AI")
-    st.caption("Hybrid SEOptimer + D7 Lead Intelligence")
+    st.caption("Hybrid SEOptimer & D7 Lead Intelligence Suite")
     st.divider()
 
-    # Credit Display (or VIP Status)
+    # USER CREDIT STATUS
     if st.session_state.vip_mode:
-        st.metric("Search Credits", "♾️ VIP Unlimited")
-        st.caption("VIP Mode Active: Free unlimited searches & audits.")
+        st.success("👑 VIP Unlimited Search Mode Active")
     else:
         st.metric("Free Search Credits Remaining", f"{st.session_state.credits} / 3")
 
-    # LIMIT PAYWALL LOGIC
-    if not st.session_state.vip_mode and st.session_state.credits <= 0:
-        st.error("⚠️ Free search limit reached (0/3 remaining).")
+    # LIMIT PAYWALL HANDLER
+    if st.session_state.credits <= 0 and not st.session_state.vip_mode:
+        st.error("⚠️ Free limit reached (0/3 remaining).")
+        with st.container(border=True):
+            st.subheader("💳 Instant Account Upgrade")
+            st.write(f"**UPI ID:** `{UPI_ID}`")
+            st.write("**Price:** ₹499 (One-Time Unlimited Access Pack)")
+            st.caption("Scan & pay using GPay / PhonePe / Paytm / FamPay")
+
         mailto_link = (
-            f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Extend%20Search%20Credits"
-            f"&body=Hi%20Haris,%20I%20have%20exhausted%20my%203%20free%20credits%20on%20ApexLeads.%20Please%20unlock%20more%20searches."
+            f"mailto:{ADMIN_CONTACT_EMAIL}?subject=ApexLeads:%20Credit%20Extension%20Request"
+            f"&body=Hi%20Haris,%20I%20used%20my%203%20free%20searches.%20Please%20unlock%20my%20account."
         )
-        st.link_button("📩 Request More Credits via Email", mailto_link, type="primary")
+        st.link_button("📩 Request Account Upgrade via Email", mailto_link, type="primary")
     elif not st.session_state.vip_mode:
         st.caption("Each URL audit or bulk lead search consumes 1 free credit.")
 
     st.divider()
 
-    # DYNAMIC SPONSOR AD CONTAINER
-    if st.session_state.show_ads:
-        with st.container(border=True):
-            st.subheader(st.session_state.ad_title)
-            st.write(st.session_state.ad_body)
-            ad_mailto = (
-                f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Sponsor%20Ad%20Placement"
-                f"&body=Hi%20Haris,%20I%20want%20to%20reserve%20ad%20space%20on%20ApexLeads."
-            )
-            st.link_button(st.session_state.ad_cta, ad_mailto)
+    # SIDEBAR SPONSOR SPOTLIGHT
+    with st.container(border=True):
+        st.subheader(st.session_state.ad_title)
+        st.write(st.session_state.ad_body)
+        sponsor_mailto = f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Sponsor%20Ad%20Inquiry"
+        st.link_button(st.session_state.ad_cta, sponsor_mailto)
 
-        st.divider()
+    st.divider()
 
-    # WHITE-LABEL BRANDING SETTINGS
+    # White-Label Branding Settings
     with st.expander("🏢 White-Label Report Settings"):
         b_name = st.text_input("Agency Name", value=st.session_state.agency_name)
         st.session_state.agency_name = b_name
@@ -311,22 +302,23 @@ with st.sidebar:
 
 
 # ==============================================================================
-# 5. MAIN DASHBOARD: 3 PERMANENT TABS
+# 5. MAIN DASHBOARD: 4 TABS (NEVER HIDE TABS)
 # ==============================================================================
-st.title("🚀 ApexLeads Intelligence Suite")
+st.title("🚀 ApexLeads Intelligence Engine")
 st.write("Instant single-domain technical audits + bulk local business lead discovery.")
 
-tab_audit, tab_leads, tab_sponsor = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "🤖 Deep URL Audit (SEOptimer)",
     "🔍 Bulk Lead Finder (D7)",
-    "💼 Advertising & Pricing"
+    "💼 Pricing & Ads",
+    "🔐 Master Admin Panel"
 ])
 
 
 # ==============================================================================
 # TAB 1: DEEP URL AUDIT (SEOPTIMER CLONE)
 # ==============================================================================
-with tab_audit:
+with tab1:
     with st.container(border=True):
         target_url = st.text_input(
             "Enter Website URL to Analyze:",
@@ -338,9 +330,8 @@ with tab_audit:
         clean_url = target_url.strip()
         if not clean_url:
             st.error("Please enter a website URL to analyze.")
-        elif not st.session_state.vip_mode and st.session_state.credits <= 0:
-            st.session_state.paywall_hits += 1
-            st.error("Limit exceeded. Check the sidebar to request more credits.")
+        elif st.session_state.credits <= 0 and not st.session_state.vip_mode:
+            st.error("Limit exceeded. Check the sidebar to upgrade your account.")
         else:
             if not clean_url.startswith("http://") and not clean_url.startswith("https://"):
                 clean_url = "https://" + clean_url
@@ -359,7 +350,7 @@ with tab_audit:
                 st.write("🔒 Validating SSL Security & Social OpenGraph Metadata...")
                 time.sleep(0.3)
 
-                # Generate structured audit metrics
+                # Pillar Sub-Scores
                 seo_val = 88
                 mobile_val = 94
                 speed_val = 72
@@ -393,36 +384,39 @@ with tab_audit:
                     "Single H1 headline structure is properly established."
                 ]
 
-                st.session_state.audit_data = {
+                pillars_dict = {
+                    "seo": seo_val,
+                    "mobile": mobile_val,
+                    "speed": speed_val,
+                    "security": sec_val,
+                    "social": social_val
+                }
+
+                st.session_state.single_audit = {
                     "url": clean_url,
                     "domain": domain_name,
                     "score": overall_calc,
                     "grade": grade_letter,
                     "grade_desc": grade_text,
-                    "seo_score": seo_val,
-                    "mobile_score": mobile_val,
-                    "speed_score": speed_val,
-                    "security_score": sec_val,
-                    "social_score": social_val,
+                    "pillars": pillars_dict,
                     "high_priority": high_fixes,
                     "med_priority": med_fixes,
                     "passed_audits": passed_checks
                 }
 
-                # Telemetry & Credit deduction
-                st.session_state.total_audits += 1
+                st.session_state.total_audits_run += 1
                 if not st.session_state.vip_mode:
                     st.session_state.credits -= 1
-                    st.session_state.total_credits_consumed += 1
                     status_box.update(label=f"🎉 Audit Complete for {domain_name}! (1 credit deducted)", state="complete")
                 else:
                     status_box.update(label=f"🎉 Audit Complete for {domain_name}! (VIP Unlimited)", state="complete")
                 
                 st.rerun()
 
-    # DISPLAY AUDIT RESULTS
-    if st.session_state.audit_data:
-        audit = st.session_state.audit_data
+    # RESULTS DISPLAY
+    if st.session_state.single_audit:
+        audit = st.session_state.single_audit
+        pillars = audit["pillars"]
 
         with st.container(border=True):
             c_dom, c_grd, c_scr = st.columns([3, 1, 1])
@@ -437,20 +431,20 @@ with tab_audit:
         st.subheader("📊 5-Pillar Performance Diagnostics")
         col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
-            st.metric("On-Page SEO", f"{audit['seo_score']} / 100")
-            st.progress(audit['seo_score'])
+            st.metric("On-Page SEO", f"{pillars['seo']} / 100")
+            st.progress(pillars['seo'])
         with col2:
-            st.metric("Mobile Usability", f"{audit['mobile_score']} / 100")
-            st.progress(audit['mobile_score'])
+            st.metric("Mobile Usability", f"{pillars['mobile']} / 100")
+            st.progress(pillars['mobile'])
         with col3:
-            st.metric("Site Speed", f"{audit['speed_score']} / 100")
-            st.progress(audit['speed_score'])
+            st.metric("Site Speed", f"{pillars['speed']} / 100")
+            st.progress(pillars['speed'])
         with col4:
-            st.metric("SSL & Security", f"{audit['security_score']} / 100")
-            st.progress(audit['security_score'])
+            st.metric("SSL & Security", f"{pillars['security']} / 100")
+            st.progress(pillars['security'])
         with col5:
-            st.metric("Social Meta", f"{audit['social_score']} / 100")
-            st.progress(audit['social_score'])
+            st.metric("Social Meta", f"{pillars['social']} / 100")
+            st.progress(pillars['social'])
 
         st.subheader("🛠️ Priority Fix Checklist")
         if audit.get("high_priority"):
@@ -476,12 +470,13 @@ with tab_audit:
                 url=audit["url"],
                 score=audit["score"],
                 grade=audit["grade"],
+                pillars=audit["pillars"],
                 issues=audit,
                 agency_name=st.session_state.agency_name,
                 agency_website=st.session_state.agency_website
             )
             st.download_button(
-                label="📄 Download White-Label Executive PDF Report",
+                label="📄 Download Executive White-Label PDF Report",
                 data=pdf_bytes,
                 file_name=f"Website_Audit_Report_{audit['domain']}.pdf",
                 mime="application/pdf",
@@ -491,21 +486,17 @@ with tab_audit:
             st.error(f"PDF generation error: {err}")
 
     # Tab 1 Bottom Ad Banner
-    if st.session_state.show_ads:
-        with st.container(border=True):
-            st.caption(f"— {st.session_state.ad_title} —")
-            st.write(st.session_state.ad_body)
-            ad_mailto_t1 = (
-                f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Leaderboard%20Ad%20Placement"
-                f"&body=Hi%20Haris,%20I%20want%20to%20reserve%20a%20leaderboard%20ad%20spot."
-            )
-            st.link_button(st.session_state.ad_cta, ad_mailto_t1, key="ad_btn_tab1")
+    with st.container(border=True):
+        st.caption(f"— {st.session_state.ad_title} —")
+        st.write(st.session_state.ad_body)
+        ad_mailto_t1 = f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Leaderboard%20Ad%20Inquiry"
+        st.link_button(st.session_state.ad_cta, ad_mailto_t1, key="ad_btn_tab1")
 
 
 # ==============================================================================
 # TAB 2: BULK LEAD FINDER (D7 LEAD FINDER CLONE)
 # ==============================================================================
-with tab_leads:
+with tab2:
     with st.container(border=True):
         col_niche, col_city = st.columns(2)
         with col_niche:
@@ -522,9 +513,8 @@ with tab_leads:
 
         if not clean_niche or not clean_city:
             st.error("Please provide both a niche and a city.")
-        elif not st.session_state.vip_mode and st.session_state.credits <= 0:
-            st.session_state.paywall_hits += 1
-            st.error("Limit exceeded. Check the sidebar to request more credits.")
+        elif st.session_state.credits <= 0 and not st.session_state.vip_mode:
+            st.error("Limit exceeded. Check the sidebar to upgrade your account.")
         else:
             with st.status(f"Scraping and auditing local {clean_niche} in {clean_city}...", expanded=True) as status_lead:
                 st.write(f"🔎 Querying local business directories for '{clean_niche} in {clean_city}'...")
@@ -555,13 +545,13 @@ with tab_leads:
 
                     results.append({
                         "Business Name": b_name,
+                        "Category": clean_niche,
                         "Phone": phone_num,
                         "Website": web_url,
                         "City": clean_city,
-                        "Niche": clean_niche,
                         "Performance Score": perf_score,
-                        "Identified Flaw": flaw_item,
-                        "Pitch Strategy": pitch
+                        "SEO Flaw": flaw_item,
+                        "Pitch Opportunity": pitch
                     })
 
                 st.session_state.bulk_leads = results
@@ -569,14 +559,13 @@ with tab_leads:
 
                 if not st.session_state.vip_mode:
                     st.session_state.credits -= 1
-                    st.session_state.total_credits_consumed += 1
                     status_lead.update(label=f"🎉 Successfully extracted {len(results)} verified leads! (1 credit deducted)", state="complete")
                 else:
                     status_lead.update(label=f"🎉 Successfully extracted {len(results)} verified leads! (VIP Unlimited)", state="complete")
                 
                 st.rerun()
 
-    # DISPLAY LEADS
+    # RESULTS DISPLAY
     if st.session_state.bulk_leads:
         leads_df = pd.DataFrame(st.session_state.bulk_leads)
 
@@ -587,7 +576,7 @@ with tab_leads:
         with col_dl_csv:
             csv_data = leads_df.to_csv(index=False)
             st.download_button(
-                label="📥 Download Leads as CSV",
+                label="📥 Download Leads (CSV)",
                 data=csv_data,
                 file_name=f"ApexLeads_{niche_in.replace(' ', '_')}_{city_in.replace(' ', '_')}.csv",
                 mime="text/csv"
@@ -603,7 +592,7 @@ with tab_leads:
                     agency_website=st.session_state.agency_website
                 )
                 st.download_button(
-                    label="📄 Download Executive Pitch PDF",
+                    label="📄 Download Executive Pitch Deck (PDF)",
                     data=leads_pdf,
                     file_name=f"Pitch_Deck_{niche_in.replace(' ', '_')}_{city_in.replace(' ', '_')}.pdf",
                     mime="application/pdf"
@@ -612,82 +601,67 @@ with tab_leads:
                 st.error(f"Error compiling batch PDF: {pdf_err}")
 
     # Tab 2 Bottom Ad Banner
-    if st.session_state.show_ads:
-        with st.container(border=True):
-            st.caption(f"— {st.session_state.ad_title} —")
-            st.write(st.session_state.ad_body)
-            ad_mailto_t2 = (
-                f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Leaderboard%20Ad%20Placement"
-                f"&body=Hi%20Haris,%20I%20want%20to%20reserve%20a%20leaderboard%20ad%20spot."
-            )
-            st.link_button(st.session_state.ad_cta, ad_mailto_t2, key="ad_btn_tab2")
-
-
-# ==============================================================================
-# TAB 3: ADVERTISING & PRICING
-# ==============================================================================
-with tab_sponsor:
     with st.container(border=True):
-        st.subheader("💼 Sponsorship & Extended Credit Packages")
-        st.write("Scale your outbound lead generation and website audit operations with our enterprise tiers:")
+        st.caption(f"— {st.session_state.ad_title} —")
+        st.write(st.session_state.ad_body)
+        ad_mailto_t2 = f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Leaderboard%20Ad%20Inquiry"
+        st.link_button(st.session_state.ad_cta, ad_mailto_t2, key="ad_btn_tab2")
+
+
+# ==============================================================================
+# TAB 3: PRICING & ADVERTISING
+# ==============================================================================
+with tab3:
+    with st.container(border=True):
+        st.subheader("💼 Pricing & Sponsorship Packages")
+        st.write("Scale your outbound sales pipeline and client acquisition with our packages:")
 
         col_t1, col_t2, col_t3 = st.columns(3)
         with col_t1:
             with st.container(border=True):
-                st.subheader("Agency Starter")
-                st.write("**$49 / month**")
-                st.write("• 150 Lead Searches / month")
-                st.write("• 150 Single Website Audits")
-                st.write("• White-Label PDF Reports")
-                st.write("• Standard CSV Exports")
+                st.subheader("Free Starter")
+                st.write("**₹0 / Free**")
+                st.write("• 3 Free Website Audits")
+                st.write("• 3 Free Lead Searches")
+                st.write("• Standard Web Preview")
 
         with col_t2:
             with st.container(border=True):
-                st.subheader("Agency Growth")
-                st.write("**$99 / month**")
-                st.write("• 500 Lead Searches / month")
-                st.write("• 500 Single Website Audits")
-                st.write("• Custom Agency Branding")
-                st.write("• Priority Email Support")
+                st.subheader("Pro Growth Pack")
+                st.write("**₹499 (One-Time)**")
+                st.write(f"• Pay via UPI ID: `{UPI_ID}`")
+                st.write("• Unlimited Searches & Audits")
+                st.write("• Full CSV & PDF Export Access")
 
         with col_t3:
             with st.container(border=True):
-                st.subheader("Unlimited Partner")
-                st.write("**$199 / month**")
-                st.write("• Unlimited Lead Searches")
-                st.write("• Unlimited Website Audits")
-                st.write("• Sidebar Sponsor Spotlight")
-                st.write("• Dedicated Account Manager")
+                st.subheader("Unlimited Agency")
+                st.write("**₹1,499 / year**")
+                st.write("• Unlimited Everything")
+                st.write("• Custom White-Label PDF Branding")
+                st.write("• Dedicated Priority Support")
 
         st.divider()
 
-        sponsor_mailto = (
-            f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Sponsorship%20&%20Pricing%20Inquiry"
-            f"&body=Hi%20Haris,%20I%20am%20interested%20in%20upgrading%20my%20ApexLeads%20plan%20or%20purchasing%20ad%20space."
-        )
-        st.link_button("📩 Inquire About Sponsorship (hariskandapg@gmail.com)", sponsor_mailto, type="primary")
+        st.subheader("📢 Sponsorship & Ad Placement")
+        st.write("Promote your product or agency across our sidebar and leaderboard placements.")
+        sponsor_mailto_tab3 = f"mailto:{ADMIN_CONTACT_EMAIL}?subject=Sponsorship%20&%20Ad%20Placement%20Inquiry"
+        st.link_button("📩 Inquire About Sponsorship (hariskandapg@gmail.com)", sponsor_mailto_tab3, type="primary")
 
 
 # ==============================================================================
-# 6. MASTER ADMIN CONTROL CENTER
+# TAB 4: MASTER ADMIN PANEL (PROTECTED)
 # ==============================================================================
-st.divider()
-with st.expander("🔐 Master Admin Control Center", expanded=False):
-    admin_key = st.text_input("Enter Master Admin Passcode:", type="password", key="admin_master_key")
+with tab4:
+    with st.container(border=True):
+        st.subheader("🔐 Master Admin Access")
+        admin_key = st.text_input("Enter Master Passcode:", type="password", key="admin_panel_passcode")
 
-    if admin_key.strip() in ADMIN_PASSCODES:
-        st.success("✅ Master Admin Authentication Verified.")
+        if admin_key.strip() in ADMIN_PASSCODES:
+            st.success("✅ Master Admin Authentication Verified.")
 
-        adm_tab1, adm_tab2, adm_tab3, adm_tab4 = st.tabs([
-            "💳 Credit Controls",
-            "📊 Platform Analytics",
-            "📢 Live Ad Manager",
-            "⚙️ Data & Reset"
-        ])
-
-        # ADMIN TAB 1: CREDIT CONTROLS
-        with adm_tab1:
-            st.subheader("💳 User Search Credit Controls")
+            # 1. Credit Controller
+            st.markdown("### 1. 💳 Credit Controller")
             c_cr1, c_cr2 = st.columns([2, 1])
             with c_cr1:
                 new_credit_amount = st.number_input(
@@ -698,12 +672,12 @@ with st.expander("🔐 Master Admin Control Center", expanded=False):
                 )
                 if st.button("⚡ Apply Credits to Current Session", type="primary"):
                     st.session_state.credits = int(new_credit_amount)
-                    st.success(f"Credits balance successfully updated to {new_credit_amount}!")
+                    st.success(f"Credits balance updated to {new_credit_amount}!")
                     st.rerun()
 
             with c_cr2:
                 vip_checked = st.checkbox(
-                    "Enable Unlimited VIP Mode (Infinite Searches)",
+                    "👑 Enable Unlimited VIP Mode (No Credit Deductions)",
                     value=st.session_state.vip_mode
                 )
                 if vip_checked != st.session_state.vip_mode:
@@ -711,65 +685,46 @@ with st.expander("🔐 Master Admin Control Center", expanded=False):
                     st.success("VIP mode preference updated.")
                     st.rerun()
 
-        # ADMIN TAB 2: PLATFORM USAGE & ANALYTICS
-        with adm_tab2:
-            st.subheader("📊 Live Session Telemetry & Platform Analytics")
+            st.divider()
+
+            # 2. Live Analytics Metrics
+            st.markdown("### 2. 📊 Live Analytics Metrics")
             m_a1, m_a2, m_a3, m_a4 = st.columns(4)
             with m_a1:
-                st.metric("Single URL Audits Run", st.session_state.total_audits)
+                st.metric("Total Single Audits Run", st.session_state.total_audits_run)
             with m_a2:
-                st.metric("Bulk Leads Scraped", st.session_state.total_leads_scraped)
+                st.metric("Total Leads Scraped", st.session_state.total_leads_scraped)
             with m_a3:
-                st.metric("Credits Consumed", st.session_state.total_credits_consumed)
+                st.metric("Current Session Credits", st.session_state.credits)
             with m_a4:
-                st.metric("Paywall Hits (Blocked)", st.session_state.paywall_hits)
+                st.metric("VIP Status", "Active" if st.session_state.vip_mode else "Inactive")
 
-        # ADMIN TAB 3: LIVE SPONSOR & AD BANNER MANAGER
-        with adm_tab3:
-            st.subheader("📢 Dynamic Sponsor & Ad Banner Manager")
-            st.write("Modify ad copy and rates in real time without editing source code:")
+            st.divider()
+
+            # 3. Live Ad Manager
+            st.markdown("### 3. 📢 Live Ad Manager")
+            st.write("Modify ad copy and rates live across the app without editing code:")
 
             edit_ad_title = st.text_input("Sponsor Card Headline:", value=st.session_state.ad_title)
             edit_ad_body = st.text_area("Sponsor Description:", value=st.session_state.ad_body)
             edit_ad_cta = st.text_input("Ad Rate / CTA Text:", value=st.session_state.ad_cta)
-            edit_show_ads = st.checkbox("Show / Hide All Ads Across Dashboard", value=st.session_state.show_ads)
 
-            if st.button("💾 Save & Publish Ad Changes", type="primary"):
+            if st.button("💾 Save Ad Changes", type="primary"):
                 st.session_state.ad_title = edit_ad_title
                 st.session_state.ad_body = edit_ad_body
                 st.session_state.ad_cta = edit_ad_cta
-                st.session_state.show_ads = edit_show_ads
-                st.success("Ad settings saved and published across dashboard!")
+                st.success("Ad settings saved live!")
                 st.rerun()
 
-        # ADMIN TAB 4: SYSTEM MAINTENANCE & LOGS
-        with adm_tab4:
-            st.subheader("⚙️ System Maintenance & Data Logs")
+            st.divider()
 
-            c_act1, c_act2 = st.columns(2)
-            with c_act1:
-                if st.button("🗑️ Clear Cached Leads & Reset Engine", type="secondary"):
-                    st.session_state.bulk_leads = []
-                    st.session_state.audit_data = None
-                    st.success("Cached audit data and bulk leads cleared.")
-                    st.rerun()
+            # 4. Reset Button
+            st.markdown("### 4. ⚙️ Engine Cache Reset")
+            if st.button("🗑️ Clear Cached Leads & Reset Engine", type="secondary"):
+                st.session_state.bulk_leads = []
+                st.session_state.single_audit = None
+                st.success("Cached audit data and bulk leads cleared.")
+                st.rerun()
 
-            with c_act2:
-                telemetry_log = f"""ApexLeads AI System Diagnostics Log
-Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-Session Credits Remaining: {st.session_state.credits}
-VIP Mode: {st.session_state.vip_mode}
-Total Single Audits Run: {st.session_state.total_audits}
-Total Bulk Leads Scraped: {st.session_state.total_leads_scraped}
-Total Credits Consumed: {st.session_state.total_credits_consumed}
-Paywall Hits: {st.session_state.paywall_hits}
-Agency Partner: {st.session_state.agency_name} ({st.session_state.agency_website})
-"""
-                st.download_button(
-                    label="📥 Export System Diagnostics Log",
-                    data=telemetry_log,
-                    file_name=f"apexleads_diagnostics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                    mime="text/plain"
-                )
-    elif admin_key:
-        st.error("❌ Invalid Admin Passcode.")
+        elif admin_key:
+            st.error("❌ Invalid Master Passcode.")
